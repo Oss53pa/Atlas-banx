@@ -48,6 +48,28 @@ describe('parseAmount — séparateurs', () => {
   it('parse un grand montant "74 158 089"', () => {
     expect(parseAmount('74 158 089')!.value).toBe(74158089);
   });
+
+  // RÉGRESSION : avant correctif, s.replace(sep, '') ne retirait que le
+  // PREMIER séparateur → tronquait tout montant ≥ 1 000 000 en format pointé.
+  it('parse les millions en format pointé FR ("79.678.620")', () => {
+    expect(parseAmount('79.678.620')!.value).toBe(79678620);
+  });
+
+  it('parse "1.000.085" → 1000085 (pas 1000)', () => {
+    expect(parseAmount('1.000.085')!.value).toBe(1000085);
+  });
+
+  it('parse "113.162.940" → 113162940', () => {
+    expect(parseAmount('113.162.940')!.value).toBe(113162940);
+  });
+
+  it('parse les millions en format virgule EN ("1,234,567")', () => {
+    expect(parseAmount('1,234,567')!.value).toBe(1234567);
+  });
+
+  it('parse "1.500.000" → 1500000', () => {
+    expect(parseAmount('1.500.000')!.value).toBe(1500000);
+  });
 });
 
 describe('parseAmount — signes', () => {
