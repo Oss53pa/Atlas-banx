@@ -10,11 +10,16 @@ import { useBankStore } from '../../store/bankStore';
 import { useClientStore } from '../../store/clientStore';
 import { BankConditionsModal } from './BankConditionsModal';
 import { BankFormModal } from './BankFormModal';
-import type { Bank, BankConditions, ConditionGrid, MonetaryZone } from '../../types';
+import { BankGridsPanel } from './BankGridsPanel';
+import type { Bank, BankConditions, ConditionGrid, MonetaryZone, ArchivedDocument } from '../../types';
 import { CEMAC_COUNTRIES, UEMOA_COUNTRIES, AFRICAN_COUNTRIES } from '../../types';
 import { formatCurrency } from '../../utils';
 import { extractConditions } from '../../extraction/conditions';
 import { setByPath } from '../../extraction/normalize';
+import {
+  getEmptyFullConditions,
+  applyExtractedValuesToConditions,
+} from '../../extraction/conditionsForm';
 import { v4 as uuidv4 } from 'uuid';
 import {
   ImportVerificationModal,
@@ -25,6 +30,143 @@ import {
 } from '../import-verification';
 
 type ViewMode = 'banks' | 'grids';
+
+// ============================================================================
+// reconcileGridsFromDocuments
+// ----------------------------------------------------------------------------
+// Synchronise bank.conditionGrids[] avec conditions.documents[] :
+//   - Chaque document actif (isActive=true) avec extractedValues devient ou
+//     met à jour une ConditionGrid avec ses propres effectiveDate /
+//     expirationDate. Le lien doc ↔ grille se fait via grid.sourceDocument.id
+//     === doc.id (les uploads passés posaient deux IDs distincts ; on fallback
+//     sur grid.sourceDocument.name === doc.name pour matcher l'historique).
+//   - Tout document non-actif (ou supprimé) voit sa grille liée archivée
+//     (status='archived'). Les grilles non liées à un doc sont laissées telles.
+//   - activeGridId reste positionné sur la première grille active produite
+//     pour conserver la rétrocompatibilité avec le champ bank.conditions
+//     legacy (synchronisé par le store).
+//
+// L'audit (BankConditionsResolver.splitTransactionsByGrid) lit bank.conditionGrids
+// et résout chaque transaction contre la grille couvrant sa date. Sans cette
+// réconciliation, deux PDFs actifs dans la modale ne créeraient qu'une seule
+// grille et l'audit utiliserait le mauvais tarif pour l'une des deux périodes.
+// ============================================================================
+interface ReconcileArgs {
+  bankId: string;
+  bank: Bank;
+  documents: ArchivedDocument[];
+  existingGrids: ConditionGrid[];
+  addConditionGrid: (
+    bankId: string,
+    grid: Omit<ConditionGrid, 'id' | 'createdAt' | 'updatedAt'>,
+  ) => ConditionGrid;
+  updateConditionGrid: (bankId: string, gridId: string, updates: Partial<ConditionGrid>) => void;
+  archiveConditionGrid: (bankId: string, gridId: string) => void;
+}
+
+function reconcileGridsFromDocuments(args: ReconcileArgs): void {
+  const {
+    bankId, bank, documents, existingGrids,
+    addConditionGrid, updateConditionGrid, archiveConditionGrid,
+  } = args;
+
+  const currency = bank.zone === 'UEMOA' ? 'XOF' : 'XAF';
+  const now = new Date();
+
+  const activeDocs = documents.filter(
+    (d) => d.isActive && d.extractedValues && Object.keys(d.extractedValues).length > 0,
+  );
+
+  // Lookup table : pour chaque grille, retrouver le doc lié (s'il existe)
+  // par id ; fallback par nom de fichier pour matcher l'historique d'avant
+  // ce fix (les anciens uploads posaient deux UUIDs distincts entre
+  // conditions.documents[i].id et grid.sourceDocument.id).
+  const findGridForDoc = (doc: ArchivedDocument): ConditionGrid | undefined => {
+    const byId = existingGrids.find((g) => g.sourceDocument?.id === doc.id);
+    if (byId) return byId;
+    return existingGrids.find(
+      (g) => g.sourceDocument?.name && g.sourceDocument.name === doc.name,
+    );
+  };
+
+  // 1. Archive les grilles dont le doc lié n'est plus actif ou n'existe plus
+  const activeDocIds = new Set(activeDocs.map((d) => d.id));
+  const activeDocNames = new Set(activeDocs.map((d) => d.name));
+  for (const grid of existingGrids) {
+    if (grid.status !== 'active') continue;
+    const linkedId = grid.sourceDocument?.id;
+    const linkedName = grid.sourceDocument?.name;
+    const stillActive =
+      (linkedId && activeDocIds.has(linkedId)) ||
+      (linkedName && activeDocNames.has(linkedName));
+    if (!stillActive) {
+      archiveConditionGrid(bankId, grid.id);
+    }
+  }
+
+  // 2. Upsert une grille par document actif. Toutes les grilles produites
+  //    restent status='active' — le resolver split-by-grid (qui filtre
+  //    g.status !== 'draft') prend en compte plusieurs grilles actives
+  //    simultanées et choisit la bonne par couverture de date.
+  for (const doc of activeDocs) {
+    const perDocConditions = applyExtractedValuesToConditions(
+      getEmptyFullConditions(),
+      doc.extractedValues as Record<string, number | string | boolean | null | undefined>,
+    );
+
+    // Cast en BankConditions — la forme riche FullBankConditions est stockée
+    // tel quel dans grid.conditions ; les algorithmes d'audit lisent les
+    // champs nominaux (tenueCompte.particulierLocal, fraisCartes.*, …).
+    const conditionsForGrid: BankConditions = {
+      ...(perDocConditions as unknown as BankConditions),
+      id: uuidv4(),
+      bankCode: bank.code,
+      bankName: bank.name,
+      country: bank.country,
+      currency,
+      effectiveDate: doc.effectiveDate ? new Date(doc.effectiveDate) : now,
+      ...(doc.expirationDate ? { expirationDate: new Date(doc.expirationDate) } : {}),
+      // fees/interestRates legacy : restent vides — les algorithmes lisent
+      // les sections nominales (tenueCompte, fraisCartes, …)
+      fees: [],
+      interestRates: [],
+      isActive: true,
+    };
+
+    const effDate = doc.effectiveDate ? new Date(doc.effectiveDate) : now;
+    const expDate = doc.expirationDate ? new Date(doc.expirationDate) : undefined;
+
+    const existing = findGridForDoc(doc);
+    if (existing) {
+      updateConditionGrid(bankId, existing.id, {
+        conditions: conditionsForGrid,
+        effectiveDate: effDate,
+        expirationDate: expDate,
+        status: 'active',
+        sourceDocument: doc,
+        updatedAt: now,
+      });
+    } else {
+      addConditionGrid(bankId, {
+        bankId,
+        name: doc.name.replace(/\.[^.]+$/, '') || 'Conditions importées',
+        version: effDate.toISOString().slice(0, 7),
+        effectiveDate: effDate,
+        expirationDate: expDate,
+        status: 'active',
+        conditions: conditionsForGrid,
+        sourceDocument: doc,
+        notes: `Grille dérivée du document « ${doc.name} ».`,
+      });
+    }
+  }
+
+  // activeGridId est maintenu par le store via addConditionGrid (positionne
+  // sur la première grille active s'il n'y en a aucune) et archiveConditionGrid
+  // (réassigne automatiquement si on archive l'active courante). Pas besoin
+  // d'appel explicite à setActiveGrid — qui aurait archivé les autres grilles
+  // actives (effet secondaire indésirable ici).
+}
 
 function getZoneFromCountry(country: string): MonetaryZone | null {
   if (country in CEMAC_COUNTRIES) return 'CEMAC';
@@ -61,7 +203,11 @@ export function BanksPage() {
   const [showAddBank, setShowAddBank] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [showConditions, setShowConditions] = useState(false);
-  const [_viewingGrid, setViewingGrid] = useState<ConditionGrid | null>(null);
+  // Quand on ouvre la modale via « Éditer la grille X », on lui passe l'id
+  // du document source — la modale scrolle jusqu'à lui dans l'onglet
+  // Documents et applique ses extractedValues pour montrer SES valeurs
+  // (pas la fusion cross-doc du blob legacy bank.conditions).
+  const [focusDocumentId, setFocusDocumentId] = useState<string | null>(null);
 
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
@@ -541,187 +687,21 @@ export function BanksPage() {
                   </div>
                 </div>
 
-                {/* Active Grid Viewer */}
-                {activeGrid ? (
-                  <Card>
-                    <CardHeader className="py-2 px-3"
-                      action={
-                        <div className="flex items-center gap-2">
-                          <Badge variant="success" className="text-[10px] py-0">Active</Badge>
-                          <span className="text-xs text-primary-400">v{activeGrid.version}</span>
-                        </div>
-                      }
-                    >
-                      <CardTitle className="text-sm">{activeGrid.name}</CardTitle>
-                    </CardHeader>
-                    <CardBody className="p-3 pt-0">
-                      <div className="space-y-3">
-                        {/* Grid Info */}
-                        <div className="flex items-center gap-4 text-xs text-primary-500">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {formatDate(activeGrid.effectiveDate)}
-                          </span>
-                          {activeGrid.expirationDate && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              Exp: {formatDate(activeGrid.expirationDate)}
-                            </span>
-                          )}
-                          {activeGrid.sourceDocument && (
-                            <span className="flex items-center gap-1 truncate">
-                              <FileText className="w-3 h-3" />
-                              {activeGrid.sourceDocument.name}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Fees Table */}
-                        {activeGrid.conditions.fees.length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-medium text-primary-700 mb-1">Frais bancaires</h4>
-                            <div className="border border-primary-200 rounded overflow-hidden max-h-48 overflow-y-auto">
-                              <table className="w-full text-xs">
-                                <thead className="bg-primary-50 sticky top-0">
-                                  <tr>
-                                    <th className="text-left px-2 py-1 font-medium text-primary-500">Service</th>
-                                    <th className="text-right px-2 py-1 font-medium text-primary-500">Montant</th>
-                                    <th className="text-right px-2 py-1 font-medium text-primary-500 w-16">Type</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-primary-100">
-                                  {activeGrid.conditions.fees.slice(0, 15).map((fee, idx) => (
-                                    <tr key={idx} className="hover:bg-primary-50">
-                                      <td className="px-2 py-1 truncate max-w-[200px]">{fee.name}</td>
-                                      <td className="px-2 py-1 text-right font-medium">
-                                        {fee.type === 'percentage'
-                                          ? `${fee.percentage}%`
-                                          : formatCurrency(fee.amount, 'XAF')}
-                                      </td>
-                                      <td className="px-2 py-1 text-right text-primary-400">
-                                        {fee.type === 'fixed' ? 'Fixe' : fee.type === 'percentage' ? '%' : 'Palier'}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                              {activeGrid.conditions.fees.length > 15 && (
-                                <div className="px-2 py-1 bg-primary-50 text-xs text-primary-500 text-center">
-                                  +{activeGrid.conditions.fees.length - 15} autres
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Interest Rates */}
-                        {activeGrid.conditions.interestRates.length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-medium text-primary-700 mb-1">Taux d'interet</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                              {activeGrid.conditions.interestRates.map((rate, idx) => (
-                                <div key={idx} className="p-2 border border-primary-200 rounded text-center">
-                                  <p className="text-[10px] text-primary-500">
-                                    {rate.type === 'overdraft' ? 'Decouvert' :
-                                     rate.type === 'authorized' ? 'Autorise' :
-                                     rate.type === 'unauthorized' ? 'Non autorise' : 'Epargne'}
-                                  </p>
-                                  <p className="text-lg font-bold text-primary-900">
-                                    {(rate.rate * 100).toFixed(1)}%
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {activeGrid.conditions.fees.length === 0 && activeGrid.conditions.interestRates.length === 0 && (
-                          <div className="text-center py-4">
-                            <AlertCircle className="w-8 h-8 text-primary-300 mx-auto mb-2" />
-                            <p className="text-xs text-primary-500">Aucune condition</p>
-                            <Button size="sm" variant="secondary" className="mt-2 h-7 text-xs" onClick={() => setShowConditions(true)}>
-                              Configurer
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </CardBody>
-                  </Card>
-                ) : selectedBank.conditions ? (
-                  <Card className="p-4 text-center">
-                    <AlertCircle className="w-8 h-8 text-primary-600 mx-auto mb-2" />
-                    <p className="text-sm text-primary-700 font-medium">Conditions non versionnees</p>
-                    <p className="text-xs text-primary-500 mb-3">Importez un PDF pour versionner</p>
-                    <Button size="sm" className="h-7 text-xs" onClick={() => fileInputRef.current?.click()}>
-                      <Upload className="w-3 h-3 mr-1" />
-                      PDF
-                    </Button>
-                  </Card>
-                ) : (
-                  <Card className="p-6 text-center">
-                    <FileText className="w-10 h-10 text-primary-300 mx-auto mb-2" />
-                    <h3 className="text-sm font-medium text-primary-900 mb-1">Aucune grille</h3>
-                    <p className="text-xs text-primary-500 mb-3">Importez un PDF ou saisissez manuellement</p>
-                    <div className="flex justify-center gap-2">
-                      <Button size="sm" className="h-7 text-xs" onClick={() => fileInputRef.current?.click()}>
-                        <Upload className="w-3 h-3 mr-1" />
-                        PDF
-                      </Button>
-                      <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => setShowConditions(true)}>
-                        Manuel
-                      </Button>
-                    </div>
-                  </Card>
-                )}
-
-                {/* Grid History for selected bank */}
-                {selectedBankGrids.length > 1 && (
-                  <Card>
-                    <CardHeader className="py-2 px-3">
-                      <CardTitle className="text-xs">Historique ({selectedBankGrids.length})</CardTitle>
-                    </CardHeader>
-                    <CardBody className="p-0">
-                      <div className="divide-y divide-primary-100 max-h-32 overflow-y-auto">
-                        {selectedBankGrids.filter(g => g.id !== activeGrid?.id).map((grid) => (
-                          <div
-                            key={grid.id}
-                            className="px-3 py-1.5 flex items-center justify-between hover:bg-primary-50"
-                          >
-                            <div className="flex items-center gap-2">
-                              {getStatusBadge(grid.status)}
-                              <div>
-                                <p className="text-xs font-medium text-primary-900">{grid.name}</p>
-                                <p className="text-[10px] text-primary-500">
-                                  v{grid.version} • {formatDate(grid.effectiveDate)}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                className="p-1 text-primary-400 hover:text-primary-600"
-                                onClick={() => {
-                                  setViewingGrid(grid);
-                                  setShowConditions(true);
-                                }}
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              {grid.status !== 'active' && (
-                                <button
-                                  className="p-1 text-primary-500 hover:text-primary-600"
-                                  onClick={() => setActiveGrid(selectedBank.id, grid.id)}
-                                  title="Activer"
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardBody>
-                  </Card>
-                )}
+                {/* Panneau Grilles tarifaires — switcher + détail */}
+                <BankGridsPanel
+                  bank={selectedBank}
+                  grids={selectedBankGrids}
+                  zone={selectedBank.zone ?? getZoneFromCountry(selectedBank.country)}
+                  onUploadPdf={() => fileInputRef.current?.click()}
+                  onEditGrid={(grid) => {
+                    setFocusDocumentId(grid?.sourceDocument?.id ?? null);
+                    setShowConditions(true);
+                  }}
+                  onViewSource={(grid) => {
+                    setFocusDocumentId(grid.sourceDocument?.id ?? null);
+                    setShowConditions(true);
+                  }}
+                />
               </>
             ) : (
               <Card className="p-8 text-center">
@@ -775,19 +755,19 @@ export function BanksPage() {
                                 const bank = banks.find(b => b.id === grid.bankId);
                                 if (bank) {
                                   setSelectedBank(bank.id);
-                                  setViewingGrid(grid);
+                                  setFocusDocumentId(grid.sourceDocument?.id ?? null);
                                   setShowConditions(true);
                                 }
                               }}
-                              title="Voir"
+                              title="Voir / éditer cette grille"
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
                             {grid.status !== 'active' && (
                               <button
                                 className="p-1 text-primary-500 hover:text-primary-600"
-                                onClick={() => setActiveGrid(grid.bankId, grid.id)}
-                                title="Activer"
+                                onClick={() => updateConditionGrid(grid.bankId, grid.id, { status: 'active' })}
+                                title="Réactiver cette grille (sans toucher aux autres)"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                               </button>
@@ -835,40 +815,35 @@ export function BanksPage() {
         isOpen={showConditions}
         onClose={() => {
           setShowConditions(false);
-          setViewingGrid(null);
+          setFocusDocumentId(null);
         }}
         bank={selectedBank}
+        focusDocumentId={focusDocumentId}
         onSaveConditions={(bankId, conditions) => {
-          // 1. Persist into the bank's flat conditions blob (legacy field)
+          // 1. Persiste la version riche du formulaire dans bank.conditions
+          //    (champ legacy utilisé pour l'affichage et la rétrocompatibilité)
           updateConditions(bankId, conditions);
 
-          // 2. Sync the active grid so the structured snapshot reflects the
-          //    edits — without this, re-opening the modal on a different
-          //    session would show stale values.
+          // 2. Réconcilie bank.conditionGrids[] depuis conditions.documents[].
+          //    Chaque document actif avec extractedValues devient une
+          //    ConditionGrid distincte couvrant sa propre période — c'est
+          //    sur ces grilles que BankConditionsResolver.splitTransactionsByGrid
+          //    s'appuie pour appliquer la bonne grille tarifaire à chaque
+          //    transaction selon sa date. Sans cette étape, deux PDFs
+          //    « En vigueur » dans la modale ne produiraient qu'une seule
+          //    grille et l'audit utiliserait le mauvais tarif sur l'une
+          //    des deux périodes.
           const bank = banks.find((b) => b.id === bankId);
-          const activeGridForBank = bank ? getActiveGrid(bankId) : null;
-
-          // 3. Extract effectiveDate/expirationDate from the active document
-          //    so the ConditionGrid has correct validity dates for bi-temporal
-          //    resolution (split-by-grid audit).
-          const docs = (conditions as Record<string, unknown>).documents as Array<{
-            isActive?: boolean;
-            effectiveDate?: Date | string;
-            expirationDate?: Date | string;
-          }> | undefined;
-          const activeDoc = docs?.find((d) => d.isActive);
-
-          if (activeGridForBank) {
-            updateConditionGrid(bankId, activeGridForBank.id, {
-              conditions: {
-                ...activeGridForBank.conditions,
-                ...conditions,
-              } as typeof activeGridForBank.conditions,
-              ...(activeDoc?.effectiveDate ? { effectiveDate: new Date(activeDoc.effectiveDate) } : {}),
-              ...(activeDoc?.expirationDate ? { expirationDate: new Date(activeDoc.expirationDate) } : { expirationDate: undefined }),
-              updatedAt: new Date(),
-            });
-          }
+          if (!bank) return;
+          reconcileGridsFromDocuments({
+            bankId,
+            bank,
+            documents: (conditions.documents as ArchivedDocument[] | undefined) ?? [],
+            existingGrids: bank.conditionGrids ?? [],
+            addConditionGrid,
+            updateConditionGrid,
+            archiveConditionGrid,
+          });
         }}
         onUploadDocument={(_bankId, _document) => {
           // Handled by the verification modal flow inside BankConditionsModal
