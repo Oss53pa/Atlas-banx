@@ -37,7 +37,13 @@ import { ValidationTabContent } from './ValidationTabContent';
 import { AFRICAN_COUNTRIES, ZONE_CURRENCIES } from '../../types';
 import { getDocumentEngine, type ExtractionReport } from '../../extraction';
 import { extractConditions } from '../../extraction/conditions';
-import { setByPath } from '../../extraction/normalize';
+import {
+  type FullBankConditions,
+  type CustomFee,
+  getEmptyFullConditions,
+  mergeBankConditions,
+  applyExtractedValuesToConditions,
+} from '../../extraction/conditionsForm';
 import { ExtractionReportPanel } from './ExtractionReportPanel';
 import {
   ImportVerificationModal,
@@ -47,16 +53,6 @@ import {
   type VerificationPayload,
 } from '../import-verification';
 import { v4 as uuidv4 } from 'uuid';
-
-// Types pour les frais personnalisés
-interface CustomFee {
-  id: string;
-  label: string;
-  amount: number;
-  type: 'fixed' | 'percent';
-  frequency: 'once' | 'monthly' | 'yearly' | 'per_operation';
-  category: string;
-}
 
 // Determine zone from country code
 function getZoneFromCountry(country: string): 'CEMAC' | 'UEMOA' | null {
@@ -73,201 +69,21 @@ interface BankConditionsModalProps {
   bank: Bank | null;
   onSaveConditions: (bankId: string, conditions: Partial<BankConditions>) => void;
   onUploadDocument: (bankId: string, document: ArchivedDocument) => void;
+  /**
+   * Si fourni à l'ouverture : la modale bascule sur l'onglet Documents,
+   * scroll jusqu'au document correspondant et applique ses valeurs extraites
+   * dans le formulaire. Utilisé pour « Éditer la grille X » depuis la liste
+   * des grilles dans BanksPage — l'utilisateur arrive directement sur la
+   * vue d'édition de cette grille tarifaire en particulier.
+   */
+  focusDocumentId?: string | null;
 }
 
-/**
- * Translate FieldRegistry keys (used by the extractor + verification modal)
- * into the form-state paths used by this editor. The two structures grew
- * apart: the FieldRegistry maps to the legacy BankConditions shape
- * (accountFees / cardFees / …) while this editor uses a richer
- * FullBankConditions shape (tenueCompte / fraisCartes / …).
- *
- * A mapping entry can be either :
- *   - a dot-path string  → used directly by setByPath()
- *   - a Patcher function → invoked with (conditions, value) to mutate in place
- *
- * The Patcher form is required for fields that target arrays-by-criterion
- * (e.g. cartes[reseau='VISA' && nom contains 'Gold'].cotisationAnnuelle)
- * which setByPath cannot navigate.
- *
- * Any FieldRegistry key not listed here falls through verbatim — that's the
- * desired behaviour for keys that already match the form (e.g. cheques.*).
- */
-type ConditionsPatcher = (conditions: FullBankConditions, value: number | string | boolean) => void;
+// FullBankConditions, REGISTRY_TO_FORM_PATH, getEmptyFullConditions,
+// mergeBankConditions et applyExtractedValuesToConditions vivent dans
+// src/extraction/conditionsForm.ts — partagés avec BanksPage qui en a besoin
+// pour synthétiser une ConditionGrid par document actif au save.
 
-/**
- * Upsert a card entry by reseau+nom in the cartes[] array.
- * Updates `cotisationAnnuelle` on the existing card if a match is found,
- * otherwise pushes a fresh card with sensible defaults.
- */
-function upsertCardCotisation(
-  reseau: FullBankConditions['cartes'][number]['reseau'],
-  nomKeyword: string,
-  defaultNom: string,
-): ConditionsPatcher {
-  return (conditions, value) => {
-    const cotisation = Number(value);
-    if (!Number.isFinite(cotisation)) return;
-    const kw = nomKeyword.toLowerCase();
-    const existing = conditions.cartes.find(
-      (c) => c.reseau === reseau && c.nom.toLowerCase().includes(kw),
-    );
-    if (existing) {
-      existing.cotisationAnnuelle = cotisation;
-    } else {
-      conditions.cartes.push({
-        id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        nom: defaultNom,
-        type: 'debit',
-        reseau,
-        cotisationAnnuelle: cotisation,
-        fraisEmission: 0,
-        plafondRetraitJour: 0,
-        plafondPaiementJour: 0,
-        plafondRetraitMois: 0,
-        plafondPaiementMois: 0,
-        validiteAnnees: 2,
-      });
-    }
-  };
-}
-
-const REGISTRY_TO_FORM_PATH: Record<string, string | ConditionsPatcher> = {
-  // Tenue de compte
-  'accountFees.tenueCompte.particulier':     'tenueCompte.particulierLocal',
-  'accountFees.tenueCompte.professionnel':   'tenueCompte.professionnel',
-  'accountFees.tenueCompte.entreprise':      'tenueCompte.entreprise',
-  // Ouverture / clôture
-  'accountFees.fraisOuverture':              'ouvertureCompte.particulier',
-  'accountFees.fraisCloture':                'clotureCompte.particulier',
-  'accountFees.fraisInactivite':             'divers.fraisInactivite',
-  // Relevés et attestations
-  'accountFees.releveCompte.mensuel':        'releves.mensuelPapier',
-  'accountFees.releveCompte.duplicata':      'releves.duplicata',
-  'accountFees.attestationSolde':            'releves.attestationSolde',
-  'accountFees.lettreInjonction':            'divers.lettreInjonction',
-  // Crédits & agios
-  'creditFees.tauxDecouvertAutorise':        'credits.decouvertAutorise',
-  'creditFees.tauxDecouvertNonAutorise':     'credits.decouvertNonAutorise',
-  'creditFees.commissionMouvement':          'credits.commissionMouvement',
-  'creditFees.commissionPlusForteDecouverte':'credits.commissionPlusForte',
-  'creditFees.tauxUsureLegal':               'credits.tauxUsure',
-  'creditFees.fraisDossierCredit':           'credits.fraisDossierCredit',
-  'creditFees.creditConsoTauxMin':           'credits.creditConsommationMin',
-  'creditFees.creditConsoTauxMax':           'credits.creditConsommationMax',
-  'creditFees.creditImmoTauxMin':            'credits.creditImmobilierMin',
-  'creditFees.creditImmoTauxMax':            'credits.creditImmobilierMax',
-  // Cartes — flat fees on fraisCartes (not the per-card array)
-  'cardFees.opposition':                     'fraisCartes.oppositionCarte',
-  'cardFees.retraitDabAutreBanque':          'fraisCartes.retraitDabAutre',
-  // Virements
-  'transferFees.virementInterne.commission':       'virements.interneFrais',
-  'transferFees.virementCemacUemoa.commission':    'virements.zoneMonetaireCommission',
-  'transferFees.virementInternational.commission': 'virements.internationalCommission',
-  'transferFees.virementInternational.swift':      'virements.swift',
-  // Chèques
-  'checkFees.chequierEmission':              'cheques.carnet25',
-  'checkFees.oppositionCheque':              'cheques.oppositionCheque',
-  'checkFees.chequeSansProvision':           'cheques.chequeImpaye',
-  // E-Banking
-  'eBankingFees.abonnementMensuel':          'ebanking.abonnementMensuel',
-  'eBankingFees.smsAlerte':                  'ebanking.smsAlerte',
-  'eBankingFees.virementEnLigne':            'ebanking.virementEnLigne',
-  'eBankingFees.mobileBanking':              'ebanking.mobileBanking',
-  'eBankingFees.ussd':                       'ebanking.ussd',
-  // Guichet — opérations en espèces et change manuel
-  'cashOperations.versementEspeces':           'guichet.versementEspeces',
-  'cashOperations.versementEspecesCommission': 'guichet.versementEspecesCommission',
-  'cashOperations.retraitEspeces':             'guichet.retraitEspeces',
-  'cashOperations.retraitEspecesCommission':   'guichet.retraitEspecesCommission',
-  'cashOperations.changeManuel':               'guichet.changeManuel',
-  'cashOperations.achatDevises':               'guichet.achatDevises',
-  'cashOperations.venteDevises':               'guichet.venteDevises',
-  // Cartes — opérations détaillées
-  'cardFees.retraitDabPropre':              'fraisCartes.retraitDabPropre',
-  'cardFees.retraitDabInternational':       'fraisCartes.retraitDabInternational',
-  'cardFees.paiementTpePropre':             'fraisCartes.paiementTpePropre',
-  'cardFees.paiementTpeInternational':      'fraisCartes.paiementTpeInternational',
-  'cardFees.paiementInternet':              'fraisCartes.paiementInternet',
-  'cardFees.codeOublie':                    'fraisCartes.codeOublie',
-  'cardFees.consultationSolde':             'fraisCartes.consultationSolde',
-  // Virements — flux nationaux
-  'transferFees.virementNationalAutreBanque': 'virements.nationalAutreBank',
-  'transferFees.virementInstantane':          'virements.instantane',
-  'transferFees.virementPermanent':           'virements.permanent',
-  'transferFees.rejetVirement':               'virements.rejetVirement',
-  // Chèques — opérations détaillées
-  'checkFees.chequeCertifie':       'cheques.chequeCertifie',
-  'checkFees.chequeBanque':         'cheques.chequeBanque',
-  'checkFees.encaissementPlace':    'cheques.encaissementPlace',
-  'checkFees.encaissementEtranger': 'cheques.encaissementEtranger',
-  // Divers
-  'miscFees.coffrePetit':       'divers.coffrePetit',
-  'miscFees.garantieBancaire':  'divers.garantieBancaire',
-  'miscFees.successionFrais':   'divers.successionFrais',
-  'miscFees.procurationCompte': 'divers.procuration',
-  'miscFees.assuranceCompte':   'divers.assuranceCompte',
-  'miscFees.droitTimbre':       'divers.droitTimbre',
-
-  // ─── COMPLÉTUDE 100% ───
-  // Account fees — variantes
-  'accountFees.tenueCompte.particulierEtranger': 'tenueCompte.particulierEtranger',
-  'accountFees.tenueCompte.association':         'tenueCompte.association',
-  'accountFees.tenueCompte.compteEpargne':       'tenueCompte.compteEpargne',
-  'accountFees.tenueCompte.compteDevises':       'tenueCompte.compteDevises',
-  'accountFees.fraisOuvertureEntreprise':        'ouvertureCompte.entreprise',
-  'accountFees.minimumDepot':                    'ouvertureCompte.minimumDepot',
-  'accountFees.fraisClotureEntreprise':          'clotureCompte.entreprise',
-  'accountFees.releveCompte.mensuelEmail':       'releves.mensuelEmail',
-  'accountFees.releveCompte.annuel':             'releves.releveAnnuel',
-  'accountFees.certificatNonEngagement':         'releves.certificatNonEngagement',
-  'accountFees.rib':                             'releves.rib',
-  // Cartes — variantes
-  'cardFees.paiementTpeAutre':       'fraisCartes.paiementTpeAutre',
-  'cardFees.renouvellementAnticipe': 'fraisCartes.renouvellementAnticipe',
-  'cardFees.carteCaptee':            'fraisCartes.carteCaptee',
-  // Virements — variantes
-  'transferFees.virementNationalMemeBank':              'virements.nationalMemeBank',
-  'transferFees.virementNationalAutreBanqueCommission': 'virements.nationalAutreBankCommission',
-  'transferFees.virementZoneMonetaire':                 'virements.zoneMonetaire',
-  'transferFees.virementInternationalFraisFixes':       'virements.international',
-  'transferFees.recuVirement':                          'virements.recuVirement',
-  // Chèques — variantes
-  'checkFees.carnet50':                       'cheques.carnet50',
-  'checkFees.carnet100':                      'cheques.carnet100',
-  'checkFees.chequeGuichet':                  'cheques.chequeGuichet',
-  'checkFees.chequeRetourne':                 'cheques.chequeRetourne',
-  'checkFees.encaissementDeplacement':        'cheques.encaissementDeplacement',
-  'checkFees.encaissementEtrangerCommission': 'cheques.encaissementEtrangerCommission',
-  // Crédits — variantes
-  'creditFees.creditPME':       'credits.creditPME',
-  'creditFees.penaliteRetard':  'credits.penaliteRetard',
-  // E-Banking — variantes
-  'eBankingFees.abonnementAnnuel':      'ebanking.abonnementAnnuel',
-  'eBankingFees.parOperation':          'ebanking.parOperation',
-  'eBankingFees.smsAlerteAbonnement':   'ebanking.smsAlerteAbonnement',
-  // Divers — variantes
-  'miscFees.coffreMoyen':           'divers.coffreMoyen',
-  'miscFees.coffreGrand':           'divers.coffreGrand',
-  'miscFees.garantieLocative':      'divers.garantieLocative',
-  'miscFees.cautionMarche':         'divers.cautionMarche',
-  'miscFees.saisieAttribution':     'divers.saisieAttribution',
-  'miscFees.mainLevee':             'divers.mainLevee',
-  'miscFees.successionCommission':  'divers.successionCommission',
-  'miscFees.avoirInactif':          'divers.avoirInactif',
-  'miscFees.tvaServices':           'divers.tvaServices',
-
-  // ─── CARTES — cotisations annuelles par type ───
-  // La structure FullBankConditions.cartes est un Array<{reseau, nom, cotisationAnnuelle, …}>.
-  // setByPath ne sait pas naviguer un tableau par critère, donc on utilise un Patcher
-  // qui upsert l'entrée correspondante.
-  'cardFees.visaClassic':  upsertCardCotisation('VISA',  'classic',  'Visa Classic'),
-  'cardFees.visaGold':     upsertCardCotisation('VISA',  'gold',     'Visa Gold'),
-  'cardFees.visaPlatinum': upsertCardCotisation('VISA',  'platinum', 'Visa Platinum'),
-  'cardFees.gimac':        upsertCardCotisation('GIMAC', 'gimac',    'Carte GIMAC'),
-};
 
 type TabId = 'compte' | 'guichet' | 'cartes' | 'virements' | 'cheques' | 'credits' | 'ebanking' | 'divers' | 'documents' | 'validation';
 
@@ -284,341 +100,13 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'validation', label: 'Validation IA', icon: <Sparkles className="w-4 h-4" /> },
 ];
 
-// Structure complète des conditions bancaires africaines
-interface FullBankConditions {
-  // Tenue de compte
-  tenueCompte: {
-    particulierLocal: number;
-    particulierEtranger: number;
-    professionnel: number;
-    entreprise: number;
-    association: number;
-    compteEpargne: number;
-    compteDevises: number;
-  };
-  ouvertureCompte: {
-    particulier: number;
-    entreprise: number;
-    minimumDepot: number;
-  };
-  clotureCompte: {
-    particulier: number;
-    entreprise: number;
-  };
-  releves: {
-    mensuelPapier: number;
-    mensuelEmail: number;
-    duplicata: number;
-    releveAnnuel: number;
-    attestationSolde: number;
-    certificatNonEngagement: number;
-    rib: number;
-  };
-  // Opérations au guichet
-  guichet: {
-    versementEspeces: number;
-    versementEspecesCommission: number;
-    retraitEspeces: number;
-    retraitEspecesCommission: number;
-    changeManuel: number;
-    achatDevises: number;
-    venteDevises: number;
-  };
-  // Cartes bancaires
-  cartes: Array<{
-    id: string;
-    nom: string;
-    type: 'debit' | 'credit' | 'prepaid';
-    reseau: 'VISA' | 'MASTERCARD' | 'GIMAC' | 'GIM-UEMOA' | 'AUTRE';
-    cotisationAnnuelle: number;
-    fraisEmission: number;
-    plafondRetraitJour: number;
-    plafondPaiementJour: number;
-    plafondRetraitMois: number;
-    plafondPaiementMois: number;
-    validiteAnnees: number;
-  }>;
-  fraisCartes: {
-    retraitDabPropre: number;
-    retraitDabAutre: number;
-    retraitDabInternational: number;
-    paiementTpePropre: number;
-    paiementTpeAutre: number;
-    paiementTpeInternational: number;
-    paiementInternet: number;
-    oppositionCarte: number;
-    renouvellementAnticipe: number;
-    codeOublie: number;
-    carteCaptee: number;
-    consultationSolde: number;
-  };
-  // Virements
-  virements: {
-    interneGratuit: boolean;
-    interneFrais: number;
-    nationalMemeBank: number;
-    nationalAutreBank: number;
-    nationalAutreBankCommission: number;
-    zoneMonetaire: number;
-    zoneMonetaireCommission: number;
-    international: number;
-    internationalCommission: number;
-    swift: number;
-    instantane: number;
-    permanent: number;
-    rejetVirement: number;
-    recuVirement: number;
-  };
-  // Chèques
-  cheques: {
-    carnet25: number;
-    carnet50: number;
-    carnet100: number;
-    chequeGuichet: number;
-    chequeCertifie: number;
-    chequeBanque: number;
-    oppositionCheque: number;
-    chequeImpaye: number;
-    chequeRetourne: number;
-    encaissementPlace: number;
-    encaissementDeplacement: number;
-    encaissementEtranger: number;
-    encaissementEtrangerCommission: number;
-  };
-  // Crédits et agios
-  credits: {
-    decouvertAutorise: number;
-    decouvertNonAutorise: number;
-    commissionMouvement: number;
-    commissionPlusForte: number;
-    tauxUsure: number;
-    fraisDossierCredit: number;
-    creditConsommationMin: number;
-    creditConsommationMax: number;
-    creditImmobilierMin: number;
-    creditImmobilierMax: number;
-    creditPME: number;
-    penaliteRetard: number;
-  };
-  // E-Banking
-  ebanking: {
-    abonnementMensuel: number;
-    abonnementAnnuel: number;
-    parOperation: number;
-    virementEnLigne: number;
-    consultationGratuite: boolean;
-    smsAlerte: number;
-    smsAlerteAbonnement: number;
-    mobileBanking: number;
-    ussd: number;
-  };
-  // Services divers
-  divers: {
-    coffrePetit: number;
-    coffreMoyen: number;
-    coffreGrand: number;
-    assuranceCompte: number;
-    garantieBancaire: number;
-    garantieLocative: number;
-    cautionMarche: number;
-    lettreInjonction: number;
-    saisieAttribution: number;
-    mainLevee: number;
-    procuration: number;
-    successionFrais: number;
-    successionCommission: number;
-    avoirInactif: number;
-    fraisInactivite: number;
-    droitTimbre: number;
-    tvaServices: number;
-  };
-  // Frais personnalisés
-  customFees: CustomFee[];
-  // Documents archivés
-  documents: ArchivedDocument[];
-}
-
-// ---------------------------------------------------------------------------
-// Squelette vide — TOUS LES FRAIS À 0
-// ---------------------------------------------------------------------------
-// Aucune valeur ne doit jamais être pré-remplie : les conditions bancaires
-// PROVIENNENT soit d'un import (PDF tarification) soit d'une saisie manuelle.
-// Tout chiffre hardcodé serait potentiellement faux et trompeur pour l'auditeur.
-// Le squelette définit uniquement la STRUCTURE des sections — les valeurs
-// numériques sont à zéro et les flags booléens à `false`.
-function getEmptyFullConditions(): FullBankConditions {
-  return {
-    tenueCompte: {
-      particulierLocal: 0,
-      particulierEtranger: 0,
-      professionnel: 0,
-      entreprise: 0,
-      association: 0,
-      compteEpargne: 0,
-      compteDevises: 0,
-    },
-    ouvertureCompte: {
-      particulier: 0,
-      entreprise: 0,
-      minimumDepot: 0,
-    },
-    clotureCompte: {
-      particulier: 0,
-      entreprise: 0,
-    },
-    releves: {
-      mensuelPapier: 0,
-      mensuelEmail: 0,
-      duplicata: 0,
-      releveAnnuel: 0,
-      attestationSolde: 0,
-      certificatNonEngagement: 0,
-      rib: 0,
-    },
-    guichet: {
-      versementEspeces: 0,
-      versementEspecesCommission: 0,
-      retraitEspeces: 0,
-      retraitEspecesCommission: 0,
-      changeManuel: 0,
-      achatDevises: 0,
-      venteDevises: 0,
-    },
-    // Aucune carte par défaut : c'est à l'utilisateur d'ajouter celles que
-    // la banque propose (visa classic / gold / mastercard / GIMAC…).
-    cartes: [],
-    fraisCartes: {
-      retraitDabPropre: 0,
-      retraitDabAutre: 0,
-      retraitDabInternational: 0,
-      paiementTpePropre: 0,
-      paiementTpeAutre: 0,
-      paiementTpeInternational: 0,
-      paiementInternet: 0,
-      oppositionCarte: 0,
-      renouvellementAnticipe: 0,
-      codeOublie: 0,
-      carteCaptee: 0,
-      consultationSolde: 0,
-    },
-    virements: {
-      interneGratuit: false,
-      interneFrais: 0,
-      nationalMemeBank: 0,
-      nationalAutreBank: 0,
-      nationalAutreBankCommission: 0,
-      zoneMonetaire: 0,
-      zoneMonetaireCommission: 0,
-      international: 0,
-      internationalCommission: 0,
-      swift: 0,
-      instantane: 0,
-      permanent: 0,
-      rejetVirement: 0,
-      recuVirement: 0,
-    },
-    cheques: {
-      carnet25: 0,
-      carnet50: 0,
-      carnet100: 0,
-      chequeGuichet: 0,
-      chequeCertifie: 0,
-      chequeBanque: 0,
-      oppositionCheque: 0,
-      chequeImpaye: 0,
-      chequeRetourne: 0,
-      encaissementPlace: 0,
-      encaissementDeplacement: 0,
-      encaissementEtranger: 0,
-      encaissementEtrangerCommission: 0,
-    },
-    credits: {
-      decouvertAutorise: 0,
-      decouvertNonAutorise: 0,
-      commissionMouvement: 0,
-      commissionPlusForte: 0,
-      tauxUsure: 0,
-      fraisDossierCredit: 0,
-      creditConsommationMin: 0,
-      creditConsommationMax: 0,
-      creditImmobilierMin: 0,
-      creditImmobilierMax: 0,
-      creditPME: 0,
-      penaliteRetard: 0,
-    },
-    ebanking: {
-      abonnementMensuel: 0,
-      abonnementAnnuel: 0,
-      parOperation: 0,
-      virementEnLigne: 0,
-      consultationGratuite: false,
-      smsAlerte: 0,
-      smsAlerteAbonnement: 0,
-      mobileBanking: 0,
-      ussd: 0,
-    },
-    divers: {
-      coffrePetit: 0,
-      coffreMoyen: 0,
-      coffreGrand: 0,
-      assuranceCompte: 0,
-      garantieBancaire: 0,
-      garantieLocative: 0,
-      cautionMarche: 0,
-      lettreInjonction: 0,
-      saisieAttribution: 0,
-      mainLevee: 0,
-      procuration: 0,
-      successionFrais: 0,
-      successionCommission: 0,
-      avoirInactif: 0,
-      fraisInactivite: 0,
-      droitTimbre: 0,
-      tvaServices: 0,
-    },
-    customFees: [],
-    documents: [],
-  };
-}
-
-/**
- * Deep-merge des conditions chargées depuis la base par-dessus le squelette
- * vide. Garantit que toutes les sous-clés requises par le formulaire existent
- * (sinon les <input> recevraient `undefined` et React jetterait un warning),
- * tout en préservant CHAQUE champ saisi par l'utilisateur ou extrait du PDF.
- *
- * - Sections objet (tenueCompte, releves, …) : merge clé-à-clé
- * - Tableaux (cartes, customFees, documents)  : copie de l'array DB tel quel
- */
-function mergeBankConditions(
-  empty: FullBankConditions,
-  bankData: Partial<FullBankConditions> | null | undefined,
-): FullBankConditions {
-  if (!bankData) return empty;
-  const merged: FullBankConditions = { ...empty };
-  const objectSectionKeys: Array<keyof FullBankConditions> = [
-    'tenueCompte', 'ouvertureCompte', 'clotureCompte', 'releves',
-    'guichet', 'fraisCartes', 'virements', 'cheques', 'credits',
-    'ebanking', 'divers',
-  ];
-  for (const k of objectSectionKeys) {
-    const fromDb = bankData[k] as Record<string, unknown> | undefined;
-    if (fromDb && typeof fromDb === 'object') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (merged as any)[k] = { ...(empty[k] as object), ...fromDb };
-    }
-  }
-  if (Array.isArray(bankData.cartes))    merged.cartes    = bankData.cartes;
-  if (Array.isArray(bankData.customFees)) merged.customFees = bankData.customFees;
-  if (Array.isArray(bankData.documents))  merged.documents  = bankData.documents;
-  return merged;
-}
 
 export function BankConditionsModal({
   isOpen,
   onClose,
   bank,
   onSaveConditions,
+  focusDocumentId,
 }: BankConditionsModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('documents');
   const [isUploading, setIsUploading] = useState(false);
@@ -645,6 +133,11 @@ export function BankConditionsModal({
     payload: VerificationPayload;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Refs vers chaque carte document de l'onglet Documents — utilisés pour
+  // scroller jusqu'au document ciblé par focusDocumentId à l'ouverture
+  // (« Éditer cette grille » depuis BanksPage).
+  const docCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // État local pour les conditions éditables — squelette vide à l'initialisation.
   // Les valeurs réelles sont chargées dans le useEffect ci-dessous, soit depuis
@@ -673,13 +166,29 @@ export function BankConditionsModal({
     // par-dessus, section par section, pour qu'aucune sous-clé ne soit
     // `undefined`. Pas de valeurs hardcodées : si la banque n'a pas de
     // données, tous les frais s'affichent à 0 et l'utilisateur les remplit.
-    const initial = mergeBankConditions(
+    let initial = mergeBankConditions(
       getEmptyFullConditions(),
       bank.conditions as Partial<FullBankConditions> | null | undefined,
     );
+
+    // Si la modale a été ouverte sur un document spécifique (« Éditer cette
+    // grille » depuis BanksPage), on applique ses extractedValues par-dessus
+    // pour que le formulaire affiche les valeurs propres à cette grille
+    // tarifaire — pas le merge cross-doc du blob legacy bank.conditions.
+    if (focusDocumentId) {
+      const focusedDoc = initial.documents.find((d) => d.id === focusDocumentId);
+      if (focusedDoc?.extractedValues) {
+        initial = applyExtractedValuesToConditions(
+          initial,
+          focusedDoc.extractedValues as Record<string, number | string | boolean | null | undefined>,
+        );
+      }
+      setActiveTab('documents');
+    }
+
     setConditions(initial);
     setBaseline(serializeForDiff(initial));
-  }, [bank, isOpen]);
+  }, [bank, isOpen, focusDocumentId]);
 
   // hasChanges est COMPUTED, pas un state. Rien ne peut l'écraser.
   // Si baseline est vide (modale jamais initialisée), on considère qu'il
@@ -723,6 +232,20 @@ export function BankConditionsModal({
     // Intentional no-op. The diff drives the UI, not imperative flags.
   };
   void setHasChanges; // keep referenced for legacy call sites
+
+  // Scroll vers le document ciblé à l'ouverture (focusDocumentId fourni
+  // par BanksPage quand on clique « Éditer cette grille »). On attend
+  // un tick pour que l'onglet Documents soit monté et la liste rendue.
+  useEffect(() => {
+    if (!isOpen || !focusDocumentId || activeTab !== 'documents') return;
+    const timeoutId = window.setTimeout(() => {
+      const el = docCardRefs.current[focusDocumentId];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+    return () => window.clearTimeout(timeoutId);
+  }, [isOpen, focusDocumentId, activeTab]);
 
   if (!isOpen || !bank) return null;
 
@@ -1010,30 +533,11 @@ export function BankConditionsModal({
   };
 
   /**
-   * Write the extracted values into the conditions form. Only fields with
-   * a non-default strategy get applied — defaults are skipped to preserve
-   * any manual edits the user has made.
+   * Project a document's extracted values onto the form state. Wraps the
+   * shared helper so the form re-renders.
    */
   const handleApplyExtraction = (values: Record<string, number | string | boolean | null>) => {
-    setConditions(prev => {
-      // Deep clone — we use setByPath / patchers which mutate
-      const next = JSON.parse(JSON.stringify(prev)) as FullBankConditions;
-      for (const [rawKey, value] of Object.entries(values)) {
-        if (value === null || value === undefined) continue;
-        // Translate FieldRegistry keys (e.g. accountFees.tenueCompte.particulier)
-        // into the modal's form-state paths (e.g. tenueCompte.particulierLocal).
-        // Without this step, setByPath wrote to a parallel object structure
-        // that no form field reads from — values silently disappeared.
-        const target = REGISTRY_TO_FORM_PATH[rawKey] ?? rawKey;
-        if (typeof target === 'function') {
-          // Patcher form — used for array-by-criterion targets like cartes[]
-          target(next, value);
-        } else {
-          setByPath(next as unknown as Record<string, unknown>, target, value);
-        }
-      }
-      return next;
-    });
+    setConditions(prev => applyExtractedValuesToConditions(prev, values));
     setHasChanges(true);
   };
 
@@ -2214,9 +1718,10 @@ export function BankConditionsModal({
                 <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50/60 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-900">
-                    Cliquez sur <strong>« Appliquer »</strong> pour qu'un document devienne la grille de conditions en vigueur.
-                    Un seul document peut être appliqué à la fois — sélectionner un nouveau remplace l'ancien.
-                    Le formulaire se met à jour automatiquement avec les valeurs extraites.
+                    Cliquez sur <strong>« Appliquer »</strong> pour qu'un document soit pris en compte par l'audit.
+                    Plusieurs documents peuvent être actifs simultanément — chacun fournit la grille tarifaire
+                    pour les transactions tombant dans sa période « En vigueur du / au ». L'audit choisit la bonne
+                    grille pour chaque transaction. Le formulaire affiche les valeurs du dernier document appliqué.
                   </p>
                 </div>
                 {conditions.documents.length === 0 ? (
@@ -2247,13 +1752,17 @@ export function BankConditionsModal({
                         }));
                         setHasChanges(true);
                       };
+                      const isFocused = doc.id === focusDocumentId;
                       return (
                         <div
                           key={doc.id}
+                          ref={(el) => { docCardRefs.current[doc.id] = el; }}
                           className={`p-3 rounded-lg border-2 transition-colors ${
-                            doc.isActive
-                              ? 'bg-emerald-50 border-emerald-400 shadow-sm'
-                              : 'bg-white border-primary-200 hover:border-primary-300'
+                            isFocused
+                              ? 'bg-amber-50 border-amber-400 shadow-md ring-2 ring-amber-300'
+                              : doc.isActive
+                                ? 'bg-emerald-50 border-emerald-400 shadow-sm'
+                                : 'bg-white border-primary-200 hover:border-primary-300'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-3">
@@ -2274,10 +1783,14 @@ export function BankConditionsModal({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {/* Toggle prominent « Appliquer » / « ✓ En vigueur ».
-                                Comportement radio : sélectionner un autre document
-                                désactive tous les autres pour respecter l'invariant
-                                « une seule grille en vigueur à la fois ». */}
+                            {/* Toggle « Appliquer » / « ✓ En vigueur » indépendant
+                                par document. Plusieurs documents peuvent être
+                                actifs simultanément — au save, chaque doc actif
+                                avec extractedValues devient une ConditionGrid
+                                avec ses propres dates « En vigueur du / au »,
+                                pour que le resolver split-by-grid de l'audit
+                                puisse appliquer la bonne grille tarifaire à
+                                chaque transaction selon sa date. */}
                             <button
                               type="button"
                               onClick={() => {
@@ -2285,9 +1798,7 @@ export function BankConditionsModal({
                                 setConditions(prev => ({
                                   ...prev,
                                   documents: prev.documents.map(d =>
-                                    d.id === doc.id
-                                      ? { ...d, isActive: willActivate }
-                                      : willActivate ? { ...d, isActive: false } : d,
+                                    d.id === doc.id ? { ...d, isActive: willActivate } : d,
                                   ),
                                 }));
                                 if (willActivate && doc.extractedValues && Object.keys(doc.extractedValues).length > 0) {
