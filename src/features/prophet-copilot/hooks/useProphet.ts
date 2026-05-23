@@ -15,6 +15,12 @@ import type {
 } from '../../statement-detail/types/statement.types';
 import { searchTransactions, aggregateAmount, findAnomalies, draftEmail } from '../tools';
 import { isSupabaseConfigured } from '../../../lib/supabase';
+import {
+  askProph3t,
+  searchKnowledge,
+  logAudit,
+  isAtlasCoreConfigured,
+} from '../../../lib/proph3t';
 import { loadOrCreateConversation, appendMessage as remoteAppend } from '../api/prophetApi';
 
 export interface UseProphetResult {
@@ -38,12 +44,23 @@ export interface UseProphetArgs {
   anomalies?: Anomaly[];
   endpoint?: string;
   authToken?: string;
+  /** Société/tenant courant (multi-tenant) — passé au core pour la RLS. */
+  societyId?: string | null;
+  /**
+   * Délègue le tour au « Proph3t core » hébergé (mode B) quand il est
+   * configuré. Défaut : true. Les relevés étant confidentiels, l'appel part
+   * en `sensitivity: confidential` (core → Ollama/Claude uniquement).
+   */
+  useAtlasCore?: boolean;
 }
 
 export function useProphet(args: UseProphetArgs): UseProphetResult {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ProphetMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // Conversation id renvoyé par le core hébergé (distinct de la conversation
+  // persistée côté app), repassé d'un tour à l'autre pour garder le contexte.
+  const [atlasConversationId, setAtlasConversationId] = useState<string | null>(null);
   const [isDeterministic, setIsDeterministic] = useState(true);
 
   const openDrawer = useCallback(() => setOpen(true), []);
@@ -79,7 +96,41 @@ export function useProphet(args: UseProphetArgs): UseProphetResult {
       };
       setMessages((m) => [...m, userMsg]);
 
-      // 1. Edge Function si disponible
+      // 1. Atlas Studio « Proph3t core » hébergé (mode B) — préféré quand
+      //    configuré. Données confidentielles → le core borne les providers
+      //    (Ollama/Claude), jamais de fuite vers un tier gratuit.
+      if ((args.useAtlasCore ?? true) && isAtlasCoreConfigured()) {
+        try {
+          const r = await askProph3t({
+            message: question,
+            sensitivity: 'confidential',
+            conversationId: atlasConversationId ?? undefined,
+            societyId: args.societyId ?? undefined,
+          });
+          if (r.conversation_id) setAtlasConversationId(r.conversation_id);
+          const msg: ProphetMessage = {
+            id: 'msg-atlas-' + Date.now(),
+            role: 'assistant',
+            content: r.disclaimer ? `${r.answer}\n\n_${r.disclaimer}_` : r.answer,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages((m) => [...m, msg]);
+          setIsDeterministic(false);
+          // Mode A — trace l'action sensible dans l'audit chaîné (non bloquant).
+          void logAudit({
+            action: 'prophet_query',
+            subjectType: 'statement',
+            subjectId: args.statementId ?? undefined,
+            content: { question, mode: 'hosted', confidence: r.confidence },
+            societyId: args.societyId ?? undefined,
+          });
+          return msg;
+        } catch {
+          // core indisponible / refus propre → on retombe sur les chemins suivants
+        }
+      }
+
+      // 2. Edge Function de l'app si disponible
       if (args.endpoint && args.authToken) {
         try {
           const r = await fetch(`${args.endpoint}/prophet-chat`, {
@@ -118,9 +169,27 @@ export function useProphet(args: UseProphetArgs): UseProphetResult {
         }
       }
 
-      // 2. Fallback local — execution deterministe des outils
+      // 3. Fallback local — execution deterministe des outils
       setIsDeterministic(true);
       const localReply = computeLocalReply(question, args);
+
+      // Mode A — ancrage : pour une question réglementaire, on enrichit la
+      // réponse déterministe avec le RAG central (SYSCOHADA/OHADA/CGI). Le
+      // message utilisateur n'est jamais envoyé : seule la requête de
+      // recherche part au core. Dégradation gracieuse (refs vides si core down).
+      if (isAtlasCoreConfigured() && isRegulatoryQuestion(question)) {
+        const refs = await searchKnowledge(question, {
+          sourceType: 'syscohada',
+          topK: 3,
+          societyId: args.societyId ?? undefined,
+        });
+        if (refs.length > 0) {
+          localReply.content +=
+            '\n\n**Références (Atlas core)**\n' +
+            refs.map((r) => `- ${r.title} — ${r.citation}`).join('\n');
+        }
+      }
+
       setMessages((m) => [...m, localReply]);
 
       // Persistance Supabase si disponible
@@ -141,7 +210,7 @@ export function useProphet(args: UseProphetArgs): UseProphetResult {
 
       return localReply;
     },
-    [args, conversationId],
+    [args, conversationId, atlasConversationId],
   );
 
   return {
@@ -374,4 +443,13 @@ function fcfa(centimes: number): string {
 
 function amt(t: BankTransaction): number {
   return Math.max(t.debitCentimes, t.creditCentimes);
+}
+
+// Question à coloration réglementaire → vaut le coup d'ancrer la réponse dans
+// le RAG central (SYSCOHADA / OHADA / CGI / LCB-FT) via le core.
+function isRegulatoryQuestion(question: string): boolean {
+  const q = question.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  return /syscohada|ohada|cgi|reglement|reglementaire|conformite|lcb|lbc|gafi|aml|blanchiment|usure|taux d.usure|cobac|bceao|uemoa|cemac|norme/i.test(
+    q,
+  );
 }
