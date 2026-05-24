@@ -25,7 +25,7 @@
 
 import { Proph3tClient, Proph3tError } from './proph3t/sdk';
 import type { KnowledgeHit, MemoryHit } from './proph3t/sdk';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient, isSupabaseConfigured } from './supabase';
 
 /** Id de cette app au catalogue Atlas Studio (le core normalise les alias). */
 const PRODUCT = 'atlasbanx';
@@ -34,13 +34,30 @@ const PRODUCT = 'atlasbanx';
 export type Sensitivity = 'confidential' | 'internal' | 'public';
 export const DEFAULT_SENSITIVITY: Sensitivity = 'confidential';
 
-// Ces vars pointent sur le CORE Atlas Studio — PAS le Supabase de cette app.
-const ATLAS_CORE_URL =
-  (import.meta.env.VITE_ATLAS_SUPABASE_URL as string | undefined) ?? '';
-const ATLAS_CORE_ANON =
-  (import.meta.env.VITE_ATLAS_SUPABASE_ANON_KEY as string | undefined) ?? '';
+/**
+ * Résout l'endpoint du core Atlas Studio.
+ *  1. `VITE_ATLAS_SUPABASE_*` dédiées (override explicite) si présentes ;
+ *  2. sinon repli sur le Supabase de l'app (`VITE_SUPABASE_*`) — car
+ *     aujourd'hui le core (`vgtmljfayiysuvrcmunt`) EST le projet de l'app :
+ *     la valeur existe déjà côté Vercel, aucune var à ré-ajouter.
+ * Les vars dédiées restent utiles le jour où le core diverge du projet app.
+ */
+function resolveAtlasCore(): { url: string; anon: string } {
+  const atlasUrl = import.meta.env.VITE_ATLAS_SUPABASE_URL as string | undefined;
+  const atlasAnon = import.meta.env.VITE_ATLAS_SUPABASE_ANON_KEY as string | undefined;
+  if (atlasUrl && atlasAnon) return { url: atlasUrl, anon: atlasAnon };
+  if (isSupabaseConfigured()) {
+    return {
+      url: import.meta.env.VITE_SUPABASE_URL as string,
+      anon: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+    };
+  }
+  return { url: '', anon: '' };
+}
 
-/** True quand l'URL + la clé anon du core sont fournies via l'environnement. */
+const { url: ATLAS_CORE_URL, anon: ATLAS_CORE_ANON } = resolveAtlasCore();
+
+/** True quand le core est joignable (vars dédiées OU repli Supabase app). */
 export function isAtlasCoreConfigured(): boolean {
   return Boolean(ATLAS_CORE_URL && ATLAS_CORE_ANON);
 }
