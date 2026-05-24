@@ -130,4 +130,29 @@ describe('filterNoise', () => {
     const rows: MappedRow[] = [{ page: 2, y: 100, items: [], cells: {} }];
     expect(filterNoise(rows, STRUCTURE).length).toBe(0);
   });
+
+  it('supprime le chrome d\'en-tête répété (format NSIA mainframe)', () => {
+    // Bloc d'en-tête qui se répète en haut de chaque page et fuyait comme
+    // de fausses transactions (cf. réconciliation Groupe Behira : +104).
+    const chrome: MappedRow[] = [
+      { page: 3, y: 540, items: [], cells: { description: 'HISTORIQUE DES MOUVEMENTS DU 01/01/2025 AU 31/12/2025' } },
+      { page: 3, y: 490, items: [], cells: { description: 'Compte No ..: 01281 XOF 29225103' } },
+      { page: 3, y: 480, items: [], cells: { description: 'No Client ..: 826371' } },
+      { page: 3, y: 525, items: [], cells: { description: 'Date ........: 29 Janvier 2026', credit: '3' } }, // "Page : 3"
+      { page: 3, y: 500, items: [], cells: { description: 'Age Dev Chap. Compte Nom Intitule' } },
+      { page: 3, y: 458, items: [], cells: { date: 'Date compta', description: 'Libelle', debit: 'Debit', credit: 'Credit' } },
+      { page: 14, y: 89, items: [], cells: { description: 'Total mouvements', debit: '661.722.696', credit: '578.834.680' } },
+    ];
+    expect(filterNoise(chrome, STRUCTURE).length).toBe(0);
+  });
+
+  it('NE supprime PAS une vraie transaction commençant par "TOTAL..." (TotalEnergies)', () => {
+    // Garde-fou : /^total\b/ ne doit pas matcher "TOTALENERGIES" (pas de
+    // frontière de mot après "total").
+    const rows: MappedRow[] = [
+      { page: 5, y: 200, items: [], cells: { date: '15/01/2025', description: 'TOTALENERGIES MARKETING COTE D IVOIRE', credit: '113.162.940' } },
+      { page: 5, y: 190, items: [], cells: { date: '16/01/2025', description: 'VIREMENT RTGS RECU', credit: '5.000.000' } },
+    ];
+    expect(filterNoise(rows, STRUCTURE).length).toBe(2);
+  });
 });
