@@ -102,12 +102,14 @@ describe('askProph3t (hosted mode B)', () => {
       if (v === undefined) continue;
       vi.stubEnv(k, v);
     }
-    // Supabase mock → JWT de session de l'app.
+    // Supabase mock → JWT de session de l'app. isSupabaseConfigured dérive de
+    // l'env stubbé pour piloter le repli VITE_ATLAS_* → VITE_SUPABASE_*.
     vi.doMock('../../lib/supabase', () => ({
       getSupabaseClient: () => ({
         auth: { getSession: async () => ({ data: { session: { access_token: 'jwt-app' } } }) },
       }),
-      isSupabaseConfigured: () => true,
+      isSupabaseConfigured: () =>
+        Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY),
     }));
     return import('../../lib/proph3t');
   }
@@ -164,6 +166,8 @@ describe('askProph3t (hosted mode B)', () => {
     const mod = await importWithEnv({
       VITE_ATLAS_SUPABASE_URL: '',
       VITE_ATLAS_SUPABASE_ANON_KEY: '',
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_ANON_KEY: '',
     });
     expect(mod.isAtlasCoreConfigured()).toBe(false);
     // resetModules → la classe Proph3tError du module importé dynamiquement est
@@ -175,7 +179,28 @@ describe('askProph3t (hosted mode B)', () => {
     const mod = await importWithEnv({
       VITE_ATLAS_SUPABASE_URL: '',
       VITE_ATLAS_SUPABASE_ANON_KEY: '',
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_ANON_KEY: '',
     });
     await expect(mod.searchKnowledge('ohada')).resolves.toEqual([]);
+  });
+
+  it('falls back to the app Supabase project when VITE_ATLAS_* are absent', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ conversation_id: 'c1', answer: 'ok', citations: [], confidence: 0.9 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const mod = await importWithEnv({
+      VITE_ATLAS_SUPABASE_URL: '',
+      VITE_ATLAS_SUPABASE_ANON_KEY: '',
+      VITE_SUPABASE_URL: 'https://app-core.test',
+      VITE_SUPABASE_ANON_KEY: 'app-anon',
+    });
+    expect(mod.isAtlasCoreConfigured()).toBe(true);
+    await mod.askProph3t({ message: 'x' });
+    expect(fetchMock.mock.calls[0][0]).toBe('https://app-core.test/functions/v1/proph3t-ask');
   });
 });
