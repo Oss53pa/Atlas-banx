@@ -107,11 +107,34 @@ export function mergeMultilineTransactions(rows: MappedRow[]): MappedRow[] {
 }
 
 /**
+ * Motifs de "chrome" de relevé qui ne sont jamais des transactions : en-têtes
+ * de page répétés, titres de section, lignes de totaux. Sur les relevés
+ * multi-pages (NSIA Banque CI & co), ce bloc d'en-tête se répète en haut de
+ * CHAQUE page ; sans ce filtre il fuit comme une fausse transaction (la date
+ * de période sert d'ancre, le numéro de page tombe en colonne montant →
+ * sur-comptage). Ces motifs n'apparaissent pas dans un libellé d'opération
+ * réel (VIREMENT, CHEQUE, FRAIS, Benef:, Tireur, Bq Emet:, …).
+ */
+const STATEMENT_CHROME_PATTERNS: RegExp[] = [
+  /historique\s+des\s+mouvements/i,   // titre du relevé
+  /compte\s+n[o°]\s*\.{0,4}\s*:/i,    // "Compte No ..:"
+  /n[o°]\s+client\s*\.{0,4}\s*:/i,    // "No Client ..:"
+  /agence\s*\.{2,}\s*:/i,             // "Agence ......:"
+  /\bpage\s*:\s*\d+/i,                // "Page : 3"
+  /\bdate\s*\.{3,}/i,                 // "Date ........: 29 Janvier"
+  /dev\s+chap/i,                      // en-tête "Age Dev Chap. Compte Nom Intitule"
+  /\bintitule\b/i,                    // même en-tête
+  /date\s+compta/i,                   // en-tête de colonnes répété
+  /^total\b/i,                        // "Total", "Total mouvements"
+];
+
+/**
  * Filter rows that are clearly NOT transactions:
- *   - the page header / sub-header
+ *   - the page header / sub-header (repeated on every page)
  *   - "Page X sur Y" markers
- *   - the totals row at the bottom ("Total" + 2 amounts)
- *   - rows above the header on the page
+ *   - the totals row at the bottom ("Total mouvements" + 2 amounts)
+ *   - opening/closing balance lines ("Solde au …")
+ *   - rows above the header on the header page
  */
 export function filterNoise(
   rows: MappedRow[],
@@ -125,9 +148,10 @@ export function filterNoise(
 
     const allText = Object.values(row.cells).join(' ').toLowerCase();
     if (!allText) return false;
-    if (/^page\s+\d+\s+(sur|of|de)\s+\d+$/i.test(allText.trim())) return false;
-    if (/^total$/i.test(allText.trim())) return false;
-    if (/^solde\s+(initial|final|au)/i.test(allText.trim())) return false;
+    const trimmed = allText.trim();
+    if (/^page\s+\d+\s+(sur|of|de)\s+\d+$/i.test(trimmed)) return false;
+    if (/^solde\s+(initial|final|au|precedent|nouveau|debiteur|crediteur)/i.test(trimmed)) return false;
+    if (STATEMENT_CHROME_PATTERNS.some((re) => re.test(allText))) return false;
     return true;
   });
 }

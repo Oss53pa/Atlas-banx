@@ -133,16 +133,29 @@ function decideSeparator(s: string): number | null {
   if (lastComma !== -1 || lastDot !== -1) {
     const sep = lastComma !== -1 ? ',' : '.';
     const sepIdx = lastComma !== -1 ? lastComma : lastDot;
+    const sepCount = s.split(sep).length - 1;
     const decimalsCount = s.length - sepIdx - 1;
     const integerPart = s.slice(0, sepIdx);
+
+    // Plusieurs séparateurs identiques (ex. "79.678.620", "1.000.085",
+    // "1,234,567") → ce sont forcément TOUS des séparateurs de milliers
+    // (on ne peut pas avoir deux virgules décimales). On les retire tous.
+    // ⚠ Bug historique : s.replace(sep, '') ne retirait que le PREMIER
+    // séparateur → tout montant ≥ 1 000 000 en format pointé était tronqué
+    // ("79.678.620" → 79678). On retire désormais TOUTES les occurrences.
+    if (sepCount > 1) {
+      const n = parseInt(s.split(sep).join(''), 10);
+      return isNaN(n) ? null : n;
+    }
+
     const treatAsThousands =
       decimalsCount === 3 && integerPart.length > 0 && !integerPart.startsWith('0');
 
     if (treatAsThousands) {
-      const n = parseInt(s.replace(sep, ''), 10);
+      const n = parseInt(s.split(sep).join(''), 10);
       return isNaN(n) ? null : n;
     }
-    const n = parseFloat(s.replace(sep, '.'));
+    const n = parseFloat(s.split(sep).join('.'));
     return isNaN(n) ? null : n;
   }
 

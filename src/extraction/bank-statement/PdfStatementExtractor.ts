@@ -31,6 +31,7 @@ import {
 } from './RowReconstructor';
 import { buildTransaction } from './TransactionBuilder';
 import { findAmounts, parseAmount } from './AmountParser';
+import { explodePipeDelimitedItems } from './PipeTableNormalizer';
 import type {
   ExtractedTransaction,
   ExtractionOptions,
@@ -65,7 +66,7 @@ export async function extractStatement(
   // ─── 1. Read PDF with positions ────────────────────────────────────────
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-  const items: PositionedItem[] = [];
+  let items: PositionedItem[] = [];
   let totalChars = 0;
 
   for (let p = 1; p <= pdf.numPages; p++) {
@@ -117,6 +118,13 @@ export async function extractStatement(
     }
     warnings.push(`Échec OCR: ${ocrResult.error}`);
   }
+
+  // ─── 1c. Normalize mainframe "pipe-table" formats ────────────────────
+  // Relevés NSIA & co : les colonnes sont délimitées par « ! » / « | » au
+  // sein d'un même item texte. On explose ces items en sous-items positionnés
+  // pour que la détection de colonnes (basée sur X) fonctionne. No-op pour les
+  // formats tabulaires classiques (aucun item bordé).
+  items = explodePipeDelimitedItems(items);
 
   // ─── 2. Strategy A: position-aware table detection ────────────────────
   options.onProgress?.({ stage: 'detect', pct: 0.5, message: 'Détection du tableau...' });
