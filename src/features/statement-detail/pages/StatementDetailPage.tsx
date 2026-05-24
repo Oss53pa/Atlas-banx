@@ -91,6 +91,7 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
   const prophet = useProphetChat({
     statementId: props.statementId,
     userId,
+    societyId: profile?.organization_id ?? null,
     contextLabel: meta
       ? `relevé ${meta.bankCode} · ${formatPeriodShort(meta.periodStart, meta.periodEnd)}`
       : 'relevé chargement…',
