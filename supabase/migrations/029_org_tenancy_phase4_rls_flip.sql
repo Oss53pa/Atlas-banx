@@ -52,6 +52,7 @@ DECLARE
   ];
 BEGIN
   FOREACH t IN ARRAY full_crud LOOP
+    CONTINUE WHEN to_regclass('atlasbanx.' || t) IS NULL;
     PERFORM atlasbanx._drop_all_policies(t);
 
     EXECUTE format($p$
@@ -92,6 +93,7 @@ DECLARE
   append_only text[] := ARRAY['risk_score_history','import_history','proph3t_inferences'];
 BEGIN
   FOREACH t IN ARRAY append_only LOOP
+    CONTINUE WHEN to_regclass('atlasbanx.' || t) IS NULL;
     PERFORM atlasbanx._drop_all_policies(t);
     EXECUTE format($p$
       CREATE POLICY ws_select ON atlasbanx.%I FOR SELECT

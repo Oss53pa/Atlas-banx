@@ -59,6 +59,7 @@ DECLARE
   ];
 BEGIN
   FOREACH t IN ARRAY shared_tables LOOP
+    CONTINUE WHEN to_regclass('atlasbanx.' || t) IS NULL;
     EXECUTE format($f$
       UPDATE atlasbanx.%I AS tbl
       SET workspace_id = w.id
@@ -87,6 +88,7 @@ DECLARE
   null_count bigint;
 BEGIN
   FOREACH t IN ARRAY not_null_candidates LOOP
+    CONTINUE WHEN to_regclass('atlasbanx.' || t) IS NULL;
     EXECUTE format('SELECT count(*) FROM atlasbanx.%I WHERE workspace_id IS NULL;', t)
       INTO null_count;
 

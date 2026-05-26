@@ -65,6 +65,7 @@ DECLARE
   ];
 BEGIN
   FOREACH t IN ARRAY shared_tables LOOP
+    CONTINUE WHEN to_regclass('atlasbanx.' || t) IS NULL;
     EXECUTE format('DROP TRIGGER IF EXISTS trg_set_workspace_id ON atlasbanx.%I;', t);
     EXECUTE format(
       'CREATE TRIGGER trg_set_workspace_id BEFORE INSERT ON atlasbanx.%I '
