@@ -62,13 +62,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
 
     try {
-      // Find the user's workspace via membership
-      const { data: membership, error: memErr } = await supabase
+      // Un utilisateur peut appartenir à PLUSIEURS workspaces (son solo issu du
+      // backfill + un cabinet où il a été invité). On récupère donc toutes ses
+      // appartenances (pas .maybeSingle() qui planterait sur >1 ligne) et on
+      // choisit le workspace actif : on PRÉFÈRE un cabinet qu'il ne possède pas
+      // (= invité, travail partagé) à son espace solo, puis le plus ancien.
+      const { data: memberships, error: memErr } = await supabase
         .schema('atlasbanx')
         .from('cabinet_members')
-        .select('workspace_id, role')
-        .eq('user_id', userId)
-        .maybeSingle();
+        .select('workspace_id, role, created_at, workspaces!inner(id, name, type, owner_id, settings, created_at, updated_at)')
+        .eq('user_id', userId);
 
       if (memErr) {
         console.warn('[workspaceStore] load membership failed:', memErr.message, {
@@ -76,23 +79,31 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         });
       }
 
-      if (!membership) {
-        // No workspace yet — caller should bootstrap one (signup flow)
+      if (!memberships || memberships.length === 0) {
+        // No workspace yet — ensureWorkspace bootstraps one.
         set({ loading: false, workspace: null, myRole: null });
         return;
       }
 
-      const { data: ws, error: wsErr } = await supabase
-        .schema('atlasbanx')
-        .from('workspaces')
-        .select('*')
-        .eq('id', membership.workspace_id)
-        .single();
-
-      if (wsErr || !ws) {
-        set({ loading: false, error: wsErr?.message ?? 'Workspace introuvable' });
-        return;
-      }
+      type Row = {
+        workspace_id: string;
+        role: string;
+        created_at: string;
+        workspaces: {
+          id: string; name: string; type: string; owner_id: string;
+          settings: Record<string, unknown> | null; created_at: string; updated_at: string;
+        };
+      };
+      const rows = memberships as unknown as Row[];
+      const sorted = [...rows].sort((a, b) => {
+        const aOwned = a.workspaces.owner_id === userId ? 1 : 0;
+        const bOwned = b.workspaces.owner_id === userId ? 1 : 0;
+        if (aOwned !== bOwned) return aOwned - bOwned; // non-possédé (invité) d'abord
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
+      const primary = sorted[0];
+      const ws = primary.workspaces;
+      const membership = { workspace_id: primary.workspace_id, role: primary.role };
 
       // Load all members of this workspace
       const { data: members } = await supabase
@@ -134,7 +145,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const supabase = getSupabaseClient();
     if (!supabase) return; // mode démo / pas de backend → no-op
 
-    // 1) Charge l'éventuel workspace existant.
+    // 0) Accepte d'abord les invitations en attente (par email) : si l'user a
+    //    été invité dans un cabinet, il le rejoint plutôt que de créer un solo.
+    try {
+      const { acceptMyInvites } = await import('./inviteApi');
+      await acceptMyInvites();
+    } catch (err) {
+      console.warn('[workspaceStore] acceptMyInvites failed (non-bloquant):', err);
+    }
+
+    // 1) Charge l'éventuel workspace existant (incluant un cabinet fraîchement
+    //    rejoint à l'étape 0).
     await get().load(userId);
     const state = get();
     if (state.workspace) return;        // déjà membre d'un workspace → rien à faire

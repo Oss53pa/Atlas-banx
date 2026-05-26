@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
+  UsersRound,
   Landmark,
   FileBarChart,
   Receipt,
@@ -56,6 +57,7 @@ const SECTIONS: NavSection[] = [
   {
     label: 'Administration',
     items: [
+      { name: 'Équipe',       href: '/team',         icon: UsersRound },
       { name: 'Intelligence', href: '/intelligence', icon: BrainCircuit },
       { name: 'Facturation',  href: '/billing',      icon: Receipt,  cabinetOnly: true },
       { name: 'Paramètres',   href: '/settings',     icon: Settings },
