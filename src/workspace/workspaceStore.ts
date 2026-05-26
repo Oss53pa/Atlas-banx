@@ -24,8 +24,26 @@ interface WorkspaceState {
 
   // Actions
   load: (userId: string) => Promise<void>;
+  /**
+   * Garantit qu'un workspace existe pour l'utilisateur : charge l'existant et,
+   * s'il n'a aucune appartenance, en crée un (1 par user, rôle DG) via le RPC
+   * SECURITY DEFINER create_workspace_with_dg, puis recharge.
+   * No-op en mode démo / sans Supabase. Respecte les cabinets multi-membres
+   * déjà existants (ne crée rien si l'user est déjà membre).
+   */
+  ensureWorkspace: (
+    userId: string,
+    opts?: { accountType?: 'enterprise' | 'cabinet'; name?: string },
+  ) => Promise<void>;
   setActiveWorkspace: (workspace: Workspace, role: CabinetRole) => void;
   reset: () => void;
+}
+
+/** Mappe le account_type du profil (anglais) vers le workspace_type (français). */
+function workspaceTypeFromAccount(
+  accountType?: 'enterprise' | 'cabinet',
+): WorkspaceType {
+  return accountType === 'enterprise' ? 'entreprise' : 'cabinet';
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -110,6 +128,37 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       console.error('[workspaceStore] load failed:', msg);
       set({ loading: false, error: msg });
     }
+  },
+
+  ensureWorkspace: async (userId, opts) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return; // mode démo / pas de backend → no-op
+
+    // 1) Charge l'éventuel workspace existant.
+    await get().load(userId);
+    const state = get();
+    if (state.workspace) return;        // déjà membre d'un workspace → rien à faire
+    if (state.error) return;            // le load a échoué → ne pas créer de doublon
+
+    // 2) Aucune appartenance → bootstrap atomique via RPC SECURITY DEFINER.
+    try {
+      const { error: rpcErr } = await supabase
+        .schema('atlasbanx')
+        .rpc('create_workspace_with_dg', {
+          p_name: opts?.name?.trim() || 'Mon espace',
+          p_type: workspaceTypeFromAccount(opts?.accountType),
+        });
+      if (rpcErr) {
+        console.error('[workspaceStore] create_workspace_with_dg failed:', rpcErr.message);
+        return;
+      }
+    } catch (err) {
+      console.error('[workspaceStore] ensureWorkspace RPC threw:', err);
+      return;
+    }
+
+    // 3) Recharge pour peupler workspace + role + members.
+    await get().load(userId);
   },
 
   setActiveWorkspace: (workspace, role) => {
