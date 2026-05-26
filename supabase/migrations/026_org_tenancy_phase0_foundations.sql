@@ -209,6 +209,10 @@ DECLARE
   ];
 BEGIN
   FOREACH t IN ARRAY shared_tables LOOP
+    -- Guard : certaines tables (risk_score_history, import_history) peuvent ne
+    -- pas exister selon l'environnement (schéma appliqué au coup par coup).
+    -- On saute proprement les absentes.
+    CONTINUE WHEN to_regclass('atlasbanx.' || t) IS NULL;
     EXECUTE format(
       'ALTER TABLE atlasbanx.%I ADD COLUMN IF NOT EXISTS workspace_id uuid REFERENCES atlasbanx.workspaces(id) ON DELETE CASCADE;',
       t
