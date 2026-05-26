@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type { Bank, BankConditions, FeeSchedule, InterestRate, ArchivedDocument, ConditionGrid } from '../types';
 import { banksRepo } from '../lib/repositories';
@@ -746,8 +746,45 @@ export const useBankStore = create<BankState>()(
     }),
     {
       name: 'atlasbanx-banks',
+      // localStorage n'est qu'un cache de démarrage rapide / mode démo : les
+      // banques sont ré-hydratées depuis Supabase à chaque boot authentifié.
+      // On allège donc le payload pour ne pas dépasser le quota (~5 Mo) :
+      //   - `documents` (ArchivedDocument[] : extraits + valeurs, le plus lourd)
+      //     n'est PAS persisté localement → rechargé depuis Supabase.
+      // Conditions et grilles restent persistées (légères, utiles offline).
       partialize: (state) => ({
-        banks: state.banks,
+        banks: state.banks.map((b) => ({ ...b, documents: [] as ArchivedDocument[] })),
+      }),
+      // Storage tolérant : si le quota est tout de même dépassé, on log et on
+      // n'écrit pas, plutôt que de laisser remonter un QuotaExceededError non
+      // catché qui casse l'hydratation (Promise.all dans App.tsx).
+      storage: createJSONStorage(() => {
+        const safeLocal: Storage = {
+          getItem: (k) => {
+            try { return window.localStorage.getItem(k); } catch { return null; }
+          },
+          setItem: (k, v) => {
+            try {
+              window.localStorage.setItem(k, v);
+            } catch (err) {
+              // QuotaExceededError ou localStorage indisponible (mode privé…)
+              console.warn('[bankStore] persist skipped (storage quota/unavailable):', err);
+            }
+          },
+          removeItem: (k) => {
+            try { window.localStorage.removeItem(k); } catch { /* noop */ }
+          },
+          clear: () => {
+            try { window.localStorage.clear(); } catch { /* noop */ }
+          },
+          key: (i) => {
+            try { return window.localStorage.key(i); } catch { return null; }
+          },
+          get length() {
+            try { return window.localStorage.length; } catch { return 0; }
+          },
+        };
+        return safeLocal;
       }),
     }
   )
