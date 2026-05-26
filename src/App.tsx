@@ -128,7 +128,7 @@ function App() {
   const hydrateReports = useReportStore((s) => s.hydrateFromSupabase);
   const resetReports = useReportStore((s) => s.resetState);
   const hydrateSettings = useSettingsStore((s) => s.hydrateFromSupabase);
-  const loadWorkspace = useWorkspaceStore((s) => s.load);
+  const ensureWorkspace = useWorkspaceStore((s) => s.ensureWorkspace);
   const resetWorkspace = useWorkspaceStore((s) => s.reset);
   const resetSettingsHydration = useSettingsStore((s) => s.resetHydration);
   const { isInitialized, isAuthenticated, isDemoMode, initialize, profile, user } = useAuthStore();
@@ -180,9 +180,10 @@ function App() {
         hydrateAnalyses(),
         hydrateReports(),
         hydrateSettings(),
-        // V3 architecture — load workspace + role from atlasbanx tables
-        loadWorkspace(user.id),
       ]);
+      // NB : le chargement/bootstrap du workspace est géré par un effet dédié
+      // (ensureWorkspace) qui attend que le profil soit disponible pour lire
+      // account_type / full_name.
     })();
 
     return () => {
@@ -307,6 +308,19 @@ function App() {
     if (profile?.account_type !== 'enterprise') return;
     ensureSelfClient(profile?.full_name ?? undefined);
   }, [isAuthenticated, profile, ensureSelfClient]);
+
+  // Multi-tenant : garantir qu'un workspace existe (charge l'existant ou en
+  // crée un, 1 par user, rôle DG). Attend le profil pour lire account_type /
+  // full_name. No-op en démo. Indispensable une fois workspace_id NOT NULL :
+  // sans workspace, les nouveaux imports n'auraient pas de tenant.
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id || isDemoMode) return;
+    if (!profile) return; // attendre le profil (account_type / full_name)
+    void ensureWorkspace(user.id, {
+      accountType: profile.account_type,
+      name: profile.full_name || profile.email || undefined,
+    });
+  }, [isAuthenticated, isDemoMode, user?.id, profile, ensureWorkspace]);
 
   // Show loading while auth initializes
   if (!authReady || !isInitialized) {
