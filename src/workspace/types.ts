@@ -37,6 +37,17 @@ export interface CabinetMember {
   email?: string;
 }
 
+/** Invitation par email — permet de pré-inviter avant que l'user ait un compte. */
+export interface WorkspaceInvite {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: CabinetRole;
+  invitedBy: string | null;
+  acceptedAt: Date | null;
+  createdAt: Date;
+}
+
 export interface ClientAssignment {
   id: string;
   clientId: string;

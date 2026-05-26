@@ -37,6 +37,7 @@ const BanksPage = lazy(() => import('./components/banks').then(m => ({ default: 
 const ReportsPage = lazy(() => import('./components/reports').then(m => ({ default: m.ReportsPage })));
 const BillingPage = lazy(() => import('./components/billing').then(m => ({ default: m.BillingPage })));
 const SettingsPage = lazy(() => import('./components/settings').then(m => ({ default: m.SettingsPage })));
+const TeamManagementPage = lazy(() => import('./components/team').then(m => ({ default: m.TeamManagementPage })));
 const IntelligencePage = lazy(() => import('./components/intelligence').then(m => ({ default: m.IntelligenceDashboard })));
 const ConditionsIntelligencePage = lazy(() => import('./components/conditions-intelligence').then(m => ({ default: m.ConditionsIntelligencePage })));
 const StatementsListPage = lazy(() => import('./components/statements').then(m => ({ default: m.StatementsListPage })));
@@ -407,6 +408,7 @@ function AppRoutes() {
                     <Route path="reports" element={<ReportsPage />} />
                     <Route path="billing" element={<CabinetOnly><BillingPage /></CabinetOnly>} />
                     <Route path="settings" element={<SettingsPage />} />
+                    <Route path="team" element={<TeamManagementPage />} />
                     <Route path="intelligence" element={<IntelligencePage />} />
                     <Route path="conditions-intelligence" element={<ConditionsIntelligencePage />} />
                     <Route path="*" element={<NotFoundPage />} />

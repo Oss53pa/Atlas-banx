@@ -8,7 +8,10 @@ export type {
   Workspace,
   CabinetMember,
   ClientAssignment,
+  WorkspaceInvite,
 } from './types';
+
+export { listInvites, createInvite, revokeInvite, acceptMyInvites } from './inviteApi';
 
 export {
   ANOMALY_GATING,
