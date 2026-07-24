@@ -20,7 +20,6 @@ import {
 import { useTransactionStore } from '../../store/transactionStore';
 import { useClientStore } from '../../store/clientStore';
 import { useAnalysisStore } from '../../store/analysisStore';
-import { useBankStore } from '../../store/bankStore';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountType } from '../../hooks/useAccountType';
 import { formatCurrency, formatNumber } from '../../utils';
@@ -43,7 +42,6 @@ export function HomePage() {
   const { isEnterprise } = useAccountType();
   const { transactions } = useTransactionStore();
   const { clients, statements } = useClientStore();
-  const { banks } = useBankStore();
   const { currentAnalysis } = useAnalysisStore();
   const profile = useAuthStore((s) => s.profile);
   const user = useAuthStore((s) => s.user);
@@ -109,18 +107,18 @@ export function HomePage() {
             <ShieldCheck className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] sm:text-xs text-ink-900 font-semibold uppercase tracking-[0.16em] truncate">
+            <p className="text-xs sm:text-sm text-ink-900 font-semibold uppercase tracking-[0.16em] truncate">
               {orgName}
             </p>
-            <p className="text-[10px] text-ink-500 truncate">{orgSubtitle}</p>
+            <p className="text-xs text-ink-500 truncate">{orgSubtitle}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-2.5">
           <Chip>
             <Calendar className="w-3 h-3 text-ink-500" />
-            <span className="text-[11px] text-ink-600">Exercice</span>
-            <span className="text-[11px] font-bold text-ink-900 tabular-nums">{yearLabel}</span>
+            <span className="text-xs text-ink-600">Exercice</span>
+            <span className="text-xs font-bold text-ink-900 tabular-nums">{yearLabel}</span>
           </Chip>
           <Chip>
             <span className={`w-1.5 h-1.5 rounded-full ${
@@ -128,11 +126,11 @@ export function HomePage() {
               : auditStatus === 'done' ? 'bg-emerald-500'
               : 'bg-ink-300'
             }`} />
-            <span className="text-[11px] text-ink-700 font-medium">Proph3t</span>
+            <span className="text-xs text-ink-700 font-medium">Proph3t</span>
           </Chip>
           <button
             onClick={() => navigate('/landing')}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-white/70 backdrop-blur border border-primary-200/60 hover:border-accent-400/60 hover:bg-white text-[11px] text-ink-700 hover:text-ink-900 transition-all"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-white/70 backdrop-blur border border-primary-200/60 hover:border-accent-400/60 hover:bg-white text-xs text-ink-700 hover:text-ink-900 transition-all"
           >
             <Compass className="w-3 h-3" />
             Découvrir
@@ -140,7 +138,7 @@ export function HomePage() {
           </button>
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-pill bg-ink-900 text-white hover:bg-ink-800 text-xs font-semibold shadow-card hover:shadow-card-hover transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-pill bg-ink-900 text-white hover:bg-ink-800 text-sm font-semibold shadow-card hover:shadow-card-hover transition-all"
           >
             Dashboard
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -152,7 +150,7 @@ export function HomePage() {
       <div className="flex flex-col items-center text-center px-4 sm:px-6 pt-12 sm:pt-16">
         <div className="flex items-center gap-2 mb-3 animate-fade-in-up">
           <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-          <p className="text-[11px] text-ink-600 uppercase tracking-[0.22em]">
+          <p className="text-xs text-ink-600 uppercase tracking-[0.22em]">
             Bienvenue · {periodLabel}
           </p>
         </div>
@@ -170,7 +168,7 @@ export function HomePage() {
         </h1>
 
         <p
-          className="max-w-2xl text-sm sm:text-base text-ink-600 leading-relaxed animate-fade-in-up"
+          className="max-w-2xl text-base sm:text-lg text-ink-600 leading-relaxed animate-fade-in-up"
           style={{ animationDelay: '120ms', animationFillMode: 'backwards' }}
         >
           Audit bancaire intelligent <strong className="text-ink-900">CEMAC · UEMOA</strong>.
@@ -227,7 +225,7 @@ export function HomePage() {
         <div className="lg:col-span-2 rounded-2xl border border-primary-200/60 bg-white/70 backdrop-blur-xl shadow-card p-6">
           <div className="flex items-start justify-between gap-3 mb-5">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-ink-500 font-semibold">
+              <p className="text-xs uppercase tracking-[0.18em] text-ink-500 font-semibold">
                 Couverture d'audit
               </p>
               <p className="text-2xl font-bold text-ink-900 mt-1">
@@ -239,7 +237,7 @@ export function HomePage() {
               <p className="text-3xl font-bold text-ink-900 tabular-nums">
                 {auditCoverage}<span className="text-base text-ink-400 ml-0.5">%</span>
               </p>
-              <p className="text-[10px] uppercase tracking-[0.16em] text-ink-500 mt-0.5">Couverts</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-ink-500 mt-0.5">Couverts</p>
             </div>
           </div>
 
@@ -250,7 +248,7 @@ export function HomePage() {
             />
           </div>
 
-          <div className="flex items-center justify-between mt-4 text-[11px] text-ink-500">
+          <div className="flex items-center justify-between mt-4 text-xs text-ink-500">
             <span>
               {pendingStatements > 0 ? (
                 <>
@@ -293,13 +291,13 @@ export function HomePage() {
             </div>
             <ArrowUpRight className="w-4 h-4 text-white/60 group-hover:text-accent-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
           </div>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-accent-300 font-semibold relative z-10">
+          <p className="text-xs uppercase tracking-[0.18em] text-accent-300 font-semibold relative z-10">
             Proph3t · Assistant IA
           </p>
-          <p className="!text-white text-base font-semibold mt-1 relative z-10">
+          <p className="!text-white text-lg font-semibold mt-1 relative z-10">
             Analyse, commente et anticipe vos écarts.
           </p>
-          <p className="text-xs text-white/70 mt-1.5 relative z-10">
+          <p className="text-sm text-white/70 mt-1.5 relative z-10">
             Multi-agents Claude · BCEAO · COBAC
           </p>
         </button>
@@ -307,7 +305,7 @@ export function HomePage() {
 
       {/* ─── ACCÈS RAPIDE ─── */}
       <div className="px-6 sm:px-10 lg:px-14 mt-10">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-ink-500 font-semibold mb-3">
+        <p className="text-xs uppercase tracking-[0.2em] text-ink-500 font-semibold mb-3">
           Accès rapide
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -365,10 +363,10 @@ export function HomePage() {
       <footer className="mt-12 pb-6 px-6 sm:px-10 lg:px-14">
         <div className="flex flex-col items-center gap-2">
           <div className="gold-rule max-w-[140px]" />
-          <p className="text-[10px] text-ink-500 uppercase tracking-[0.2em]">
+          <p className="text-xs text-ink-500 uppercase tracking-[0.2em]">
             AtlasBanx · CEMAC · UEMOA · {yearLabel}
           </p>
-          <p className="text-[10px] text-ink-400">
+          <p className="text-xs text-ink-400">
             Une application <span className="text-ink-700 font-semibold">Atlas Studio</span>
           </p>
         </div>
@@ -424,19 +422,19 @@ function KpiCard({ eyebrow, value, subline, accent, tone, delay = 0, onClick }: 
       }`} />
 
       <div className="flex items-start justify-between gap-2 mb-3">
-        <p className="text-[10px] uppercase tracking-[0.16em] text-ink-500 font-semibold leading-tight">
+        <p className="text-xs uppercase tracking-[0.16em] text-ink-500 font-semibold leading-tight">
           {eyebrow}
         </p>
         <ArrowUpRight className="w-4 h-4 text-ink-300 group-hover:text-accent-600 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
       </div>
 
-      <p className={`text-2xl sm:text-3xl font-bold tabular-nums tracking-tight leading-none ${
+      <p className={`text-3xl sm:text-4xl font-bold tabular-nums tracking-tight leading-none ${
         accent ? 'text-gradient-gold' : 'text-ink-900'
       }`}>
         {value}
       </p>
 
-      <div className="flex items-center gap-1.5 mt-3 text-[11px] text-ink-500">
+      <div className="flex items-center gap-1.5 mt-3 text-xs text-ink-500">
         {tone === 'warn' && <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />}
         {tone === 'ok' && <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" />}
         <span className="truncate">{subline}</span>
@@ -462,8 +460,8 @@ function QuickCard({ icon, iconBg, title, subtitle, onClick }: QuickCardProps) {
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${iconBg}`}>
         {icon}
       </div>
-      <p className="text-sm font-semibold text-ink-900 leading-tight">{title}</p>
-      <p className="text-[11px] text-ink-500 mt-0.5 truncate">{subtitle}</p>
+      <p className="text-base font-semibold text-ink-900 leading-tight">{title}</p>
+      <p className="text-xs text-ink-500 mt-0.5 truncate">{subtitle}</p>
     </button>
   );
 }
