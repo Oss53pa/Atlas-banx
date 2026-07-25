@@ -6,6 +6,7 @@ import {
 import { Card, CardBody, Button, Badge } from '../../ui';
 import { formatDate } from '../../../utils';
 import type { Bank, BankStatement, BankAccount, Transaction } from '../../../types';
+import { StatementDuplicatesBanner } from './StatementDuplicatesBanner';
 
 interface StatementsTabProps {
   clientStatements: BankStatement[];
@@ -16,6 +17,8 @@ interface StatementsTabProps {
   onOpenStatement?: (statementId: string) => void;
   /** Switch to the in-page Import tab instead of navigating away. */
   onOpenImport?: () => void;
+  /** Suppression d'un relevé (utilisée pour purger les doublons). */
+  onDeleteStatement?: (statementId: string) => void;
 }
 
 // ============================================================================
@@ -123,6 +126,7 @@ export const StatementsTab = memo(function StatementsTab({
   navigate,
   onOpenStatement,
   onOpenImport,
+  onDeleteStatement,
 }: StatementsTabProps) {
   const tree = useMemo(
     () => buildTree(clientAccounts, clientStatements, banks),
@@ -150,6 +154,14 @@ export const StatementsTab = memo(function StatementsTab({
 
   return (
     <div className="space-y-3">
+      {/* Doublons de relevés — même compte + même période */}
+      {onDeleteStatement && (
+        <StatementDuplicatesBanner
+          statements={clientStatements}
+          onDeleteStatement={(stmt) => onDeleteStatement(stmt.id)}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-primary-700">
           {tree.length} banque{tree.length > 1 ? 's' : ''} · {clientStatements.length} releve{clientStatements.length > 1 ? 's' : ''}
