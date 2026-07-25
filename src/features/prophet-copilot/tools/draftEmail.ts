@@ -48,7 +48,8 @@ export function draftEmail(args: DraftEmailArgs): DraftEmailResult {
 
 function formatFcfa(centimes: number): string {
   const u = Math.round(centimes / 100);
-  let out = '', s = String(Math.abs(u));
+  let out = '';
+  const s = String(Math.abs(u));
   for (let i = 0; i < s.length; i++) {
     if (i > 0 && (s.length - i) % 3 === 0) out += ' ';
     out += s[i];

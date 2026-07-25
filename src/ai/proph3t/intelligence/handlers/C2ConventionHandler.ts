@@ -24,17 +24,17 @@ const DEROGATION_MARKERS: RegExp[] = [
 ];
 
 const SIGNATORY_PATTERNS: RegExp[] = [
-  /(?:pour|sign[eé])\s+(?:la\s+)?banque\s*[:\-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
-  /(?:pour|sign[eé])\s+(?:le\s+)?client\s*[:\-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
-  /directeur\s+(?:d['´]?agence|r[eé]gional)\s*[:\-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
-  /charg[eé]\s+d['´]?affaires?\s*[:\-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
-  /g[eé]rant\s*[:\-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
+  /(?:pour|sign[eé])\s+(?:la\s+)?banque\s*[:-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
+  /(?:pour|sign[eé])\s+(?:le\s+)?client\s*[:-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
+  /directeur\s+(?:d['´]?agence|r[eé]gional)\s*[:-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
+  /charg[eé]\s+d['´]?affaires?\s*[:-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
+  /g[eé]rant\s*[:-]?\s*([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+){0,3})/i,
 ];
 
 const DATE_PATTERNS: RegExp[] = [
   /sign[eé]e?\s+(?:le\s+)?(\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})/i,
   /fait\s+[àa]\s+\w+\s*,?\s*(?:le\s+)?(\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})/i,
-  /date\s*(?:de\s+signature)?\s*[:\-]?\s*(\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})/i,
+  /date\s*(?:de\s+signature)?\s*[:-]?\s*(\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})/i,
   /en\s+date\s+du\s+(\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})/i,
 ];
 
@@ -46,7 +46,7 @@ const DURATION_PATTERNS: RegExp[] = [
   /dur[eé]e\s+ind[eé]termin[eé]e/i,
 ];
 
-const GROUP_REF_PATTERN = /convention[_\-\s]cadre\s*(?:n[°o]?\s*)?([A-Z0-9\-\/]+)/i;
+const GROUP_REF_PATTERN = /convention[_\-\s]cadre\s*(?:n[°o]?\s*)?([A-Z0-9\-/]+)/i;
 
 // ----------------------------------------------------------------------------
 // Extraction helpers

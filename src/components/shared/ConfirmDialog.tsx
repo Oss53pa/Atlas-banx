@@ -85,7 +85,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
         <div className="p-4 space-y-3 text-sm text-ink-700">
           <div>{description}</div>
 
-          {requireComment || true ? (
+          {(
             <div>
               <label className="block text-xs font-semibold text-ink-700 mb-1">
                 {commentLabel} {requireComment && <span className="text-rose-600">*</span>}
@@ -101,7 +101,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
                 <p className="text-[10px] text-ink-500 mt-1">{commentHelp}</p>
               )}
             </div>
-          ) : null}
+          )}
 
           {futureHash && (
             <div className="flex items-start gap-2 text-[10px] text-ink-500 bg-canvas-50 px-2 py-1.5 rounded border border-canvas-200">

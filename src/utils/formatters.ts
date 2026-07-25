@@ -7,7 +7,7 @@ import { fr } from 'date-fns/locale';
  * Intl.NumberFormat('fr-FR') output like "397 914 601" into "397914601".
  */
 function normalizeSpaces(s: string): string {
-  return s.replace(/[  ]/g, ' ');
+  return s.replace(/[\u00A0\u202F]/g, ' ');
 }
 
 // Currency formatting

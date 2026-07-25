@@ -9,7 +9,7 @@ import type { FieldDefinition, FieldExtraction } from '../types';
 import { normalizeForMatch, parseNumber, similarity } from '../normalize';
 
 const MIN_SCORE = 0.62;
-const NUMBER_REGEX = /(\d[\d\s .,]{0,15}\d|\d+)\s*(?:%|FCFA|XAF|XOF)?/g;
+const NUMBER_REGEX = /(\d[\d\s\u00A0.,]{0,15}\d|\d+)\s*(?:%|FCFA|XAF|XOF)?/g;
 
 export function semanticStrategy(
   text: string,

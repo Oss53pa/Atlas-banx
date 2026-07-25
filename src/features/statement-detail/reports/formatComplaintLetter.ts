@@ -147,7 +147,7 @@ export function formatComplaintLetter(input: ComplaintLetterInput): FormattedCom
 
 function formatFcfa(centimes: number): string {
   const units = Math.round(centimes / 100);
-  let s = String(Math.abs(units));
+  const s = String(Math.abs(units));
   let out = '';
   for (let i = 0; i < s.length; i++) {
     if (i > 0 && (s.length - i) % 3 === 0) out += ' ';

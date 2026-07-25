@@ -173,7 +173,7 @@ export class SupabaseCdcDao implements CdcDataAccess {
   ): Promise<Agreement[]> {
     const dateStr = referenceDate.toISOString().slice(0, 10);
 
-    let query = this.supabase
+    const query = this.supabase
       .schema('atlasbanx')
       .from('agreements')
       .select('*')

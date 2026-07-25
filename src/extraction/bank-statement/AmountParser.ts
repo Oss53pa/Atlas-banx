@@ -13,8 +13,8 @@
 
 const CURRENCY_PATTERN = /(?:FCFA|XOF|XAF|EUR|USD|F\s*CFA|F\.?\s*CFA)/gi;
 const PARENS_DEBIT_PATTERN = /^\s*\(([^)]+)\)\s*$/;
-const TRAILING_SIGN_PATTERN = /^\s*([\d\s.,]+)\s*([+\-])\s*$/;
-const LEADING_SIGN_PATTERN = /^\s*([+\-])?\s*([\d\s.,]+)\s*$/;
+const TRAILING_SIGN_PATTERN = /^\s*([\d\s.,]+)\s*([+-])\s*$/;
+const LEADING_SIGN_PATTERN = /^\s*([+-])?\s*([\d\s.,]+)\s*$/;
 
 export interface ParsedAmount {
   value: number;
@@ -34,7 +34,7 @@ export interface ParsedAmount {
  */
 export function parseAmount(raw: string | undefined | null): ParsedAmount | null {
   if (!raw) return null;
-  let s = String(raw).replace(/ /g, ' ').trim();
+  let s = String(raw).replace(/\u00A0/g, ' ').trim();
   if (!s) return null;
 
   // Strip currency labels first
@@ -175,7 +175,7 @@ export function findAmounts(text: string): Array<{ start: number; end: number; r
   const results: Array<{ start: number; end: number; raw: string }> = [];
   // Match clusters of digits separated by spaces / commas / dots
   // Examples: "500 293",  "74 158 089",  "1 250,50",  "5,000.50"
-  const re = /[+\-]?\s*\(?\s*\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{1,2})?\s*\)?/g;
+  const re = /[+-]?\s*\(?\s*\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{1,2})?\s*\)?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const raw = m[0].trim();

@@ -273,7 +273,7 @@ function computeFallbackReply(
 }
 
 function fmtFcfa(units: number): string {
-  let s = String(Math.abs(Math.round(units)));
+  const s = String(Math.abs(Math.round(units)));
   let out = '';
   for (let i = 0; i < s.length; i++) {
     if (i > 0 && (s.length - i) % 3 === 0) out += ' ';

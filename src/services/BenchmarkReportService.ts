@@ -536,7 +536,7 @@ function drawEvolutionSection(ctx: DrawCtx): void {
   if (!focusBank) return;
   doc.addPage(); drawPageHeader(ctx, `Évolution intra-banque — ${focusBank.name}`);
 
-  let y = 48;
+  const y = 48;
   const grids = [...(focusBank.conditionGrids ?? [])].sort(
     (a, b) => new Date(a.effectiveDate).getTime() - new Date(b.effectiveDate).getTime(),
   );
@@ -651,7 +651,7 @@ function drawDriftSection(ctx: DrawCtx): void {
   const { doc, args } = ctx;
   doc.addPage(); drawPageHeader(ctx, 'Dérives tarifaires (>10%)');
 
-  let y = 48;
+  const y = 48;
   const drifts: Array<{ bank: Bank; rubric: RubricRef; from: number; to: number; deltaPct: number; fromDate: Date; toDate: Date }> = [];
   for (const b of args.banks) {
     const grids = [...(b.conditionGrids ?? [])].sort(

@@ -35,9 +35,9 @@ function parseNumeric(value: string | number | null): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   const cleaned = value
-    .replace(/\s| /g, '')   // espaces (dont insécables)
+    .replace(/\s|\u00A0/g, '')   // espaces (dont insécables)
     .replace(/,/g, '.')          // virgule décimale → point
-    .replace(/[^0-9.\-]/g, '');  // retire unités/symboles résiduels
+    .replace(/[^0-9.-]/g, '');  // retire unités/symboles résiduels
   if (cleaned === '' || cleaned === '-' || cleaned === '.') return null;
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
