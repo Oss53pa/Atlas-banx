@@ -2,6 +2,27 @@ import { createWorker, Worker } from 'tesseract.js';
 // Side-effect import: configures pdfjs worker once, locally bundled by Vite
 import { pdfjsLib } from './pdfjsWorker';
 
+/**
+ * Same-origin base URL for the self-hosted tesseract worker + WASM core.
+ * The files live in /public/tesseract and are copied verbatim into the
+ * build output (never inlined, unlike the rest of the single-file bundle),
+ * so they are served as real static assets under script-src/worker-src
+ * 'self'. Override via VITE_OCR_BASE if the app is ever mounted on a
+ * non-root base path.
+ */
+const OCR_BASE = (import.meta.env?.VITE_OCR_BASE as string | undefined)?.replace(/\/$/, '') || '/tesseract';
+
+/**
+ * Language data (fra/eng .traineddata.gz). Fully self-hosted in
+ * /public/tessdata → served same-origin under connect-src 'self', so OCR
+ * works with zero external network dependency (critical for field use in
+ * low-connectivity CEMAC/UEMOA contexts, and immune to CDN version 404s).
+ * Override with VITE_OCR_LANG_PATH only if you deliberately want a remote
+ * tessdata host again.
+ */
+const OCR_LANG_PATH = (import.meta.env?.VITE_OCR_LANG_PATH as string | undefined)?.replace(/\/$/, '')
+  || '/tessdata';
+
 export interface OcrResult {
   success: boolean;
   text: string;
@@ -37,9 +58,33 @@ export class OcrService {
     this.isInitializing = true;
 
     try {
+      // ⚠ CSP-safe / offline-capable asset loading.
+      // ─────────────────────────────────────────────
+      // By default tesseract.js fetches its worker + WASM core from a CDN
+      // (jsdelivr) and the language data from tessdata.projectnaptha.com.
+      // The production CSP (vercel.json) only allows 'self', so those CDN
+      // fetches were silently blocked → OCR returned nothing → the whole
+      // conditions/import extraction failed with "Aucune condition extraite".
+      //
+      // We now self-host the worker + core (copied into /public/tesseract by
+      // the build, served same-origin → covered by script-src/worker-src
+      // 'self' + wasm-unsafe-eval). Only the traineddata language files are
+      // still fetched from the official tessdata host, which is explicitly
+      // whitelisted in connect-src. These paths are absolute ('/tesseract…')
+      // so they resolve identically in dev and in the single-file prod build.
       this.worker = await createWorker('fra+eng', 1, {
+        workerPath: `${OCR_BASE}/worker.min.js`,
+        corePath: OCR_BASE,
+        langPath: OCR_LANG_PATH,
+        gzip: true,
+        // Load the worker directly from its same-origin URL instead of
+        // wrapping it in a blob: URL — keeps it under worker-src 'self'.
+        workerBlobURL: false,
         logger: (m) => {
           console.log('[OCR]', m.status, Math.round((m.progress || 0) * 100) + '%');
+        },
+        errorHandler: (e: unknown) => {
+          console.error('[OCR] worker error:', e);
         },
       });
 
