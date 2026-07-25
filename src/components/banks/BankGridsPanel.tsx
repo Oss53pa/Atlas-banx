@@ -19,6 +19,7 @@ import { Calendar, AlertCircle, FileText, Upload, History } from 'lucide-react';
 import { Button } from '../ui';
 import type { Bank, ConditionGrid, MonetaryZone } from '../../types';
 import { GridSummaryCard } from './GridSummaryCard';
+import { GridDuplicatesBanner } from './GridDuplicatesBanner';
 
 interface BankGridsPanelProps {
   bank: Bank;
@@ -27,6 +28,7 @@ interface BankGridsPanelProps {
   onUploadPdf: () => void;
   onEditGrid: (grid: ConditionGrid | null) => void;
   onViewSource: (grid: ConditionGrid) => void;
+  onDeleteGrid: (grid: ConditionGrid) => void;
 }
 
 function fmtPeriod(grid: ConditionGrid): string {
@@ -44,6 +46,7 @@ export function BankGridsPanel({
   onUploadPdf,
   onEditGrid,
   onViewSource,
+  onDeleteGrid,
 }: BankGridsPanelProps) {
   const currency: 'XAF' | 'XOF' = zone === 'UEMOA' ? 'XOF' : 'XAF';
 
@@ -107,9 +110,12 @@ export function BankGridsPanel({
 
   return (
     <div className="space-y-3">
+      {/* Doublons éventuels — même période + même segment */}
+      <GridDuplicatesBanner grids={sortedGrids} onDeleteGrid={onDeleteGrid} />
+
       {/* Chips switcher */}
       <div className="rounded-lg border border-primary-200 bg-white px-3 py-2.5">
-        <div className="flex items-baseline justify-between mb-2">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-baseline gap-2">
             <h3 className="text-sm font-semibold text-primary-900">
               Grilles tarifaires
@@ -119,15 +125,27 @@ export function BankGridsPanel({
               {sortedGrids.length > activeCount && ` · ${sortedGrids.length - activeCount} archivée${sortedGrids.length - activeCount > 1 ? 's' : ''}`}
             </span>
           </div>
-          {activeCount > 1 && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] text-amber-700"
-              title="L'audit applique la grille couvrant la date de chaque transaction"
+          <div className="flex items-center gap-2">
+            {activeCount > 1 && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] text-amber-700"
+                title="L'audit applique la grille couvrant la date de chaque transaction"
+              >
+                <AlertCircle className="w-3 h-3" />
+                Multi-période
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 text-xs"
+              onClick={onUploadPdf}
+              title="Importer un ou plusieurs PDF de conditions (périodes/années précédentes incluses)"
             >
-              <AlertCircle className="w-3 h-3" />
-              Multi-période
-            </span>
-          )}
+              <Upload className="w-3 h-3 mr-1" />
+              Importer une période
+            </Button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {sortedGrids.map((grid) => {
