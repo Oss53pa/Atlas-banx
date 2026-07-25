@@ -33,7 +33,7 @@ export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { getClient, statements, reports, addAccount, removeAccount } = useClientStore();
+  const { getClient, statements, reports, addAccount, removeAccount, deleteStatement } = useClientStore();
   const { banks } = useBankStore();
   const { transactions } = useTransactionStore();
   const { analysisHistory = [], currentAnalysis } = useAnalysisStore();
@@ -369,6 +369,7 @@ export function ClientDetailPage() {
           navigate={navigate}
           onOpenStatement={(id) => navigate(`/statements/${id}`)}
           onOpenImport={() => setActiveTab('import')}
+          onDeleteStatement={deleteStatement}
         />
       )}
 

@@ -226,6 +226,11 @@ export function BanksPage() {
     bank: Bank;
   } | null>(null);
 
+  // File d'attente d'import multi-fichiers : permet d'importer plusieurs
+  // grilles (périodes/années précédentes) en une seule sélection. Chaque
+  // fichier passe à tour de rôle par la modale de vérification.
+  const [pendingImports, setPendingImports] = useState<{ file: File; bankId: string }[]>([]);
+
   // Selected bank
   const selectedBank = useMemo(() => {
     return selectedBankId ? banks.find(b => b.id === selectedBankId) ?? null : null;
@@ -315,41 +320,61 @@ export function BanksPage() {
   // Handle document upload and extraction. PDFs go through the verification
   // modal (split-screen: source PDF + editable rubric mapping). The grid is
   // only committed to the store when the user validates the modal.
-  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>, bankId: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const bank = banks.find(b => b.id === bankId);
-    if (!bank) return;
-
-    setIsUploading(true);
-    setUploadingBankId(bankId);
-
-    try {
-      const result = await extractConditions(file, { bankCode: bank.code });
-      if (result.rawPairs.length === 0) {
-        alert('Aucune condition n\'a pu être extraite du document. Vérifie le format du PDF.');
-        return;
+  // Traite la file d'import : extrait le prochain fichier exploitable et ouvre
+  // la modale de vérification. Les fichiers vides/en erreur sont ignorés (avec
+  // notification) et l'on passe automatiquement au suivant.
+  const processNextImport = async (queue: { file: File; bankId: string }[]) => {
+    let remaining = queue;
+    while (remaining.length > 0) {
+      const [head, ...rest] = remaining;
+      const bank = banks.find((b) => b.id === head.bankId);
+      if (!bank) {
+        remaining = rest;
+        continue;
       }
-
-      const payload = buildConditionsPayload({
-        fileName: file.name,
-        bankCode: bank.code,
-        pairs: result.rawPairs,
-        matches: result.matches,
-      });
-
-      setVerification({ file, payload, bankId, bank });
-    } catch (error) {
-      console.error('Erreur extraction conditions:', error);
-      alert('Erreur lors de l\'extraction des conditions. Veuillez réessayer.');
-    } finally {
-      setIsUploading(false);
-      setUploadingBankId(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      setIsUploading(true);
+      setUploadingBankId(head.bankId);
+      try {
+        const result = await extractConditions(head.file, { bankCode: bank.code });
+        if (result.rawPairs.length === 0) {
+          alert(`Aucune condition n'a pu être extraite de « ${head.file.name} ». Fichier ignoré.`);
+          remaining = rest;
+          continue;
+        }
+        const payload = buildConditionsPayload({
+          fileName: head.file.name,
+          bankCode: bank.code,
+          pairs: result.rawPairs,
+          matches: result.matches,
+        });
+        // On mémorise le reste de la file, puis on ouvre la vérification.
+        setPendingImports(rest);
+        setVerification({ file: head.file, payload, bankId: head.bankId, bank });
+        return;
+      } catch (error) {
+        console.error('Erreur extraction conditions:', error);
+        alert(`Erreur lors de l'extraction de « ${head.file.name} ». Fichier ignoré.`);
+        remaining = rest;
+        continue;
+      } finally {
+        setIsUploading(false);
+        setUploadingBankId(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     }
+    // File épuisée.
+    setPendingImports([]);
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>, bankId: string) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    const bank = banks.find((b) => b.id === bankId);
+    if (!bank) return;
+    // Chaque fichier = une période/grille potentielle (années précédentes incluses).
+    await processNextImport(files.map((file) => ({ file, bankId })));
   };
 
   // User validated rows in the modal → commit a new ConditionGrid
@@ -425,6 +450,16 @@ export function BanksPage() {
     setActiveGrid(bankId, createdGrid.id);
 
     setVerification(null);
+
+    // Import multi-fichiers : s'il reste des fichiers dans la file, on enchaîne
+    // sur le suivant plutôt que d'ouvrir l'éditeur entre chaque période.
+    if (pendingImports.length > 0) {
+      const next = pendingImports;
+      setPendingImports([]);
+      void processNextImport(next);
+      return;
+    }
+
     setSelectedBank(bankId);
     setShowConditions(true); // open the legacy editor on the new grid for fine-tuning
 
@@ -660,6 +695,7 @@ export function BanksPage() {
                     <input
                       type="file"
                       ref={fileInputRef}
+                      multiple
                       accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.tiff,.bmp,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
                       onChange={(e) => handlePdfUpload(e, selectedBank.id)}
                       className="hidden"
@@ -699,6 +735,7 @@ export function BanksPage() {
                     setFocusDocumentId(grid.sourceDocument?.id ?? null);
                     setShowConditions(true);
                   }}
+                  onDeleteGrid={(grid) => deleteConditionGrid(grid.bankId, grid.id)}
                 />
               </>
             ) : (
@@ -855,7 +892,15 @@ export function BanksPage() {
           file={verification.file}
           initialPayload={verification.payload}
           onCommit={handleVerifiedConditionsCommit}
-          onCancel={() => setVerification(null)}
+          onCancel={() => {
+            setVerification(null);
+            // On saute ce fichier mais on poursuit la file d'import restante.
+            if (pendingImports.length > 0) {
+              const next = pendingImports;
+              setPendingImports([]);
+              void processNextImport(next);
+            }
+          }}
         />
       )}
     </div>
