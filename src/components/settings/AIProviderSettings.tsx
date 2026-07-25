@@ -11,6 +11,7 @@ import {
   Cloud,
   Cpu,
   Settings2,
+  Zap,
 } from 'lucide-react';
 import {
   Card,
@@ -58,6 +59,19 @@ const PROVIDERS = {
     placeholder: 'sk-...',
     description: 'Solution OpenAI populaire',
     hasOrganization: true,
+  },
+  groq: {
+    name: 'Groq',
+    icon: Zap,
+    color: 'orange',
+    models: [
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Recommande)' },
+      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (Rapide)' },
+      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+      { value: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+    ],
+    placeholder: 'gsk_...',
+    description: 'Inference LPU ultra-rapide, modeles open-weight',
   },
   mistral: {
     name: 'Mistral AI',
@@ -138,9 +152,10 @@ export function AIProviderSettings({ onSave }: AIProviderSettingsProps) {
 
     try {
       // Map store provider type to AI module provider type
-      const providerTypeMap: Record<string, 'claude' | 'openai' | 'mistral' | 'ollama'> = {
+      const providerTypeMap: Record<string, 'claude' | 'openai' | 'groq' | 'mistral' | 'ollama'> = {
         claude: 'claude',
         openai: 'openai',
+        groq: 'groq',
         mistral: 'mistral',
         ollama: 'ollama',
         gemini: 'openai', // Use OpenAI-compatible for Gemini
@@ -406,6 +421,7 @@ export function AIProviderSettings({ onSave }: AIProviderSettingsProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {renderProviderCard('claude')}
           {renderProviderCard('openai')}
+          {renderProviderCard('groq')}
           {renderProviderCard('mistral')}
           {renderProviderCard('gemini')}
           {renderProviderCard('ollama')}

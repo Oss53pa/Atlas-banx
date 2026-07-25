@@ -27,7 +27,7 @@ export interface CustomRegulatorySource {
 }
 
 // Types for AI providers
-export type AIProviderType = 'claude' | 'openai' | 'mistral' | 'gemini' | 'ollama' | 'custom' | 'none';
+export type AIProviderType = 'claude' | 'openai' | 'groq' | 'mistral' | 'gemini' | 'ollama' | 'custom' | 'none';
 
 export interface AIProviderConfig {
   enabled: boolean;
@@ -185,6 +185,7 @@ interface SettingsStore {
     providers: {
       claude: AIProviderConfig;
       openai: AIProviderConfig;
+      groq: AIProviderConfig;
       mistral: AIProviderConfig;
       gemini: AIProviderConfig;
       ollama: AIProviderConfig;
@@ -364,6 +365,10 @@ const defaultAIProviders = {
       ...defaultProviderConfig,
       model: 'gpt-4-turbo',
       organization: '',
+    },
+    groq: {
+      ...defaultProviderConfig,
+      model: 'llama-3.3-70b-versatile',
     },
     mistral: {
       ...defaultProviderConfig,
@@ -998,6 +1003,7 @@ export const useSettingsStore = create<SettingsStore>()(
                   ? {
                       claude:  stripKey(state.aiProviders.providers.claude)  ?? state.aiProviders.providers.claude,
                       openai:  stripKey(state.aiProviders.providers.openai)  ?? state.aiProviders.providers.openai,
+                      groq:    stripKey(state.aiProviders.providers.groq)    ?? state.aiProviders.providers.groq,
                       mistral: stripKey(state.aiProviders.providers.mistral) ?? state.aiProviders.providers.mistral,
                       gemini:  stripKey(state.aiProviders.providers.gemini)  ?? state.aiProviders.providers.gemini,
                       ollama:  state.aiProviders.providers.ollama, // Ollama runs locally — no key

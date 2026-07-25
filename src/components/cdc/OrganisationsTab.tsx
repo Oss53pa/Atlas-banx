@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, Building, Loader2 } from 'lucide-react';
 import { useCdcStore } from '../../cdc/store/cdcStore';
+import { useWorkspaceStore } from '../../workspace/workspaceStore';
 import type { CdcOrganization } from '../../cdc/types';
 
 const ORG_TYPE_LABELS: Record<string, string> = {
@@ -29,16 +30,16 @@ export function OrganisationsTab() {
     selectOrganization,
   } = useCdcStore();
 
-  // TODO: get tenantId from auth context
-  const tenantId = null;
+  // Le tenant CDC correspond au workspace actif (multi-tenant par org).
+  const tenantId = useWorkspaceStore((s) => s.workspace?.id ?? null);
 
   useEffect(() => {
     if (tenantId) loadOrganizations(tenantId);
-  }, [tenantId]);
+  }, [tenantId, loadOrganizations]);
 
   useEffect(() => {
     if (selectedOrgId) loadAccounts(selectedOrgId);
-  }, [selectedOrgId]);
+  }, [selectedOrgId, loadAccounts]);
 
   // Build tree from flat list
   const rootOrgs = organizations.filter((o) => !o.parentId);

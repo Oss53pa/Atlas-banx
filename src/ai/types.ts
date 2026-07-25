@@ -12,7 +12,7 @@ import { Transaction, Anomaly, AnomalyType, BankConditions, TransactionType } fr
 /**
  * Fournisseurs d'IA supportés
  */
-export type AIProviderType = 'claude' | 'openai' | 'mistral' | 'ollama' | 'custom' | 'gemini' | 'deepseek';
+export type AIProviderType = 'claude' | 'openai' | 'groq' | 'mistral' | 'ollama' | 'custom' | 'gemini' | 'deepseek';
 
 /**
  * Labels des fournisseurs
@@ -20,6 +20,7 @@ export type AIProviderType = 'claude' | 'openai' | 'mistral' | 'ollama' | 'custo
 export const AI_PROVIDER_LABELS: Record<AIProviderType, string> = {
   claude: 'Anthropic Claude',
   openai: 'OpenAI GPT',
+  groq: 'Groq (LPU ultra-rapide)',
   mistral: 'Mistral AI',
   ollama: 'Ollama (Local)',
   custom: 'Personnalisé',
@@ -58,6 +59,12 @@ export const AI_MODELS: Record<AIProviderType, AIModel[]> = {
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', contextWindow: 128000, maxOutputTokens: 16384, supportsVision: true },
     { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', contextWindow: 128000, maxOutputTokens: 4096, supportsVision: true },
     { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', contextWindow: 16385, maxOutputTokens: 4096 },
+  ],
+  groq: [
+    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', provider: 'groq', contextWindow: 128000, maxOutputTokens: 32768, isDefault: true },
+    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', provider: 'groq', contextWindow: 128000, maxOutputTokens: 8192 },
+    { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', provider: 'groq', contextWindow: 32768, maxOutputTokens: 32768 },
+    { id: 'gemma2-9b-it', name: 'Gemma 2 9B', provider: 'groq', contextWindow: 8192, maxOutputTokens: 8192 },
   ],
   mistral: [
     { id: 'mistral-large-latest', name: 'Mistral Large', provider: 'mistral', contextWindow: 128000, maxOutputTokens: 8192, isDefault: true },
