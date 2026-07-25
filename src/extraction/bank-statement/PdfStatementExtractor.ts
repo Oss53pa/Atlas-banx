@@ -241,7 +241,7 @@ function strategyFreeText(
     if (!dateMatch) continue;
 
     // Strip date(s) at the start (some banks have Date + Date Valeur)
-    let rest = line.replace(/^\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})?)\s*/, '');
+    const rest = line.replace(/^\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})?)\s*/, '');
 
     // Find amount-like clusters in the rest
     const amounts = findAmounts(rest);

@@ -59,9 +59,9 @@ function confidenceLabel(c: number): string {
 
 function formatValue(ex: FieldExtraction): string {
   if (ex.value === null) return '—';
-  if (ex.kind === 'percentage') return `${ex.value} %`;
+  if (ex.kind === 'percentage') return `${ex.value}\u00A0%`;
   if (ex.kind === 'amount') {
-    return `${formatNumber(Number(ex.value))} FCFA`;
+    return `${formatNumber(Number(ex.value))}\u00A0FCFA`;
   }
   return String(ex.value);
 }

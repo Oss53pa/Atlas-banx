@@ -135,7 +135,6 @@ async function dispatchCompetence(
 
   const durationMs = Date.now() - startMs;
   const promptHash = await hashString(JSON.stringify(req.context).slice(0, 500));
-  const inputHash = await hashString(JSON.stringify(req.context));
 
   const trace: IntelligenceTrace = {
     model_used: "ollama-qwen2.5-7b",

@@ -100,7 +100,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 }
 
 function fmtFcfa(amount: number): string {
-  let s = String(Math.abs(Math.round(amount)));
+  const s = String(Math.abs(Math.round(amount)));
   let out = '';
   for (let i = 0; i < s.length; i++) {
     if (i > 0 && (s.length - i) % 3 === 0) out += ' ';
@@ -202,7 +202,7 @@ function buildPdf(args: BuildPdfArgs): Uint8Array {
     doc.setTextColor(120, 120, 120);
     doc.setFontSize(8);
     doc.text(
-      `Type: ${a.type} · Statut: ${a.status} · Confiance: ${Math.round((Number(a.confidence) ?? 0) * 100)}%`,
+      `Type: ${a.type} · Statut: ${a.status} · Confiance: ${Math.round(Number(a.confidence) * 100)}%`,
       22, y,
     );
     if (a.potential_recovery) {

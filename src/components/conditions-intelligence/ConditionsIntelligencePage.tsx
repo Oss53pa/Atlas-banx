@@ -153,7 +153,7 @@ function getRubricValue(grid: ConditionGrid, rubric: RubricDef): number | null {
 }
 
 function formatRubric(value: number, rubric: RubricDef): string {
-  if (rubric.unit === '%') return `${value.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`.replace(/ /g, ' ');
+  if (rubric.unit === '%') return `${value.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}\u00A0%`.replace(/\u00A0/g, ' ');
   if (rubric.unit === 'jours') return `${value} jour${value > 1 ? 's' : ''}`;
   return formatCurrency(value, 'XAF');
 }

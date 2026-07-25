@@ -41,9 +41,10 @@ export function ComplaintLetterCard(props: ComplaintLetterCardProps) {
 
   const totalRecovery = eligible.reduce((s, a) => s + (a.potentialRecoveryCentimes ?? 0), 0);
 
-  if (eligible.length === 0) return null;
-
+  // Tous les hooks doivent être appelés avant tout retour conditionnel (Rules of Hooks).
   const bankAddr = useMemo(() => resolveBankAddress(props.statement.bankCode), [props.statement.bankCode]);
+
+  if (eligible.length === 0) return null;
 
   const formatted = props.convention ? formatComplaintLetter({
     cabinet: props.cabinet,

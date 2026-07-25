@@ -2,8 +2,8 @@
 // ATLASBANX — Text normalization & number parsing utilities
 // French banking documents use varied formatting:
 //   - Decimal: "14,5" or "14.5"
-//   - Thousands: "5 000" / "5 000" / "5,000"
-//   - Currency: "FCFA" / "F CFA" / "F CFA" / "XAF" / "XOF"
+//   - Thousands: "5 000" / "5\u00A0000" / "5,000"
+//   - Currency: "FCFA" / "F CFA" / "F\u00A0CFA" / "XAF" / "XOF"
 //   - Dotted lines: "Tenue de compte ......... 5 000"
 // ============================================================================
 
@@ -20,7 +20,7 @@ export function normalizeForMatch(s: string): string {
 /** Normalize an entire document: collapse whitespace, unify currency markers */
 export function normalizeDocument(text: string): string {
   return text
-    .replace(/ /g, ' ')          // NBSP → space
+    .replace(/\u00A0/g, ' ')          // NBSP → space
     .replace(/[…•·]/g, ' ') // ellipsis / bullets → space
     .replace(/[ \t]+/g, ' ')          // collapse spaces/tabs
     .replace(/\n{3,}/g, '\n\n')       // collapse multiple newlines
@@ -48,7 +48,7 @@ export function parseNumber(raw: string): number | null {
 
   // Keep digits, comma, dot, space, NBSP
   const cleaned = raw
-    .replace(/[ ]/g, ' ')
+    .replace(/[\u00A0]/g, ' ')
     .replace(/[^0-9 ,.]/g, '')
     .trim();
 

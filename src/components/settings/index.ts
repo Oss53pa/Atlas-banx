@@ -9,3 +9,4 @@ export { Proph3tSettingsPanel } from './Proph3tSettingsPanel';
 export { SecuritySettings } from './SecuritySettings';
 export { AuditTrailPanel } from './AuditTrailPanel';
 export { MfaSetupPanel } from './MfaSetupPanel';
+export { MfaSettings } from './MfaSettings';

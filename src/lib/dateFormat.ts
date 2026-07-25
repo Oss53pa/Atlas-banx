@@ -95,11 +95,11 @@ export function parseAnyDate(input: unknown): Date | null {
   }
 
   // 4) dd/MM/yyyy, dd-MM-yyyy, dd.MM.yyyy
-  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
   if (m) return makeUtcDate(+m[3], +m[2] - 1, +m[1]);
 
   // 5) dd/MM/yy
-  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2})$/);
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2})$/);
   if (m) {
     const yy = +m[3];
     const year = yy <= TWO_DIGIT_YEAR_PIVOT ? 2000 + yy : 1900 + yy;
@@ -107,7 +107,7 @@ export function parseAnyDate(input: unknown): Date | null {
   }
 
   // 6) yyyy/MM/dd
-  m = s.match(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/);
+  m = s.match(/^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/);
   if (m) return makeUtcDate(+m[1], +m[2] - 1, +m[3]);
 
   // 7) Français : "10 février 2026", "10 fev 2026", "10 févr. 2026"

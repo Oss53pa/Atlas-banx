@@ -102,8 +102,8 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
   // 3. Dispatch to handler
   let output: unknown;
   let modelUsed: IntelligenceModel = 'ollama-qwen2.5-7b';
-  let tokensIn = 0;
-  let tokensOut = 0;
+  const tokensIn = 0;
+  const tokensOut = 0;
   let confidenceScore = 0;
 
   try {

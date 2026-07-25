@@ -188,8 +188,8 @@ const REGULATORY_SIGNALS: RegExp[] = [
   /\buemoa\b/i,
   /\bteg\b/i,
   /\btaea\b/i,
-  /rccm\s*[:\-]?\s*[A-Z]{2}/i,
-  /swift\s*[:\-]?\s*[A-Z]{4,}/i,
+  /rccm\s*[:-]?\s*[A-Z]{2}/i,
+  /swift\s*[:-]?\s*[A-Z]{4,}/i,
 ];
 
 // ----------------------------------------------------------------------------

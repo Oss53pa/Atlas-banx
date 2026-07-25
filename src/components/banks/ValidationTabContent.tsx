@@ -3,16 +3,36 @@
 // ============================================================================
 // Wrap le SplitScreenValidator (CDC §7.2) :
 //   - panneau gauche : PDF du dernier document archivé
-//   - panneau droit : champs extraits par PROPH3T (mock pour l'instant)
+//   - panneau droit : champs extraits par le vrai extracteur de conditions
 //   - sélection bidirectionnelle bbox ↔ champ
 //   - validation finale → publication d'une nouvelle version L2
 // ============================================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileX, Sparkles, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { Bank, ArchivedDocument } from '../../types';
 import { SplitScreenValidator, type ExtractedField } from '../../cdc/components/SplitScreenValidator';
 import { submitValidatedReference } from '../../cdc/services/submitValidatedReference';
+import { extractConditions } from '../../extraction/conditions';
+import { extractionResultToFields } from './extractionToFields';
+
+type ExtractionState =
+  | { status: 'idle' }
+  | { status: 'extracting' }
+  | { status: 'done'; count: number; warnings: string[] }
+  | { status: 'error'; message: string };
+
+/**
+ * Charge le PDF (data-URL ou URL distante) et le convertit en `File`,
+ * format attendu par `extractConditions`.
+ */
+async function fetchPdfAsFile(pdfUrl: string, name: string): Promise<File> {
+  const res = await fetch(pdfUrl);
+  const blob = await res.blob();
+  return new File([blob], name || 'document.pdf', {
+    type: blob.type || 'application/pdf',
+  });
+}
 
 type SubmitState =
   | { status: 'idle' }
@@ -38,11 +58,49 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
     return sorted[0] ?? null;
   }, [archivedDocuments]);
 
-  const [fields, setFields] = useState<ExtractedField[]>(() =>
-    document ? buildSeedFields(document.id) : [],
-  );
+  const [fields, setFields] = useState<ExtractedField[]>([]);
   const [activeFieldId, setActiveFieldId] = useState<string | undefined>();
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
+  const [extractionState, setExtractionState] = useState<ExtractionState>({ status: 'idle' });
+
+  const pdfUrl = document?.fileData ?? '';
+
+  // Lance la vraie extraction des conditions dès qu'un document est présent.
+  // Non bloquant : le rendu se fait immédiatement, les champs arrivent ensuite.
+  useEffect(() => {
+    if (!document || !pdfUrl) {
+      setFields([]);
+      setExtractionState({ status: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setExtractionState({ status: 'extracting' });
+    (async () => {
+      try {
+        const file = await fetchPdfAsFile(pdfUrl, document.name);
+        const result = await extractConditions(file, { bankCode: bank.code });
+        if (cancelled) return;
+        const mapped = extractionResultToFields(result);
+        setFields(mapped);
+        setExtractionState({
+          status: 'done',
+          count: mapped.length,
+          warnings: result.warnings ?? [],
+        });
+      } catch (err) {
+        if (cancelled) return;
+        // Fallback gracieux : liste vide + notice non bloquante, jamais de crash.
+        setFields([]);
+        setExtractionState({
+          status: 'error',
+          message: err instanceof Error ? err.message : "Échec de l'extraction.",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [document, pdfUrl, bank.code]);
 
   if (!document) {
     return (
@@ -62,8 +120,6 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
       </div>
     );
   }
-
-  const pdfUrl = document.fileData ?? '';
 
   const handleValidateAll = async () => {
     if (submitState.status === 'submitting') return;
@@ -89,6 +145,37 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
         Document : <span className="font-mono text-ink-700">{document.name}</span>
         {' · '}Banque : <span className="font-semibold text-ink-700">{bank.name}</span>
       </div>
+
+      {/* Statut d'extraction (temps réel) */}
+      {extractionState.status === 'extracting' && (
+        <div className="px-4 py-2 bg-canvas-50 border-b border-canvas-200 text-xs text-ink-600 flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Extraction des conditions en cours…
+        </div>
+      )}
+      {extractionState.status === 'done' && (
+        <div className="px-4 py-2 bg-canvas-50 border-b border-canvas-200 text-xs text-ink-600 flex flex-col gap-1">
+          <span className="inline-flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-ink-400" />
+            {extractionState.count} champ{extractionState.count > 1 ? 's' : ''} extrait
+            {extractionState.count > 1 ? 's' : ''}
+            {extractionState.count === 0 && ' — aucune condition détectée, ajoutez les champs manuellement.'}
+          </span>
+          {extractionState.warnings.length > 0 && (
+            <span className="inline-flex items-start gap-1.5 text-amber-700">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+              <span>{extractionState.warnings.join(' · ')}</span>
+            </span>
+          )}
+        </div>
+      )}
+      {extractionState.status === 'error' && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          Extraction indisponible ({extractionState.message}). Vous pouvez ajouter les
+          champs manuellement.
+        </div>
+      )}
 
       {submitState.status === 'submitting' && (
         <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 flex items-center gap-2">
@@ -135,41 +222,4 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
       />
     </div>
   );
-}
-
-// ============================================================================
-// Mock seed fields (à remplacer par extraction PROPH3T effective)
-// ============================================================================
-
-function buildSeedFields(documentId: string): ExtractedField[] {
-  void documentId;
-  return [
-    {
-      id: 'fld-1',
-      rubricCode: 'compte.tenue_mensuelle',
-      label: 'Tenue de compte mensuelle',
-      value: '2 500',
-      unit: 'FCFA',
-      bbox: { page: 1, x: 100, y: 700, w: 80, h: 14 },
-      confidence: 'high',
-    },
-    {
-      id: 'fld-2',
-      rubricCode: 'decouverts.taux_autorise',
-      label: 'Taux découvert autorisé',
-      value: '11.5',
-      unit: '%',
-      bbox: { page: 2, x: 120, y: 500, w: 60, h: 14 },
-      confidence: 'medium',
-    },
-    {
-      id: 'fld-3',
-      rubricCode: 'decouverts.commission_mouvement',
-      label: 'Commission de mouvement',
-      value: '0.25',
-      unit: '%',
-      bbox: { page: 2, x: 120, y: 460, w: 60, h: 14 },
-      confidence: 'low',
-    },
-  ];
 }
