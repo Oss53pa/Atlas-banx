@@ -60,6 +60,12 @@ export interface ConditionsExtractionResult {
   unmatchedPairs: LabelValuePair[];
   /** Section headers detected in the document */
   sections: string[];
+  /** Clientèle segment detected from file name / header (particuliers…). */
+  detectedSegment?: import('../../types').TariffSegment | null;
+  /** Effective date detected from file name / header. */
+  detectedEffectiveDate?: Date | null;
+  /** Short period label (e.g. "S2 2021") + human evidence for the UI. */
+  detectionEvidence?: { segment: string; period: string; periodLabel: string | null };
   stats: {
     totalPages: number;
     pairsFound: number;

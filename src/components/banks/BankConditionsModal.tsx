@@ -44,6 +44,7 @@ import {
   mergeBankConditions,
   applyExtractedValuesToConditions,
 } from '../../extraction/conditionsForm';
+import { normalizeForMatch } from '../../extraction/normalize';
 import { ExtractionReportPanel } from './ExtractionReportPanel';
 import {
   ImportVerificationModal,
@@ -53,6 +54,22 @@ import {
   type VerificationPayload,
 } from '../import-verification';
 import { v4 as uuidv4 } from 'uuid';
+
+// Valid custom-fee categories = the edit-form tab ids. Auto-created fees
+// must land in one of these so they render under the right tab.
+const CUSTOM_FEE_TABS = new Set([
+  'compte', 'guichet', 'cartes', 'virements', 'cheques', 'credits', 'ebanking', 'divers',
+]);
+
+/** Coerce an arbitrary category string to a valid tab id (fallback: divers). */
+function normalizeCategory(category?: string): string {
+  return category && CUSTOM_FEE_TABS.has(category) ? category : 'divers';
+}
+
+/** Dedup signature for a custom fee — category + accent/space-insensitive label. */
+function customFeeSignature(category: string, label: string): string {
+  return `${category}::${normalizeForMatch(label)}`;
+}
 
 // Determine zone from country code
 function getZoneFromCountry(country: string): 'CEMAC' | 'UEMOA' | null {
@@ -396,6 +413,9 @@ export function BankConditionsModal({
           bankCode: bank.code,
           pairs: result.rawPairs,
           matches: result.matches,
+          detectedSegment: result.detectedSegment,
+          detectedEffectiveDate: result.detectedEffectiveDate,
+          detectedPeriodLabel: result.detectionEvidence?.periodLabel,
         });
 
         setVerification({ file, payload });
@@ -469,20 +489,67 @@ export function BankConditionsModal({
     // first, then again at the end as a belt-and-braces guarantee.
     setHasChanges(true);
 
-    // Apply each validated rubric into the conditions form via setByPath.
+    // Split validated rubrics into two channels:
+    //   • registry keys  → typed conditions form (via REGISTRY_TO_FORM_PATH)
+    //   • custom keys     → CustomFee[] under the matching tab category,
+    //                       DEDUPLICATED so re-importing never creates doubles.
     const values: Record<string, number | string> = {};
+    // docCustomFees = ALL custom rubrics from THIS import (deduped within the
+    // batch only) → attached to the archived document so they ride into the
+    // grid and thus into the anomaly calculation.
+    const docCustomFees: CustomFee[] = [];
+    // customToAdd = subset not already present at bank level (avoids doubles
+    // in the bank-wide customFees list).
+    const customToAdd: CustomFee[] = [];
+    const batchSigs = new Set<string>();
+    const existingCustomSigs = new Set(
+      conditions.customFees.map((f) => customFeeSignature(f.category, f.label)),
+    );
     if (commit.conditions) {
       for (const [rubricKey, val] of Object.entries(commit.conditions)) {
+        if (val.custom) {
+          const label = (val.label ?? rubricKey).trim();
+          const category = normalizeCategory(val.category);
+          const sig = customFeeSignature(category, label);
+          if (batchSigs.has(sig)) continue; // dedup within this import
+          batchSigs.add(sig);
+          const fee: CustomFee = {
+            id: uuidv4(),
+            label,
+            amount: Number.isFinite(val.value) ? val.value : 0,
+            type: val.unit === '%' ? 'percent' : 'fixed',
+            frequency: 'per_operation',
+            category,
+          };
+          docCustomFees.push(fee);
+          if (!existingCustomSigs.has(sig)) customToAdd.push(fee); // dedup vs existing
+          continue;
+        }
+        // Registry rubric → typed form. Skip pure qualitative-zero rows.
         if (val.qualitative && val.value === 0) continue;
         values[rubricKey] = val.value;
       }
     }
+
     const mappedCount = Object.keys(values).length;
     if (mappedCount > 0) {
       handleApplyExtraction(values); // sets hasChanges(true) too
     }
+    if (customToAdd.length > 0) {
+      setConditions((prev) => ({
+        ...prev,
+        customFees: [...prev.customFees, ...customToAdd],
+      }));
+    }
+    const classifiedCount = mappedCount + docCustomFees.length;
 
     // Archive the source document so it's listed in the Documents tab.
+    // Stamp it with the detected segment + effective date so the grid built
+    // from it resolves correctly during segment-aware audits.
+    const detectedSegment = verification.payload.detectedSegment ?? undefined;
+    const detectedEffectiveDate = verification.payload.detectedEffectiveDate
+      ? new Date(verification.payload.detectedEffectiveDate)
+      : new Date();
     let archiveError: unknown = null;
     try {
       const base64 = await fileToBase64(file);
@@ -491,11 +558,13 @@ export function BankConditionsModal({
         name: file.name,
         type: 'conditions',
         uploadDate: new Date(),
-        effectiveDate: new Date(),
+        effectiveDate: detectedEffectiveDate,
         fileData: base64,
         fileSize: file.size,
         extractedAt: new Date(),
         extractedValues: mappedCount > 0 ? values : undefined,
+        extractedCustomFees: docCustomFees.length > 0 ? docCustomFees : undefined,
+        segment: detectedSegment,
         isActive: true,
       };
       setConditions(prev => ({
@@ -516,10 +585,10 @@ export function BankConditionsModal({
 
     // Defer the alert to the next tick so it doesn't block the React
     // commit phase. Using setTimeout(_, 0) keeps the alert async to React.
-    if (mappedCount === 0 && !archiveError) {
+    if (classifiedCount === 0 && !archiveError) {
       setTimeout(() => {
         alert(
-          'Aucune rubrique n\'a été automatiquement mappée — le document a été archivé. '
+          'Aucune rubrique n\'a été automatiquement classée — le document a été archivé. '
           + 'Tu peux saisir les valeurs manuellement dans les onglets ci-dessus, '
           + 'puis cliquer sur Enregistrer.'
         );

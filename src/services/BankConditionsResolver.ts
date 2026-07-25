@@ -33,13 +33,17 @@ import type {
   AnalysisSummary,
   AnomalyType,
   Severity,
+  TariffSegment,
 } from '../types';
+import { TARIFF_SEGMENT_LABEL } from '../types';
 
 export interface ResolutionInput {
   bankCode: string;
   /** Period being audited (typically statement.periodStart and periodEnd) */
   start: Date;
   end: Date;
+  /** Clientèle segment of the statement — restricts which grids are eligible. */
+  segment?: TariffSegment | null;
 }
 
 export interface ResolutionResult {
@@ -55,6 +59,9 @@ export interface ResolutionResult {
   explanation: string;
   /** True when the analysis should be flagged: the grid doesn't cover the full period */
   partial: boolean;
+  /** False when no segment-specific grid was available and we fell back to a
+   *  grid of another/unknown segment (audit result to be taken with caution). */
+  segmentMatch?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -75,17 +82,44 @@ export class BankConditionsResolver {
         strategy: 'none',
         explanation: `Aucune banque enregistrée pour le code ${input.bankCode}.`,
         partial: true,
+        segmentMatch: false,
       };
     }
 
-    const grids = (bank.conditionGrids ?? []).filter((g) => g.status !== 'draft');
-    if (grids.length === 0) {
+    const allGrids = (bank.conditionGrids ?? []).filter((g) => g.status !== 'draft');
+    if (allGrids.length === 0) {
       return {
         grid: null,
         strategy: 'none',
         explanation: `${bank.name} n'a aucune grille tarifaire enregistrée.`,
         partial: true,
+        segmentMatch: false,
       };
+    }
+
+    // ── Segment gating ──────────────────────────────────────────────────────
+    // Prefer grids that match the statement's clientèle segment. A grid with
+    // no segment is "universal" and always eligible. Only if there is no
+    // segment-specific NOR universal grid do we fall back to other segments,
+    // and we flag segmentMatch=false so the report warns about it.
+    let grids = allGrids;
+    let segmentMatch = true;
+    let segmentNote = '';
+    if (input.segment) {
+      const exactSeg = allGrids.filter((g) => g.segment === input.segment);
+      const universal = allGrids.filter((g) => !g.segment);
+      const label = TARIFF_SEGMENT_LABEL[input.segment];
+      if (exactSeg.length > 0) {
+        grids = exactSeg;
+        segmentNote = ` Segment « ${label} ».`;
+      } else if (universal.length > 0) {
+        grids = universal;
+        segmentNote = ` Aucune grille spécifique « ${label} » — grille commune utilisée.`;
+      } else {
+        grids = allGrids;
+        segmentMatch = false;
+        segmentNote = ` ⚠ Aucune grille « ${label} » ni commune — audit conduit sur une grille d'un autre segment, à valider.`;
+      }
     }
 
     const startMs = input.start.getTime();
@@ -109,8 +143,9 @@ export class BankConditionsResolver {
       return {
         grid: exact[0],
         strategy: 'exact_coverage',
-        explanation: `${bank.name} — grille « ${exact[0].name} » (effective au ${formatFr(exact[0].effectiveDate)}) couvre la totalité de la période ${formatFr(input.start)} → ${formatFr(input.end)}.`,
+        explanation: `${bank.name} — grille « ${exact[0].name} » (effective au ${formatFr(exact[0].effectiveDate)}) couvre la totalité de la période ${formatFr(input.start)} → ${formatFr(input.end)}.${segmentNote}`,
         partial: false,
+        segmentMatch,
       };
     }
 
@@ -126,8 +161,9 @@ export class BankConditionsResolver {
         grid: coveringEnd[0],
         strategy: 'covers_end',
         explanation: `Période chevauchant un changement tarifaire — application de la grille « ${coveringEnd[0]
-          .name} » (effective au ${formatFr(coveringEnd[0].effectiveDate)}). Les écritures antérieures à cette date sont auditées avec une réserve.`,
+          .name} » (effective au ${formatFr(coveringEnd[0].effectiveDate)}). Les écritures antérieures à cette date sont auditées avec une réserve.${segmentNote}`,
         partial: true,
+        segmentMatch,
       };
     }
 
@@ -138,8 +174,9 @@ export class BankConditionsResolver {
     return {
       grid: active,
       strategy: 'active_fallback',
-      explanation: `Aucune grille n'est en vigueur sur la période demandée. Audit conduit avec la grille active « ${active.name} » à titre indicatif — résultats à valider.`,
+      explanation: `Aucune grille n'est en vigueur sur la période demandée. Audit conduit avec la grille active « ${active.name} » à titre indicatif — résultats à valider.${segmentNote}`,
       partial: true,
+      segmentMatch,
     };
   }
 
@@ -151,6 +188,7 @@ export class BankConditionsResolver {
       bankCode: statement.bankCode,
       start: new Date(statement.periodStart),
       end: new Date(statement.periodEnd),
+      segment: statement.segment ?? null,
     });
   }
 
@@ -197,6 +235,7 @@ export class BankConditionsResolver {
   splitTransactionsByGrid<T extends { date: Date | string; bankCode?: string }>(
     transactions: T[],
     fallbackBankCode?: string,
+    segment?: TariffSegment | null,
   ): Array<{
     grid: ConditionGrid | null;
     transactions: T[];
@@ -219,6 +258,7 @@ export class BankConditionsResolver {
         bankCode: code,
         start: txDate,
         end: txDate,
+        segment,
       });
 
       const key = `${code}::${res.grid?.id ?? 'none'}`;

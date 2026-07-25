@@ -16,6 +16,7 @@ import type {
   Anomaly,
   Transaction,
 } from '../types';
+import { clientTypeToSegment, deriveClientType } from '../types';
 import { clientsRepo } from '../lib/repositories';
 import { useAuthStore } from './authStore';
 import { auditLog, AuditEventType } from '../services/auditTrail';
@@ -371,9 +372,18 @@ export const useClientStore = create<ClientState>()((set, get) => ({
   // --------------------------------------------------------------------------
 
   addStatement: (clientId, statementData) => {
+    // Derive the tariff segment from the linked client (SA/SARL → entreprises,
+    // particulier → particuliers, …) unless the caller already set it. This is
+    // what lets the audit resolve the right « Particuliers » vs « Entreprises »
+    // grid for this statement.
+    const linkedClient = get().clients.find((c) => c.id === clientId);
+    const derivedSegment = clientTypeToSegment(
+      linkedClient?.clientType ?? deriveClientType(linkedClient?.legalForm),
+    );
     const statement: BankStatement = {
       id: uuidv4(),
       clientId,
+      segment: derivedSegment ?? undefined,
       ...statementData,
       importedAt: new Date(),
     };

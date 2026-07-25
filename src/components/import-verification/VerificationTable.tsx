@@ -29,12 +29,15 @@ import {
   hasEdits,
 } from './types';
 import { FIELD_DEFINITIONS } from '../../extraction';
+import { isCustomRubricKey, type ClassifiedRubric } from '../../extraction/conditions';
 
 type AnyRow = StatementRow | ConditionRow;
 
 interface Props {
   rows: AnyRow[];
   mode: VerificationMode;
+  /** Conditions mode: auto-created custom rubrics to offer in the combobox. */
+  rubricCatalog?: ClassifiedRubric[];
   focusedRowId: string | null;
   onFocus: (id: string | null) => void;
   onToggleValidation: (id: string) => void;
@@ -58,6 +61,7 @@ const CONFIDENCE_TONES = (c: number) => {
 export function VerificationTable({
   rows,
   mode,
+  rubricCatalog,
   focusedRowId,
   onFocus,
   onToggleValidation,
@@ -149,6 +153,7 @@ export function VerificationTable({
               <ConditionRowView
                 key={row.id}
                 row={row as ConditionRow}
+                customRubrics={rubricCatalog}
                 focused={focusedRowId === row.id}
                 expanded={expandedRow === row.id}
                 onFocus={() => onFocus(row.id)}
@@ -318,6 +323,7 @@ function StatementRowView({
 
 function ConditionRowView({
   row,
+  customRubrics,
   focused,
   expanded,
   onFocus,
@@ -327,6 +333,7 @@ function ConditionRowView({
   onPatch,
 }: {
   row: ConditionRow;
+  customRubrics?: ClassifiedRubric[];
   focused: boolean;
   expanded: boolean;
   onFocus: () => void;
@@ -342,6 +349,20 @@ function ConditionRowView({
   const rubricKey = (getEffective(row, 'rubricKey') as string | undefined) ?? '';
   const qualitative = (getEffective(row, 'qualitative') as ConditionRow['data']['qualitative']) ?? undefined;
   const edited = hasEdits(row);
+  const isCustom = isCustomRubricKey(rubricKey);
+
+  // The current custom key might not be in the shared catalog if the user
+  // edited this row's label after import — surface it as its own option so
+  // the <select> always has a matching entry (never falls back to blank).
+  const customOptions = [...(customRubrics ?? [])];
+  if (isCustom && !customOptions.some((r) => r.key === rubricKey)) {
+    customOptions.push({
+      key: rubricKey,
+      label: (getEffective(row, 'rubricLabel') as string | undefined) ?? label,
+      category: 'divers',
+      source: 'custom',
+    });
+  }
 
   return (
     <div
@@ -387,19 +408,44 @@ function ConditionRowView({
           </div>
         )}
 
-        {/* Rubric mapping (combobox) */}
-        <select
-          value={rubricKey}
-          onChange={(e) => onPatch({ rubricKey: e.target.value || undefined })}
-          className="bg-transparent border border-primary-200/40 hover:border-primary-300 focus:outline-none focus:ring-1 focus:ring-accent-400/60 rounded px-1 py-0.5 text-[11px] text-ink-700 w-full truncate"
-        >
-          <option value="">— Non rattachée —</option>
-          {FIELD_DEFINITIONS.map((f) => (
-            <option key={f.key} value={f.key}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+        {/* Rubric mapping (combobox) — registry rubrics + auto-created ones */}
+        <div className="flex items-center gap-1 min-w-0">
+          {isCustom && (
+            <span
+              title="Rubrique créée automatiquement à partir du document"
+              className="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-accent-100 text-accent-700 border border-accent-200"
+            >
+              auto
+            </span>
+          )}
+          <select
+            value={rubricKey}
+            onChange={(e) => onPatch({ rubricKey: e.target.value || undefined })}
+            className={`bg-transparent border rounded px-1 py-0.5 text-[11px] w-full truncate focus:outline-none focus:ring-1 focus:ring-accent-400/60 ${
+              rubricKey
+                ? 'border-primary-200/40 hover:border-primary-300 text-ink-700'
+                : 'border-red-300 text-red-600'
+            }`}
+          >
+            <option value="">— Non rattachée —</option>
+            {customOptions.length > 0 && (
+              <optgroup label="Rubriques détectées (auto)">
+                {customOptions.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.label}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Rubriques standard">
+              {FIELD_DEFINITIONS.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
 
         {/* Expand */}
         <button

@@ -19,7 +19,7 @@
 // de la sauvegarde (architecture bi-temporelle requise par le resolver).
 // ============================================================================
 
-import type { ArchivedDocument } from '../types';
+import type { ArchivedDocument, FeeSchedule } from '../types';
 import { setByPath } from './normalize';
 
 // Frais personnalisés saisis manuellement dans le formulaire (hors PDF extrait).
@@ -30,6 +30,40 @@ export interface CustomFee {
   type: 'fixed' | 'percent';
   frequency: 'once' | 'monthly' | 'yearly' | 'per_operation';
   category: string;
+}
+
+/**
+ * Projette des rubriques custom (auto-créées à l'import ou saisies) vers le
+ * catalogue `FeeSchedule[]` que lisent les détecteurs d'anomalies
+ * (OverchargeAnalyzer, GhostFeeDetector, ComplianceAudit). C'est ce qui fait
+ * ENTRER les rubriques auto-créées dans le calcul d'anomalies : sans cela,
+ * elles restaient purement descriptives.
+ *
+ * - `code`   : intègre un mot-clé de catégorie pour le matching par service.
+ * - `name`   : le libellé (les détecteurs matchent aussi par nom).
+ * - `type`   : 'percent' → 'percentage' (+ `percentage` en décimal).
+ */
+export function customFeesToFeeSchedules(fees: CustomFee[]): FeeSchedule[] {
+  const catCode: Record<string, string> = {
+    compte: 'TDC', guichet: 'GUICHET', cartes: 'CARTE', virements: 'VIR',
+    cheques: 'CHQ', credits: 'CREDIT', ebanking: 'EBANK', divers: 'DIV',
+  };
+  return fees.map((f, i) => {
+    const isPct = f.type === 'percent';
+    const prefix = catCode[f.category] ?? 'DIV';
+    const base: FeeSchedule = {
+      code: `CUSTOM-${prefix}-${i + 1}`,
+      name: f.label,
+      amount: f.amount,
+      type: isPct ? 'percentage' : 'fixed',
+    };
+    if (isPct) {
+      // CustomFee stocke un pourcentage "humain" (ex. 2 = 2%). FeeSchedule
+      // attend un décimal. On garde `amount` comme plancher indicatif.
+      base.percentage = f.amount > 1 ? f.amount / 100 : f.amount;
+    }
+    return base;
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

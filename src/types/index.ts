@@ -172,6 +172,34 @@ export function deriveClientType(legalForm?: string | null): ClientType {
   return LEGAL_FORM_TO_CLIENT_TYPE[key] ?? 'entreprise';
 }
 
+// ----------------------------------------------------------------------------
+// Segment tarifaire — regroupement « clientèle » utilisé par les banques pour
+// publier leurs grilles (ex. NSIA : « Particuliers » vs « Entreprises et
+// Professionnels »). Plus grossier que ClientType : c'est l'axe sur lequel une
+// grille de conditions est publiée ET résolue lors de l'audit d'un relevé.
+// ----------------------------------------------------------------------------
+export type TariffSegment = 'particuliers' | 'entreprises' | 'associations';
+
+export const TARIFF_SEGMENT_LABEL: Record<TariffSegment, string> = {
+  particuliers: 'Particuliers',
+  entreprises:  'Entreprises & Professionnels',
+  associations: 'Associations & ONG',
+};
+
+const CLIENT_TYPE_TO_SEGMENT: Record<ClientType, TariffSegment> = {
+  particulier_resident:     'particuliers',
+  particulier_non_resident: 'particuliers',
+  professionnel:            'entreprises',
+  entreprise:               'entreprises',
+  association:              'associations',
+};
+
+/** Mappe le type tarifaire fin d'un client vers le segment de grille. */
+export function clientTypeToSegment(ct?: ClientType | null): TariffSegment | null {
+  if (!ct) return null;
+  return CLIENT_TYPE_TO_SEGMENT[ct] ?? null;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -249,6 +277,9 @@ export interface BankStatement {
   transactionCount: number;
   importedAt: Date;
   status: 'imported' | 'analyzed' | 'archived';
+  /** Segment tarifaire du relevé — dérivé du client lié (clientTypeToSegment),
+   *  éventuellement confirmé par le contenu. Pilote la résolution de grille. */
+  segment?: TariffSegment;
 }
 
 // Zone monétaire africaine
@@ -402,6 +433,9 @@ export interface ConditionGrid {
   effectiveDate: Date; // Date de prise d'effet
   expirationDate?: Date; // Date d'expiration (si connue)
   status: 'active' | 'archived' | 'draft'; // Statut de la grille
+  /** Segment clientèle couvert par cette grille. Absent = applicable à tous
+   *  (rétro-compat des grilles créées avant la segmentation). */
+  segment?: TariffSegment;
   conditions: BankConditions;
   sourceDocument?: ArchivedDocument; // Document source (PDF importé)
   createdAt: Date;
@@ -559,6 +593,18 @@ export interface ArchivedDocument {
   extractedAt?: Date;
   /** Valeurs extraites du document (cles = chemins du formulaire, valeurs = montants/taux). */
   extractedValues?: Record<string, number | string | boolean | null>;
+  /** Rubriques custom auto-créées à l'import (hors registre standard).
+   *  Reportées dans grid.conditions.fees pour entrer dans l'audit. */
+  extractedCustomFees?: Array<{
+    id: string;
+    label: string;
+    amount: number;
+    type: 'fixed' | 'percent';
+    frequency: 'once' | 'monthly' | 'yearly' | 'per_operation';
+    category: string;
+  }>;
+  /** Segment tarifaire détecté à l'import (nom de fichier / en-tête). */
+  segment?: TariffSegment;
   isActive: boolean;
 }
 

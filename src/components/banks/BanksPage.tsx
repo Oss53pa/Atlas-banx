@@ -19,6 +19,7 @@ import { setByPath } from '../../extraction/normalize';
 import {
   getEmptyFullConditions,
   applyExtractedValuesToConditions,
+  customFeesToFeeSchedules,
 } from '../../extraction/conditionsForm';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -74,7 +75,10 @@ function reconcileGridsFromDocuments(args: ReconcileArgs): void {
   const now = new Date();
 
   const activeDocs = documents.filter(
-    (d) => d.isActive && d.extractedValues && Object.keys(d.extractedValues).length > 0,
+    (d) =>
+      d.isActive &&
+      ((d.extractedValues && Object.keys(d.extractedValues).length > 0) ||
+        (d.extractedCustomFees && d.extractedCustomFees.length > 0)),
   );
 
   // Lookup table : pour chaque grille, retrouver le doc lié (s'il existe)
@@ -111,7 +115,7 @@ function reconcileGridsFromDocuments(args: ReconcileArgs): void {
   for (const doc of activeDocs) {
     const perDocConditions = applyExtractedValuesToConditions(
       getEmptyFullConditions(),
-      doc.extractedValues as Record<string, number | string | boolean | null | undefined>,
+      (doc.extractedValues ?? {}) as Record<string, number | string | boolean | null | undefined>,
     );
 
     // Cast en BankConditions — la forme riche FullBankConditions est stockée
@@ -126,9 +130,10 @@ function reconcileGridsFromDocuments(args: ReconcileArgs): void {
       currency,
       effectiveDate: doc.effectiveDate ? new Date(doc.effectiveDate) : now,
       ...(doc.expirationDate ? { expirationDate: new Date(doc.expirationDate) } : {}),
-      // fees/interestRates legacy : restent vides — les algorithmes lisent
-      // les sections nominales (tenueCompte, fraisCartes, …)
-      fees: [],
+      // Les rubriques auto-créées à l'import deviennent des FeeSchedule →
+      // elles entrent dans le calcul d'anomalies (OverchargeAnalyzer,
+      // GhostFeeDetector, ComplianceAudit lisent conditions.fees).
+      fees: customFeesToFeeSchedules(doc.extractedCustomFees ?? []),
       interestRates: [],
       isActive: true,
     };
@@ -143,6 +148,7 @@ function reconcileGridsFromDocuments(args: ReconcileArgs): void {
         effectiveDate: effDate,
         expirationDate: expDate,
         status: 'active',
+        segment: doc.segment ?? existing.segment,
         sourceDocument: doc,
         updatedAt: now,
       });
@@ -154,9 +160,10 @@ function reconcileGridsFromDocuments(args: ReconcileArgs): void {
         effectiveDate: effDate,
         expirationDate: expDate,
         status: 'active',
+        segment: doc.segment,
         conditions: conditionsForGrid,
         sourceDocument: doc,
-        notes: `Grille dérivée du document « ${doc.name} ».`,
+        notes: `Grille dérivée du document « ${doc.name} »${doc.segment ? ` (${doc.segment})` : ''}.`,
       });
     }
   }

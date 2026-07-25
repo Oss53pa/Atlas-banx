@@ -7,7 +7,8 @@
 // ============================================================================
 
 import type { BoundingBox } from '../../extraction/bank-statement/types';
-import type { Transaction } from '../../types';
+import type { ClassifiedRubric } from '../../extraction/conditions';
+import type { TariffSegment, Transaction } from '../../types';
 
 export type VerificationMode = 'statement' | 'conditions';
 
@@ -54,9 +55,14 @@ export interface ConditionRowData {
   unit?: '%' | 'FCFA' | 'XAF' | 'XOF' | 'EUR' | 'USD' | 'days';
   qualitative?: 'gratuit' | 'consulter' | 'neant' | 'franco' | 'souscription' | 'other';
   section?: string;      // locked (detected from PDF headers)
-  /** The rubric key in FieldRegistry that this row maps to. May be
-   *  changed by the user via a combobox. */
+  /** The rubric key this row maps to — a FieldRegistry key OR an
+   *  auto-created `custom:<category>:<slug>` key. May be changed by the
+   *  user via a combobox. Always set by the exhaustive classifier. */
   rubricKey?: string;
+  /** Human-readable rubric label (registry label or cleaned custom label). */
+  rubricLabel?: string;
+  /** Where the rubric came from — drives the "auto-créée" UI badge. */
+  rubricSource?: 'registry' | 'custom';
 }
 
 export interface ConditionRow {
@@ -87,6 +93,15 @@ export interface VerificationPayload {
     averageConfidence: number;
     pages?: number;
   };
+  /** Conditions mode only: deduped catalog of auto-created custom rubrics,
+   *  used to populate the rubric combobox and resolve keys at commit. */
+  rubricCatalog?: ClassifiedRubric[];
+  /** Conditions mode: clientèle segment detected from the source document. */
+  detectedSegment?: TariffSegment | null;
+  /** Conditions mode: effective date detected (ISO string, JSON-safe). */
+  detectedEffectiveDate?: string | null;
+  /** Conditions mode: short period label like "S2 2021". */
+  detectedPeriodLabel?: string | null;
   rows: Array<StatementRow | ConditionRow>;
 }
 
@@ -113,6 +128,23 @@ export interface CommitArgs {
   bankCode?: string;
   clientId?: string;
   rows: Array<StatementRow | ConditionRow>;
+  /** Conditions mode: catalog to resolve custom rubric keys → label/category. */
+  rubricCatalog?: ClassifiedRubric[];
+}
+
+/** A single validated condition, keyed by rubric in CommitResult.conditions.
+ *  Custom (auto-created) rubrics carry their label + form category so the
+ *  parent can persist them as CustomFee under the right tab. */
+export interface CommittedCondition {
+  value: number;
+  unit?: string;
+  qualitative?: string;
+  /** True when this is an auto-created custom rubric (not a registry key). */
+  custom?: boolean;
+  /** Human label — set for custom rubrics. */
+  label?: string;
+  /** Form-tab category — set for custom rubrics. */
+  category?: string;
 }
 
 export interface CommitResult {
@@ -120,7 +152,7 @@ export interface CommitResult {
    *  atlasbanx.transactions. */
   transactions?: Transaction[];
   /** For conditions mode: the validated condition values keyed by rubric. */
-  conditions?: Record<string, { value: number; unit?: string; qualitative?: string }>;
+  conditions?: Record<string, CommittedCondition>;
   /** Number of rows that were rejected and skipped */
   rejected: number;
   /** Number of rows that were validated and kept */

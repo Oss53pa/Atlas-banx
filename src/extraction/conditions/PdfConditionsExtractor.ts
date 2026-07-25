@@ -23,6 +23,7 @@ import { OcrService } from '../../services/OcrService';
 import type { PositionedItem } from '../bank-statement/types';
 import { extractLabelValuePairs } from './LabelValueExtractor';
 import { matchRubrics } from './RubricMatcher';
+import { detectSegment, detectEffectivePeriod } from './segmentDetector';
 import type { ConditionsExtractionResult } from './types';
 
 export interface ConditionsExtractionOptions {
@@ -154,6 +155,19 @@ export async function extractConditions(
     (p) => !matchedPairKeys.has(`${p.page}-${Math.round(p.y)}-${p.label}`),
   );
 
+  // Detect clientèle segment + effective period from the file name and the
+  // top-of-document text (page 1). Both drive bi-temporal, segment-aware grid
+  // resolution when this document is later turned into a ConditionGrid.
+  const headerText = items
+    .filter((it) => it.page === 1)
+    .map((it) => it.text)
+    .join(' ')
+    .slice(0, 3000);
+  const seg = detectSegment(file.name, headerText);
+  const period = detectEffectivePeriod(file.name, headerText);
+  if (seg.segment) warnings.push(`Segment détecté : ${seg.segment} (${seg.evidence})`);
+  if (period.effectiveDate) warnings.push(`Période détectée : ${period.label} (${period.evidence})`);
+
   options.onProgress?.({
     stage: 'done',
     pct: 1,
@@ -165,6 +179,9 @@ export async function extractConditions(
     rawPairs: pairs,
     unmatchedPairs,
     sections,
+    detectedSegment: seg.segment,
+    detectedEffectiveDate: period.effectiveDate,
+    detectionEvidence: { segment: seg.evidence, period: period.evidence, periodLabel: period.label },
     stats: {
       totalPages: pdf.numPages,
       pairsFound: pairs.length,

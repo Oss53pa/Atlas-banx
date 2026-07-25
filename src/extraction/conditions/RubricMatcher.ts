@@ -76,6 +76,28 @@ function scoreField(field: FieldDefinition, pair: LabelValuePair): { score: numb
   return { score: best, matchedAlias: bestAlias };
 }
 
+/**
+ * Best registry field for a single pair (or null if nothing clears the
+ * minimum similarity + unit/range gates). Exposed so the exhaustive
+ * RubricClassifier can reuse the exact same scoring logic — keeping the
+ * "which rubric?" decision in a single place.
+ */
+export function bestRegistryFieldForPair(
+  pair: LabelValuePair,
+): { field: FieldDefinition; similarity: number; matchedAlias: string } | null {
+  let best: { field: FieldDefinition; similarity: number; matchedAlias: string } | null = null;
+  for (const field of FIELD_DEFINITIONS) {
+    if (!unitCompatible(field, pair)) continue;
+    if (!rangeOk(field, pair.value)) continue;
+    const { score, matchedAlias } = scoreField(field, pair);
+    if (score < MIN_SIMILARITY) continue;
+    if (!best || score > best.similarity) {
+      best = { field, similarity: score, matchedAlias };
+    }
+  }
+  return best;
+}
+
 export function matchRubrics(pairs: LabelValuePair[]): {
   matches: Record<string, RubricMatch>;
   perPair: Array<{ pair: LabelValuePair; field: FieldDefinition; score: number }>;

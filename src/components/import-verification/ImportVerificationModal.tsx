@@ -34,6 +34,7 @@ import { useVerificationState } from './useVerificationState';
 import {
   type CommitArgs,
   type CommitResult,
+  type CommittedCondition,
   type ConditionRow,
   type StatementRow,
   type VerificationPayload,
@@ -41,12 +42,20 @@ import {
   getEffective,
 } from './types';
 import {
+  isCustomRubricKey,
+  parseCustomRubricKey,
+  customRubricKey,
+  isAiNormalizationAvailable,
+  normalizeRubricsWithAI,
+  type AiNormalizeItem,
+} from '../../extraction/conditions';
+import {
   hashFile,
   importDraftsRepo,
   type ImportDraftRow,
 } from '../../lib/repositories/importDraftsRepo';
 import { useAuthStore } from '../../store/authStore';
-import { TransactionType, type Transaction } from '../../types';
+import { TransactionType, TARIFF_SEGMENT_LABEL, type Transaction } from '../../types';
 
 interface Props {
   /** PDF file (or other document) being verified. */
@@ -233,6 +242,62 @@ function ModalBody({
   const focusedRow = state.rows.find((r) => r.id === state.focusedRowId) ?? null;
   const focusedBox = focusedRow?.boundingBox ?? null;
 
+  // ── AI normalization (Atlas Core: Ollama-first → Claude, confidential) ────
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const aiAvailable = payload.mode === 'conditions' && isAiNormalizationAvailable();
+
+  const runAiNormalization = useCallback(async () => {
+    if (aiRunning) return;
+    setAiRunning(true);
+    setAiNote(null);
+    try {
+      const condRows = state.rows as ConditionRow[];
+      const items: AiNormalizeItem[] = condRows.map((r, i) => ({
+        index: i,
+        label: (getEffective(r, 'label') as string) ?? '',
+        value: (getEffective(r, 'value') as number) ?? 0,
+        unit: getEffective(r, 'unit') as string | undefined,
+        section: r.data.section,
+      }));
+      const suggestions = await normalizeRubricsWithAI(items);
+      let applied = 0;
+      for (const s of suggestions) {
+        const row = condRows[s.index];
+        if (!row) continue;
+        const patch: Record<string, unknown> = {};
+        if (s.label) patch.label = s.label;
+        if (s.rubricKey) {
+          patch.rubricKey = s.rubricKey;
+          patch.rubricSource = 'registry';
+          if (s.label) patch.rubricLabel = s.label;
+        } else if (s.rubricKey === null) {
+          const label = s.label ?? (getEffective(row, 'label') as string) ?? 'Rubrique';
+          const category = s.category ?? 'divers';
+          patch.rubricKey = customRubricKey(category, label);
+          patch.rubricLabel = label;
+          patch.rubricSource = 'custom';
+        }
+        if (Object.keys(patch).length > 0) {
+          state.patchRowData(row.id, patch);
+          applied++;
+        }
+      }
+      setAiNote(
+        applied > 0
+          ? `IA Atlas Core : ${applied} ligne${applied > 1 ? 's' : ''} normalisée${applied > 1 ? 's' : ''}.`
+          : "IA Atlas Core : aucune amélioration proposée.",
+      );
+    } catch (err) {
+      setAiNote(
+        "IA Atlas Core indisponible — classement déterministe conservé. "
+        + (err instanceof Error ? err.message : ''),
+      );
+    } finally {
+      setAiRunning(false);
+    }
+  }, [aiRunning, state]);
+
   const stats = useMemo(() => {
     const total = state.rows.length;
     const validated = state.rows.filter((r) => r.state === 'validated').length;
@@ -249,10 +314,11 @@ function ModalBody({
       bankCode: payload.bankCode,
       clientId: payload.clientId,
       rows: state.rows,
+      rubricCatalog: payload.rubricCatalog,
     };
     const result = computeCommitResult(args);
     await onCommit(args, result);
-  }, [state.rows, payload.bankCode, payload.clientId, payload.mode, onCommit]);
+  }, [state.rows, payload.bankCode, payload.clientId, payload.mode, payload.rubricCatalog, onCommit]);
 
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
@@ -275,6 +341,20 @@ function ModalBody({
             {' · '}
             extrait le {new Date(payload.extractedAt).toLocaleString('fr-FR')}
           </p>
+          {payload.mode === 'conditions' && (payload.detectedSegment || payload.detectedPeriodLabel) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              {payload.detectedSegment && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-pill bg-accent-100 text-accent-700 border border-accent-200">
+                  {TARIFF_SEGMENT_LABEL[payload.detectedSegment] ?? payload.detectedSegment}
+                </span>
+              )}
+              {payload.detectedPeriodLabel && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-pill bg-canvas-100 text-ink-600 border border-primary-200/60">
+                  Période : {payload.detectedPeriodLabel}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {persistDraft && (
           <div className="hidden md:flex items-center gap-1.5 text-[11px] text-ink-500 mr-2">
@@ -342,6 +422,19 @@ function ModalBody({
             </button>
           </div>
 
+          {/* AI normalization (Atlas Core) — conditions mode, when available */}
+          {aiAvailable && (
+            <button
+              onClick={runAiNormalization}
+              disabled={aiRunning}
+              title="Corriger le bruit OCR et classer via l'IA Core Atlas Studio (Groq)"
+              className="text-xs px-2.5 py-1 rounded-pill border border-accent-300 text-accent-700 hover:bg-accent-50 inline-flex items-center gap-1 disabled:opacity-50"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${aiRunning ? 'animate-pulse' : ''}`} />
+              {aiRunning ? 'IA en cours…' : 'Classer avec IA'}
+            </button>
+          )}
+
           {/* Bulk actions */}
           <button
             onClick={state.validateAll}
@@ -365,6 +458,9 @@ function ModalBody({
             Réinitialiser
           </button>
         </div>
+        {aiNote && (
+          <p className="px-5 pb-2 text-[11px] text-accent-700">{aiNote}</p>
+        )}
       </div>
 
       {/* SPLIT BODY */}
@@ -399,6 +495,7 @@ function ModalBody({
             <VerificationTable
               rows={state.rows}
               mode={payload.mode}
+              rubricCatalog={payload.rubricCatalog}
               focusedRowId={state.focusedRowId}
               onFocus={state.setFocusedRowId}
               onToggleValidation={state.toggleRowValidation}
@@ -535,15 +632,35 @@ function computeCommitResult(args: CommitArgs): CommitResult {
     return { transactions, validated: validated.length, rejected };
   }
 
-  // Conditions
-  const conditions: Record<string, { value: number; unit?: string; qualitative?: string }> = {};
+  // Conditions — every validated row carries a rubric key (registry or
+  // auto-created custom). Custom keys are enriched with label + category so
+  // the parent can persist them as CustomFee. Same key twice → deduped
+  // (last validated value wins).
+  const catalogByKey = new Map<string, { label: string; category: string }>();
+  for (const r of args.rubricCatalog ?? []) {
+    catalogByKey.set(r.key, { label: r.label, category: r.category });
+  }
+  const conditions: Record<string, CommittedCondition> = {};
   for (const row of validated as ConditionRow[]) {
     const key = getEffective(row, 'rubricKey') as string | undefined;
     if (!key) continue;
     const value = (getEffective(row, 'value') as number) ?? 0;
     const unit = getEffective(row, 'unit') as string | undefined;
     const qualitative = getEffective(row, 'qualitative') as string | undefined;
-    conditions[key] = { value, unit, qualitative };
+    if (isCustomRubricKey(key)) {
+      const meta = catalogByKey.get(key);
+      const parsed = parseCustomRubricKey(key);
+      const label =
+        meta?.label ??
+        (getEffective(row, 'rubricLabel') as string | undefined) ??
+        (getEffective(row, 'label') as string | undefined) ??
+        parsed?.slug ??
+        'Rubrique';
+      const category = meta?.category ?? parsed?.category ?? 'divers';
+      conditions[key] = { value, unit, qualitative, custom: true, label, category };
+    } else {
+      conditions[key] = { value, unit, qualitative };
+    }
   }
   return { conditions, validated: validated.length, rejected };
 }

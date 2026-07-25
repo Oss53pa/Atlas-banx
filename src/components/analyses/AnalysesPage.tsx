@@ -26,7 +26,7 @@ import { useTransactionStore } from '../../store/transactionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAccountType } from '../../hooks/useAccountType';
 import { formatCurrency, formatDate } from '../../utils';
-import { AnomalyType, Severity, ANOMALY_TYPE_LABELS, DetectionSource, DEFAULT_THRESHOLDS, Anomaly, Transaction } from '../../types';
+import { AnomalyType, Severity, ANOMALY_TYPE_LABELS, DetectionSource, DEFAULT_THRESHOLDS, Anomaly, Transaction, clientTypeToSegment, deriveClientType } from '../../types';
 import { getAnalysisService, ClaudeService, PremiumReportService, BankConditionsResolver, gridToBankConditions, mergeAnalysisResults } from '../../services';
 import type { ResolutionResult } from '../../services';
 
@@ -326,7 +326,14 @@ export function AnalysesPage() {
       // the correct tariff for each transaction.
       const txScope = clientTransactions.length > 0 ? clientTransactions : transactions;
       const resolver = new BankConditionsResolver(banks);
-      const gridBuckets = resolver.splitTransactionsByGrid(txScope);
+      // Segment of the audited statement — derived from the client's tariff
+      // type (SA/SARL → entreprises, particulier → particuliers, …). Drives
+      // segment-aware grid resolution so an entreprise statement is never
+      // audited against a « Particuliers » grid.
+      const auditSegment = clientTypeToSegment(
+        currentClient?.clientType ?? deriveClientType(currentClient?.legalForm),
+      );
+      const gridBuckets = resolver.splitTransactionsByGrid(txScope, undefined, auditSegment);
 
       // Setup Claude service if enabled and mode requires it
       let claudeService: ClaudeService | undefined;

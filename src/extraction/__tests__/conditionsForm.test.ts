@@ -13,7 +13,34 @@ import {
   getEmptyFullConditions,
   applyExtractedValuesToConditions,
   mergeBankConditions,
+  customFeesToFeeSchedules,
+  type CustomFee,
 } from '../conditionsForm';
+
+describe('customFeesToFeeSchedules — rubriques custom → catalogue d\'audit', () => {
+  const fee = (p: Partial<CustomFee>): CustomFee => ({
+    id: 'x', label: 'Frais X', amount: 5000, type: 'fixed',
+    frequency: 'per_operation', category: 'divers', ...p,
+  });
+
+  it('mappe un frais fixe en FeeSchedule fixed', () => {
+    const [fs] = customFeesToFeeSchedules([fee({ label: 'Port de lettre', amount: 5000, category: 'compte' })]);
+    expect(fs.type).toBe('fixed');
+    expect(fs.amount).toBe(5000);
+    expect(fs.name).toBe('Port de lettre');
+    expect(fs.code).toContain('CUSTOM');
+  });
+
+  it('mappe un frais % en percentage (décimal)', () => {
+    const [fs] = customFeesToFeeSchedules([fee({ label: 'Commission change', amount: 2, type: 'percent', category: 'guichet' })]);
+    expect(fs.type).toBe('percentage');
+    expect(fs.percentage).toBeCloseTo(0.02);
+  });
+
+  it('renvoie un tableau vide pour aucune rubrique', () => {
+    expect(customFeesToFeeSchedules([])).toEqual([]);
+  });
+});
 
 describe('getEmptyFullConditions', () => {
   it('produit un squelette tout à zéro / vide', () => {
