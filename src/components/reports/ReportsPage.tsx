@@ -17,7 +17,7 @@ import { ReportService, auditLog, AuditEventType } from '../../services';
 import { formatCurrency, formatDate } from '../../utils';
 import { Severity } from '../../types';
 import { ReportViewer, generateAtlasBanxAuditReport } from '../reporting';
-import type { FullReport, BankStatement, ClientReport, Client } from '../../types';
+import type { FullReport, BankStatement, ClientReport, Client, AnalysisResult } from '../../types';
 
 type ViewMode = 'table' | 'card';
 type TabType = 'statements' | 'reports';
@@ -166,7 +166,7 @@ export function ReportsPage() {
 
     const report = generateAtlasBanxAuditReport({
       client: client as any,
-      analysis: analysisData,
+      analysis: analysisData as unknown as AnalysisResult,
       auditorName: 'Expert-Comptable',
       auditorCompany: 'Cabinet d\'Expertise Comptable',
     });

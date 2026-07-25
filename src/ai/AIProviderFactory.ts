@@ -14,6 +14,7 @@ import {
 import {
   ClaudeProvider,
   OpenAIProvider,
+  GroqProvider,
   MistralProvider,
   OllamaProvider,
 } from './providers';
@@ -41,6 +42,8 @@ class AIProviderFactoryClass {
         return new ClaudeProvider(config);
       case 'openai':
         return new OpenAIProvider(config);
+      case 'groq':
+        return new GroqProvider(config);
       case 'mistral':
         return new MistralProvider(config);
       case 'ollama':
@@ -141,6 +144,7 @@ class AIProviderFactoryClass {
     return [
       { type: 'claude', name: 'Anthropic Claude', requiresApiKey: true },
       { type: 'openai', name: 'OpenAI GPT', requiresApiKey: true },
+      { type: 'groq', name: 'Groq (LPU ultra-rapide)', requiresApiKey: true },
       { type: 'mistral', name: 'Mistral AI', requiresApiKey: true },
       { type: 'ollama', name: 'Ollama (Local)', requiresApiKey: false },
     ];

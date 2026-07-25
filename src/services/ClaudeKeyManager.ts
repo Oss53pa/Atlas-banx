@@ -25,10 +25,11 @@ export const ClaudeKeyManager = {
     if (!supabase) return blank();
 
     const { data, error } = await supabase.rpc('anthropic_api_key_info');
-    if (error || !data || !Array.isArray(data) || data.length === 0) {
+    const rows = data as unknown[] | null;
+    if (error || !rows || !Array.isArray(rows) || rows.length === 0) {
       return blank();
     }
-    const row = data[0] as {
+    const row = rows[0] as {
       is_configured: boolean;
       fingerprint: string | null;
       validated_at: string | null;
@@ -55,7 +56,7 @@ export const ClaudeKeyManager = {
       throw new Error('Clé invalide (trop courte)');
     }
 
-    const { error } = await supabase.rpc('set_anthropic_api_key', { p_key: key });
+    const { error } = await supabase.rpc('set_anthropic_api_key', { p_key: key } as never);
     if (error) {
       throw new Error(error.message || 'Échec de l\'enregistrement de la clé');
     }

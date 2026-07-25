@@ -6,5 +6,6 @@
 export { BaseAIProvider } from './BaseAIProvider';
 export { ClaudeProvider, ClaudeAPIError } from './ClaudeProvider';
 export { OpenAIProvider, OpenAIAPIError } from './OpenAIProvider';
+export { GroqProvider, GroqAPIError } from './GroqProvider';
 export { MistralProvider, MistralAPIError } from './MistralProvider';
 export { OllamaProvider, OllamaAPIError } from './OllamaProvider';

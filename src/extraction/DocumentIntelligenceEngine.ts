@@ -10,7 +10,6 @@ import type {
   FieldExtraction,
   FieldDefinition,
   DocumentFormat,
-  DocumentAnalysis,
 } from './types';
 import { FIELD_DEFINITIONS } from './FieldRegistry';
 import { normalizeDocument, setByPath } from './normalize';

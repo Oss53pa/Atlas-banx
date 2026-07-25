@@ -84,7 +84,7 @@ describe('C2 — Extraction conventions client', () => {
 
     const result = await dispatch(
       CompetenceId.EXTRACTION_CONVENTIONS,
-      { ...baseInput, text_content: CONVENTION_TEXT },
+      { ...baseInput, text_content: CONVENTION_TEXT } as C2Input & { text_content: string },
       'a0000000-0000-4000-8000-000000000001',
       'a0000000-0000-4000-8000-000000000002',
     );

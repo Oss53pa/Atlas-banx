@@ -2,10 +2,10 @@ import { memo } from 'react';
 import { FileBarChart, Plus, Calendar, Eye, Download, Send } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardBody, Button, Badge } from '../../ui';
 import { formatCurrency, formatDate } from '../../../utils';
-import { AuditReport } from '../../../types';
+import { ClientReport } from '../../../types';
 
 interface ReportsTabProps {
-  clientReports: AuditReport[];
+  clientReports: ClientReport[];
   navigate: (path: string) => void;
 }
 
@@ -87,8 +87,7 @@ export const ReportsTab = memo(function ReportsTab({
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-primary-700">
                         {report.type === 'audit' ? 'Audit complet' :
-                         report.type === 'summary' ? 'Synthese' :
-                         report.type === 'anomaly' ? 'Anomalies' : 'Standard'}
+                         report.type === 'summary' ? 'Synthese' : 'Standard'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

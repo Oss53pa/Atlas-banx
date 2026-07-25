@@ -140,7 +140,7 @@ export function FileUploader({ onImportComplete, onPdfStaged, clientId = 'defaul
           clientId,
           bankCode,
           accountNumber,
-        });
+        } as Parameters<typeof ImportService.parseFile>[1]);
 
         setFiles((prev) =>
           prev.map((f) =>

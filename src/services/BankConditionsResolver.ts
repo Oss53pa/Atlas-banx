@@ -375,6 +375,7 @@ export function mergeAnalysisResults(results: AnalysisResult[]): AnalysisResult 
       : results[0].summary.message,
     keyFindings: [...new Set(results.flatMap((r) => r.summary.keyFindings))],
     recommendations: [...new Set(results.flatMap((r) => r.summary.recommendations))],
+    estimatedRecovery: results.reduce((sum, r) => sum + r.summary.estimatedRecovery, 0),
   };
 
   return {

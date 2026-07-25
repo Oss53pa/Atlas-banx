@@ -343,7 +343,7 @@ function finalize(
       currency: c.currency || opts.defaultCurrency,
       createdAt: new Date(),
       updatedAt: new Date(),
-    }));
+    })) as unknown as Transaction[];
 
   const avgConf =
     candidates.length === 0

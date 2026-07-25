@@ -6,6 +6,7 @@ import {
   AnomalyType,
   Severity,
   BankConditions,
+  Evidence,
 } from '../types';
 
 /**
@@ -37,11 +38,9 @@ const DEFAULT_CONFIG: ValueDateConfig = {
  */
 export class ValueDateAudit {
   private config: ValueDateConfig;
-  private bankConditions?: BankConditions;
 
   constructor(config?: Partial<ValueDateConfig>, bankConditions?: BankConditions) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.bankConditions = bankConditions;
 
     // Utiliser le taux de la banque si disponible
     if (bankConditions?.creditFees?.decouvertAutorise?.tauxAnnuel) {

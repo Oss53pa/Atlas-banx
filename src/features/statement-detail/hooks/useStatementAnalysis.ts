@@ -12,7 +12,6 @@ import {
   AnomalyType,
   TransactionType,
   type AnalysisConfig,
-  type AnalysisResult,
   type Transaction,
   type BankConditions,
   type Anomaly as CoreAnomaly,
@@ -80,13 +79,13 @@ const DEFAULT_DETECTORS: AnomalyType[] = [
   AnomalyType.FEE_ANOMALY,
 ];
 
-const DEFAULT_BANK_CONDITIONS: BankConditions = {
+const DEFAULT_BANK_CONDITIONS = {
   bankName: '',
-  accountType: 'current' as never,
+  accountType: 'current',
   fees: {},
   interestRates: {},
   limits: {},
-};
+} as unknown as BankConditions;
 
 export function useStatementAnalysis(
   statementId: string,
@@ -116,12 +115,12 @@ export function useStatementAnalysis(
         const txMeta = meta ?? { clientId: '', accountNumber: '', bankCode: '' };
         const transactions = bankTxs.map((tx) => toAnalysisTransaction(tx, txMeta));
 
-        const config: AnalysisConfig = {
+        const config = {
           enabledDetectors: DEFAULT_DETECTORS,
           dateRange: {},
           clientId: txMeta.clientId || undefined,
           bankCodes: txMeta.bankCode ? [txMeta.bankCode] : undefined,
-        };
+        } as unknown as AnalysisConfig;
 
         const service = getAnalysisService();
         const result = await service.analyzeTransactions(

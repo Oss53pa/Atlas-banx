@@ -12,7 +12,7 @@ import { CompetenceId } from './types';
 
 export const IntelligenceRequestSchema = z.object({
   competence_id: z.number().int().min(1).max(14) as z.ZodType<CompetenceId>,
-  context: z.record(z.unknown()),
+  context: z.record(z.string(), z.unknown()),
   client_consent_cloud: z.boolean().optional(),
   user_id: z.string().uuid(),
   organization_id: z.string().uuid(),
@@ -223,8 +223,8 @@ export const C8InputSchema = z.object({
     actual_value: z.number(),
     delta_fcfa: z.number(),
     period: z.object({ from: z.string(), to: z.string() }),
-    operations_concerned: z.array(z.record(z.unknown())),
-    receipt: z.record(z.unknown()),
+    operations_concerned: z.array(z.record(z.string(), z.unknown())),
+    receipt: z.record(z.string(), z.unknown()),
   }),
   audience: z.enum(['daf', 'comptable', 'dirigeant']),
   language: z.literal('fr'),

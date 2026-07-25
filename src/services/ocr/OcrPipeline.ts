@@ -10,7 +10,6 @@ import { StructurationLayer } from './StructurationLayer';
 import type {
   OcrStructuredOutput,
   OcrPipelineOptions,
-  OcrPipelineProgress,
 } from './OcrPipelineTypes';
 import type { BankTemplateConfig } from './TemplateExtractor';
 

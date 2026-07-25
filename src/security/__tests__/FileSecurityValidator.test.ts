@@ -3,7 +3,7 @@ import { FileSecurityValidator } from '../FileSecurityValidator';
 
 function makeFile(bytes: number[] | Uint8Array, name: string, type = ''): File {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  return new File([arr], name, { type });
+  return new File([arr as BlobPart], name, { type });
 }
 
 describe('FileSecurityValidator', () => {

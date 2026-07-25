@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BarChart3, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { useCdcStore } from '../../cdc/store/cdcStore';
+import { useWorkspaceStore } from '../../workspace/workspaceStore';
 import type { Ecart, CdcAuditSession } from '../../cdc/types';
 
 const ECART_COLORS: Record<string, string> = {
@@ -55,12 +56,12 @@ export function AuditCdcTab() {
     selectAuditSession,
   } = useCdcStore();
 
-  // TODO: get tenantId from auth context
-  const tenantId = null;
+  // Le tenant CDC correspond au workspace actif (multi-tenant par org).
+  const tenantId = useWorkspaceStore((s) => s.workspace?.id ?? null);
 
   useEffect(() => {
     if (tenantId) loadAuditSessions(tenantId);
-  }, [tenantId]);
+  }, [tenantId, loadAuditSessions]);
 
   if (!tenantId) {
     return (

@@ -1,19 +1,16 @@
 import { useState, useMemo, useRef } from 'react';
 import {
   Landmark, Plus, Search, X, Upload, Eye, History,
-  CheckCircle2, Archive, Calendar, FileText, Loader2, ChevronRight,
-  Trash2, Pencil, AlertCircle,
-  Clock
+  CheckCircle2, Archive, FileText, Loader2, ChevronRight,
+  Trash2, Pencil,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardBody, Button, Input, Select, Badge } from '../ui';
 import { useBankStore } from '../../store/bankStore';
-import { useClientStore } from '../../store/clientStore';
 import { BankConditionsModal } from './BankConditionsModal';
 import { BankFormModal } from './BankFormModal';
 import { BankGridsPanel } from './BankGridsPanel';
 import type { Bank, BankConditions, ConditionGrid, MonetaryZone, ArchivedDocument } from '../../types';
 import { CEMAC_COUNTRIES, UEMOA_COUNTRIES, AFRICAN_COUNTRIES } from '../../types';
-import { formatCurrency } from '../../utils';
 import { extractConditions } from '../../extraction/conditions';
 import { setByPath } from '../../extraction/normalize';
 import {
@@ -198,7 +195,6 @@ export function BanksPage() {
     deleteConditionGrid,
     setActiveGrid,
   } = useBankStore();
-  const { clients } = useClientStore();
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('banks');
@@ -232,7 +228,7 @@ export function BanksPage() {
 
   // Selected bank
   const selectedBank = useMemo(() => {
-    return selectedBankId ? banks.find(b => b.id === selectedBankId) : null;
+    return selectedBankId ? banks.find(b => b.id === selectedBankId) ?? null : null;
   }, [banks, selectedBankId]);
 
   // Bank grids
@@ -316,11 +312,6 @@ export function BanksPage() {
     return AFRICAN_COUNTRIES;
   }, [zoneFilter]);
 
-  // Get client count for a bank
-  const _getClientCount = (_bankCode: string) => {
-    return clients.filter((c) => c.accounts.some((a) => a.bankCode === _bankCode)).length;
-  };
-
   // Handle document upload and extraction. PDFs go through the verification
   // modal (split-screen: source PDF + editable rubric mapping). The grid is
   // only committed to the store when the user validates the modal.
@@ -398,6 +389,7 @@ export function BanksPage() {
         type: 'conditions',
         uploadDate: new Date(),
         effectiveDate: new Date(),
+        fileData: '',
         fileSize: file.size,
         extractedAt: new Date(),
         isActive: true,
@@ -418,6 +410,7 @@ export function BanksPage() {
         type: 'conditions',
         uploadDate: new Date(),
         effectiveDate: new Date(),
+        fileData: '',
         fileSize: file.size,
         extractedAt: new Date(),
         isActive: true,
@@ -604,8 +597,6 @@ export function BanksPage() {
             <CardBody className="p-0">
               <div className="divide-y divide-primary-100 max-h-[calc(100vh-180px)] overflow-y-auto">
                 {filteredBanks.map((bank) => {
-                  const _zone = bank.zone || getZoneFromCountry(bank.country);
-                  const _bankGrids = getAllGrids(bank.id);
                   const bankActiveGrid = getActiveGrid(bank.id);
 
                   return (

@@ -37,6 +37,7 @@ export function AnalysisPage() {
     completeAnalysis,
     failAnalysis,
     getFilteredAnomalies,
+    updateAnomalyStatus,
   } = useAnalysisStore();
   const { thresholds, bankConditions, claudeApi, getEnabledDetectors } = useSettingsStore();
   const { banks: _banks, getGridForDate, getBankByCode } = useBankStore();
@@ -381,8 +382,9 @@ export function AnalysisPage() {
             setSelectedAnomaly(null);
           }}
           onStatusChange={(status) => {
-            // TODO: Update anomaly status
-            console.log('Status changed:', status);
+            updateAnomalyStatus(selectedAnomaly.id, status);
+            // Reflète immédiatement le nouveau statut dans le panneau ouvert
+            setSelectedAnomaly((prev) => (prev ? { ...prev, status } : prev));
           }}
         />
       )}

@@ -75,7 +75,7 @@ interface AnomalyTypeBadgeProps extends Omit<BadgeProps, 'variant' | 'children'>
   type: AnomalyType;
 }
 
-const anomalyTypeToVariant: Record<AnomalyType, BadgeVariant> = {
+const anomalyTypeToVariant: Partial<Record<AnomalyType, BadgeVariant>> = {
   [AnomalyType.DUPLICATE_FEE]: 'warning',
   [AnomalyType.GHOST_FEE]: 'high',
   [AnomalyType.OVERCHARGE]: 'medium',

@@ -96,7 +96,7 @@ export const useRagStore = create<RagState & RagActions>()(
       indexKnowledgeBase: async () => {
         if (!regulatoryIndexer) return;
 
-        const docs = await regulatoryIndexer.indexKnowledgeBase((status) => {
+        await regulatoryIndexer.indexKnowledgeBase((status) => {
           set({ indexingStatus: status });
         });
 

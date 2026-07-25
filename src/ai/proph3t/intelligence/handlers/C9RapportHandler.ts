@@ -32,11 +32,6 @@ const TONE_INTRO: Record<C9Input['tone'], string> = {
   pedagogique: 'Ce rapport a pour objectif d\'expliquer, de maniere accessible, les ecarts constates entre les conditions bancaires contractuelles et celles effectivement appliquees',
 };
 
-const TONE_CONCLUSION: Record<C9Input['tone'], string> = {
-  factuel: 'Les constats ci-dessus sont presentes a titre informatif pour action par les equipes concernees.',
-  assertif: 'Au vu des ecarts constates, il est vivement recommande d\'engager sans delai les demarches de reclamation aupres de l\'etablissement bancaire.',
-  pedagogique: 'En resume, cet audit revele des opportunites concretes de recuperation de sommes indument prelevees. Les equipes sont invitees a se rapprocher de leur interlocuteur bancaire pour discuter de ces constats.',
-};
 
 // ----------------------------------------------------------------------------
 // Section generators

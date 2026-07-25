@@ -167,7 +167,7 @@ function fmtFull(n: number): string {
   return (n < 0 ? '−' : '') + out + ' FCFA';
 }
 
-function CustomTooltip({ active, payload, label }: {
+function CustomTooltip({ active, payload }: {
   active?: boolean;
   payload?: Array<{ payload: DailyPoint }>;
   label?: string;

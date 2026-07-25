@@ -6,7 +6,7 @@
 //   - status='analyzed'  → cercle score + résumé anomalies + bouton "Voir"
 // ============================================================================
 
-import { Sparkles, RefreshCw, AlertTriangle, ListChecks } from 'lucide-react';
+import { Sparkles, RefreshCw, ListChecks } from 'lucide-react';
 import type { Anomaly } from '../types/statement.types';
 import { computeRiskScore } from '../utils/riskScore';
 

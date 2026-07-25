@@ -51,7 +51,7 @@ export async function createGeneratedReport(args: {
       integrity_hash: args.hash,
       metadata: { statement_id: args.statementId, template: args.template },
       generated_at: new Date().toISOString(),
-    })
+    } as never)
     .select('id')
     .single();
   if (error || !data) throw new Error(`Insert generated_report: ${error?.message}`);
@@ -83,7 +83,7 @@ export async function createSignedReportDraft(args: {
       hash: args.hash,
       status: 'draft',
       recipients: [],
-    })
+    } as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert signed_report: ${error?.message}`);
@@ -130,7 +130,7 @@ export async function signReport(args: {
       recipients: args.recipients,
       signed_at: new Date().toISOString(),
       status: 'sent',
-    })
+    } as never)
     .eq('id', args.reportId)
     .select('*')
     .single();
@@ -164,7 +164,7 @@ export async function createComplaintLetter(args: {
       document_url: args.documentUrl ?? null,
       status: 'draft',
       created_by: args.createdBy,
-    })
+    } as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert complaint: ${error?.message}`);

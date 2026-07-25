@@ -150,7 +150,7 @@ export class OcrService {
 
     const result = await worker.recognize(source);
 
-    const words = result.data.words?.map((w: { text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }) => ({
+    const words = (result.data as { words?: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }> }).words?.map((w: { text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }) => ({
       text: w.text,
       bbox: w.bbox,
       confidence: w.confidence,
@@ -249,8 +249,8 @@ export class OcrService {
 
       // If very little text found, likely image-based
       const textLength = textContent.items
-        .filter((item): item is { str: string } => 'str' in item)
-        .reduce((acc, item) => acc + item.str.length, 0);
+        .filter((item) => 'str' in item)
+        .reduce((acc, item) => acc + (item as { str: string }).str.length, 0);
 
       // Less than 50 characters on first page suggests scanned PDF
       return textLength < 50;

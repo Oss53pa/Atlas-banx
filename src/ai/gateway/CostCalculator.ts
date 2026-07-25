@@ -34,6 +34,12 @@ const COST_TABLES: Record<string, CostTable> = {
   'mistral-medium-latest': { inputPer1M: 2.7, outputPer1M: 8.1 },
   'mistral-small-latest': { inputPer1M: 0.2, outputPer1M: 0.6 },
   'codestral-latest': { inputPer1M: 0.2, outputPer1M: 0.6 },
+
+  // Groq (LPU) — tarifs indicatifs par million de tokens
+  'llama-3.3-70b-versatile': { inputPer1M: 0.59, outputPer1M: 0.79 },
+  'llama-3.1-8b-instant': { inputPer1M: 0.05, outputPer1M: 0.08 },
+  'mixtral-8x7b-32768': { inputPer1M: 0.24, outputPer1M: 0.24 },
+  'gemma2-9b-it': { inputPer1M: 0.20, outputPer1M: 0.20 },
 };
 
 /**
@@ -42,7 +48,10 @@ const COST_TABLES: Record<string, CostTable> = {
 const DEFAULT_PROVIDER_COSTS: Record<AIProviderType, CostTable> = {
   claude: { inputPer1M: 3.0, outputPer1M: 15.0 },
   openai: { inputPer1M: 2.50, outputPer1M: 10.0 },
+  groq: { inputPer1M: 0.59, outputPer1M: 0.79 }, // Tres economique (LPU)
   mistral: { inputPer1M: 2.0, outputPer1M: 6.0 },
+  gemini: { inputPer1M: 1.25, outputPer1M: 5.0 },
+  deepseek: { inputPer1M: 0.27, outputPer1M: 1.10 },
   ollama: { inputPer1M: 0, outputPer1M: 0 }, // Gratuit (local)
   custom: { inputPer1M: 0, outputPer1M: 0 },
 };

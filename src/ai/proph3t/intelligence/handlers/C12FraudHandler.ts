@@ -4,7 +4,7 @@
 // 5 patterns cibles du CDC PROPH3T v1.0
 // ============================================================================
 
-import type { C12Input, C12Output, DetectedFraudPattern, FraudPattern, AnomalySeverity } from '../types';
+import type { C12Input, C12Output, DetectedFraudPattern, AnomalySeverity } from '../types';
 
 // ----------------------------------------------------------------------------
 // Pattern 1: Plafonnement "juste sous seuil" BCEAO

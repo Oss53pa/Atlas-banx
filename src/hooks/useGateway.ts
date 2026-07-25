@@ -5,7 +5,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSettingsStore } from '../store';
-import { PremiumGateway } from '../ai/gateway/PremiumGateway';
 import { AIProviderFactory } from '../ai';
 import type {
   GatewayStrategy,

@@ -9,9 +9,16 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react';
-import { FileX, Sparkles } from 'lucide-react';
+import { FileX, Sparkles, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { Bank, ArchivedDocument } from '../../types';
 import { SplitScreenValidator, type ExtractedField } from '../../cdc/components/SplitScreenValidator';
+import { submitValidatedReference } from '../../cdc/services/submitValidatedReference';
+
+type SubmitState =
+  | { status: 'idle' }
+  | { status: 'submitting' }
+  | { status: 'success'; conditionsCount: number }
+  | { status: 'error'; message: string };
 
 interface ValidationTabContentProps {
   bank: Bank;
@@ -22,10 +29,10 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
   // On prend le document le plus récent qui a un PDF
   const document = useMemo(() => {
     const sorted = [...archivedDocuments]
-      .filter((d) => Boolean(d.url || d.dataUrl))
+      .filter((d) => Boolean(d.fileData))
       .sort((a, b) => {
-        const da = new Date(a.uploadedAt ?? 0).getTime();
-        const db = new Date(b.uploadedAt ?? 0).getTime();
+        const da = new Date(a.uploadDate ?? 0).getTime();
+        const db = new Date(b.uploadDate ?? 0).getTime();
         return db - da;
       });
     return sorted[0] ?? null;
@@ -35,6 +42,7 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
     document ? buildSeedFields(document.id) : [],
   );
   const [activeFieldId, setActiveFieldId] = useState<string | undefined>();
+  const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
 
   if (!document) {
     return (
@@ -55,7 +63,25 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
     );
   }
 
-  const pdfUrl = document.url ?? document.dataUrl ?? '';
+  const pdfUrl = document.fileData ?? '';
+
+  const handleValidateAll = async () => {
+    if (submitState.status === 'submitting') return;
+    setSubmitState({ status: 'submitting' });
+    try {
+      const result = await submitValidatedReference({
+        bankCode: bank.code,
+        pdfUrl,
+        fields,
+      });
+      setSubmitState({ status: 'success', conditionsCount: result.conditionsCount });
+    } catch (err) {
+      setSubmitState({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Échec de la soumission.',
+      });
+    }
+  };
 
   return (
     <div className="h-[600px] -mx-6 -my-4">
@@ -63,6 +89,27 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
         Document : <span className="font-mono text-ink-700">{document.name}</span>
         {' · '}Banque : <span className="font-semibold text-ink-700">{bank.name}</span>
       </div>
+
+      {submitState.status === 'submitting' && (
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Création de la version L2 et soumission à validation…
+        </div>
+      )}
+      {submitState.status === 'success' && (
+        <div className="px-4 py-2 bg-green-50 border-b border-green-100 text-xs text-green-700 flex items-center gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Version soumise à validation ({submitState.conditionsCount} condition
+          {submitState.conditionsCount > 1 ? 's' : ''}). Un pair doit désormais la
+          valider puis la publier (workflow 2 yeux).
+        </div>
+      )}
+      {submitState.status === 'error' && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-xs text-red-700 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          {submitState.message}
+        </div>
+      )}
       <SplitScreenValidator
         pdfUrl={pdfUrl}
         fields={fields}
@@ -84,11 +131,7 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
           }]);
           setActiveFieldId(id);
         }}
-        onValidateAll={() => {
-          // TODO : déclencher publication d'une nouvelle version L2 via DAO
-          // (submitBankReferenceVersion → validateBankReferenceVersion → publish)
-          alert('Validation envoyée — workflow 2-yeux à brancher');
-        }}
+        onValidateAll={handleValidateAll}
       />
     </div>
   );

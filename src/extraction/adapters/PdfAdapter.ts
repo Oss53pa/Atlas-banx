@@ -114,7 +114,7 @@ export class PdfAdapter implements DocumentAdapter {
 
   private async toArrayBuffer(input: File | Blob | ArrayBuffer | string): Promise<ArrayBuffer> {
     if (input instanceof ArrayBuffer) return input;
-    if (input instanceof Blob || input instanceof File) return await input.arrayBuffer();
+    if (input instanceof File || input instanceof Blob) return await input.arrayBuffer();
     if (typeof input === 'string') {
       // Assume base64
       const clean = input.replace(/^data:application\/pdf;base64,/, '');

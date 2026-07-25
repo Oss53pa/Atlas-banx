@@ -62,6 +62,7 @@ const DEMO_PROFILE: Profile = {
   id: 'demo-user-00000000-0000-0000-0000-000000000000',
   email: 'demo@atlasbanx.com',
   full_name: 'Utilisateur Démo',
+  avatar_url: null,
   role: 'admin',
   account_type: 'cabinet',
   organization_id: null,
@@ -147,7 +148,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       }
 
       // Écouter les changements d'état auth (store subscription for cleanup)
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
         if (session?.user) {
           set({
             isAuthenticated: true,
@@ -166,7 +167,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         }
       });
       // Store the unsubscribe function for potential cleanup
-      (get() as Record<string, unknown>)._authSubscription = subscription;
+      (get() as unknown as Record<string, unknown>)._authSubscription = subscription;
     } catch (err) {
       set({
         isInitialized: true,
@@ -345,7 +346,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ account_type: accountType })
+        .update({ account_type: accountType } as never)
         .eq('id', user.id);
 
       if (error) {

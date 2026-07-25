@@ -85,7 +85,7 @@ describe('C3 — Extraction avenants ponctuels', () => {
 
     const result = await dispatch(
       CompetenceId.EXTRACTION_AVENANTS,
-      { ...baseInput, text_content: 'Avenant n°1 signe le 01/01/2024' },
+      { ...baseInput, text_content: 'Avenant n°1 signe le 01/01/2024' } as C3Input & { text_content: string },
       'a0000000-0000-4000-8000-000000000001',
       'a0000000-0000-4000-8000-000000000002',
     );

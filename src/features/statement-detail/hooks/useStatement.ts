@@ -20,6 +20,7 @@ const FALLBACK_META: StatementHeaderMeta = {
   bankLegalName: 'NSIA Banque Côte d\'Ivoire',
   accountNumber: '86315802001',
   clientLegalName: 'Pamela ATOKOUNA',
+  clientType: 'particulier_resident',
   periodStart: '2026-02-10',
   periodEnd: '2026-05-08',
   transactionCount: 94,

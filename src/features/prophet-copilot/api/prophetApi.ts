@@ -48,7 +48,7 @@ export async function loadOrCreateConversation(
     .insert({
       user_id: userId,
       title: statementId ? `Relevé ${statementId.slice(0, 8)}` : 'Conversation PROPH3T',
-    })
+    } as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert conversation: ${error?.message}`);
@@ -97,7 +97,7 @@ export async function appendMessage(
         followUps: message.followUps ?? [],
         toolCalls: message.toolCalls ?? [],
       },
-    })
+    } as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert message: ${error?.message}`);
@@ -105,7 +105,7 @@ export async function appendMessage(
   // Bump updated_at sur la conversation
   await sb
     .from('proph3t_conversations')
-    .update({ updated_at: new Date().toISOString() })
+    .update({ updated_at: new Date().toISOString() } as never)
     .eq('id', conversationId);
 
   return mapMessageRow(data);

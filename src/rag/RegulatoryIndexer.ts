@@ -6,7 +6,7 @@
 import { RagPipeline } from './RagPipeline';
 import { DocxExtractor } from './DocxExtractor';
 import { REGULATORY_KNOWLEDGE_BASE, REGULATORY_SOURCES } from '../services/RegulatorySearchService';
-import type { RagDocument, RagIndexingStatus, RagSourceType } from './types';
+import type { RagDocument, RagIndexingStatus } from './types';
 
 /**
  * Service d'indexation des documents reglementaires et personnalises
@@ -167,7 +167,7 @@ export class RegulatoryIndexer {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const pageText = content.items
-        .map((item: { str?: string }) => item.str || '')
+        .map((item: any) => item.str || '')
         .join(' ');
       textParts.push(pageText);
     }

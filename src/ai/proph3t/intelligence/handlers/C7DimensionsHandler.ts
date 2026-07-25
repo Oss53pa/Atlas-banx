@@ -6,10 +6,8 @@
 
 import type {
   C7Input, C7Output, DetectedDimension, DimensionType,
-  ConditionDimensions, ConditionFormula, BoundingBox,
+  ConditionDimensions, ConditionFormula,
 } from '../types';
-
-const PLACEHOLDER_BBOX: BoundingBox = { x: 0, y: 0, w: 100, h: 10 };
 
 // ----------------------------------------------------------------------------
 // Dimension detection patterns
@@ -154,7 +152,6 @@ const DIMENSION_PATTERNS: DimensionPattern[] = [
 ];
 
 // Tier/tranche detection
-const TIER_PATTERN = /(\d[\d\s.,]*)\s*(%|FCFA|XAF)\s*(?:jusqu['´]?[àa]|pour\s+les?\s+(?:premiers?\s+)?)?\s*([\d\s.,]+)\s*(?:FCFA|XAF|M\b|millions?)/gi;
 const TIERED_MARKERS = /tranche|d[eé]gressif|progressif|bar[eè]me|palier/i;
 
 // Conditional rules

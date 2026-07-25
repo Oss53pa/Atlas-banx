@@ -129,7 +129,7 @@ function searchEcartKnowledge(query: string): C10Output['sources'] {
 // Answer generation (deterministic)
 // ----------------------------------------------------------------------------
 
-function generateAnswer(query: string, sources: C10Output['sources']): string {
+function generateAnswer(_query: string, sources: C10Output['sources']): string {
   if (sources.length === 0) {
     return 'Cette information n\'est pas couverte par l\'audit en cours. Souhaitez-vous une investigation complementaire ?';
   }

@@ -185,7 +185,6 @@ export class ComplianceAudit {
     }
 
     // Vérifier si les taux sont conformes
-    const _authorizedRate = this.bankConditions.interestRates.find(r => r.type === 'authorized');
     const usureRate = this.bankConditions.creditFees?.tauxUsure;
 
     if (usureRate) {

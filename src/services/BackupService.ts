@@ -212,8 +212,8 @@ export class BackupService {
       useBillingStore.setState({
         invoices: data.data.billing.invoices,
         payments: data.data.billing.payments,
-        pricingPlans: data.data.billing.pricingPlans,
-      });
+        pricingPlans: (data.data.billing as { pricingPlans?: unknown }).pricingPlans,
+      } as unknown as Partial<ReturnType<typeof useBillingStore.getState>>);
     }
 
     // Restaurer reports

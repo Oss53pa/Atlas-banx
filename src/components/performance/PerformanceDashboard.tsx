@@ -10,6 +10,7 @@ import { formatNumber } from '../../utils';
 import { useState, useEffect } from 'react';
 import { Activity, Clock, Zap, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts';
+import type { Formatter } from 'recharts/types/component/DefaultTooltipContent';
 import { Card, CardHeader, CardTitle, CardBody, Alert, Badge } from '../ui';
 import {
   getPerformanceMonitor,
@@ -113,10 +114,10 @@ export function PerformanceDashboard() {
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip
-                    formatter={(v: number, name: string) => [
+                    formatter={((v: number, name: string) => [
                       name === 'duration' ? `${v} s` : `${formatNumber(v)} tx`,
                       name === 'duration' ? 'Durée' : 'Transactions',
-                    ]}
+                    ]) as unknown as Formatter<number, string>}
                   />
                   <ReferenceLine y={180} stroke="#d97706" strokeDasharray="3 3" label="SLA 10k" />
                   <Bar dataKey="duration" fill="#1e3a8a" radius={[4, 4, 0, 0]} />

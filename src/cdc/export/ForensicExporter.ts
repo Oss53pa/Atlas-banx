@@ -44,7 +44,7 @@ import type {
   AgreementCondition,
   BankReferenceVersion,
 } from '../types';
-import { ReceiptSigner, createDevSigner, canonicalize } from '../resolution/ReceiptSigner';
+import { ReceiptSigner, canonicalize } from '../resolution/ReceiptSigner';
 
 // ============================================================================
 // Types
@@ -120,7 +120,7 @@ function bytesToHex(buf: ArrayBuffer | Uint8Array): string {
 }
 
 async function sha256Bytes(input: Uint8Array): Promise<string> {
-  const buf = await getCrypto().subtle.digest('SHA-256', input);
+  const buf = await getCrypto().subtle.digest('SHA-256', input as unknown as BufferSource);
   return bytesToHex(buf);
 }
 

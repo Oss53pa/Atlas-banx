@@ -12,7 +12,6 @@ export interface PrintOptions {
 }
 
 export class PrintService {
-  private static originalBodyContent: string | null = null;
   private static printStylesId = 'print-service-styles';
 
   /**

@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { AIProviderFactory } from '../ai/AIProviderFactory';
-import type { AIProviderConfig, IAIProvider, AICategoryResult } from '../ai/types';
+import type { IAIProvider, AICategoryResult, AIReportData } from '../ai/types';
 import type { Transaction } from '../types';
 
 export interface ComparisonResult {
@@ -186,7 +186,7 @@ export class AIComparatorService {
           clientName: 'Test',
           period: { start: '', end: '' },
         },
-      });
+      } as unknown as AIReportData);
       const usage = provider.getLastTokensUsed();
       const timeMs = performance.now() - start;
 
@@ -203,7 +203,7 @@ export class AIComparatorService {
     }
   }
 
-  private getProviderForType(providerType: string): IAIProvider | null {
+  private getProviderForType(_providerType: string): IAIProvider | null {
     // Use the factory's current provider if it matches
     const current = AIProviderFactory.getProvider();
     if (current) return current;

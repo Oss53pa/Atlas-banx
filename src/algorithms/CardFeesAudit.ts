@@ -177,13 +177,13 @@ export class CardFeesAudit {
       for (const sub of subscriptions) {
         const amount = Math.abs(sub.amount);
         const matchingCard = this.bankConditions.cardFees.cartes.find(c =>
-          amount > c.cotisation * (1 - this.config.feeTolerance) &&
-          amount < c.cotisation * (1 + this.config.feeTolerance)
+          amount > c.cotisationAnnuelle * (1 - this.config.feeTolerance) &&
+          amount < c.cotisationAnnuelle * (1 + this.config.feeTolerance)
         );
 
         if (!matchingCard) {
           // Cotisation ne correspond à aucune carte connue
-          const expectedCots = this.bankConditions.cardFees.cartes.map(c => c.cotisation);
+          const expectedCots = this.bankConditions.cardFees.cartes.map(c => c.cotisationAnnuelle);
           const closestCot = expectedCots.reduce((prev, curr) =>
             Math.abs(curr - amount) < Math.abs(prev - amount) ? curr : prev
           );
@@ -239,8 +239,7 @@ export class CardFeesAudit {
 
     // Vérifier si frais par rapport au nombre de retraits
     const withdrawalCount = withdrawals.length;
-    const freeWithdrawals = this.bankConditions?.cardFees?.retraitGratuits || 0;
-    const _feePerWithdrawal = this.bankConditions?.cardFees?.fraisRetrait || 0;
+    const freeWithdrawals = (this.bankConditions?.cardFees as { retraitGratuits?: number } | undefined)?.retraitGratuits || 0;
 
     if (freeWithdrawals > 0 && withdrawalCount <= freeWithdrawals && atmFees.length > 0) {
       const totalFees = atmFees.reduce((sum, f) => sum + Math.abs(f.amount), 0);

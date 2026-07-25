@@ -28,7 +28,6 @@ import { JsonValidator } from './JsonValidator';
 import { DeterministicPreFilter } from './DeterministicPreFilter';
 import { CategorizationCache } from './CategorizationCache';
 import type { RagPipeline } from '../../rag/RagPipeline';
-import { buildRAGAugmentedPrompt } from './prompts';
 
 const DEFAULT_TIMEOUT_MS = 120000;
 

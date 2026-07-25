@@ -1044,27 +1044,27 @@ export function BankConditionsModal({
                     <EditableField
                       label="Cotisation annuelle"
                       value={card.cotisationAnnuelle}
-                      onChange={(v) => updateCard(card.id, 'cotisationAnnuelle', v)}
+                      onChange={(v) => updateCard(card.id, 'cotisationAnnuelle', v as string | number)}
                     />
                     <EditableField
                       label="Frais d'émission"
                       value={card.fraisEmission}
-                      onChange={(v) => updateCard(card.id, 'fraisEmission', v)}
+                      onChange={(v) => updateCard(card.id, 'fraisEmission', v as string | number)}
                     />
                     <EditableField
                       label="Plafond retrait/jour"
                       value={card.plafondRetraitJour}
-                      onChange={(v) => updateCard(card.id, 'plafondRetraitJour', v)}
+                      onChange={(v) => updateCard(card.id, 'plafondRetraitJour', v as string | number)}
                     />
                     <EditableField
                       label="Plafond paiement/jour"
                       value={card.plafondPaiementJour}
-                      onChange={(v) => updateCard(card.id, 'plafondPaiementJour', v)}
+                      onChange={(v) => updateCard(card.id, 'plafondPaiementJour', v as string | number)}
                     />
                     <EditableField
                       label="Validité (années)"
                       value={card.validiteAnnees}
-                      onChange={(v) => updateCard(card.id, 'validiteAnnees', v)}
+                      onChange={(v) => updateCard(card.id, 'validiteAnnees', v as string | number)}
                       suffix="ans"
                     />
                   </div>

@@ -162,7 +162,7 @@ describe('C1 — Extraction CG bancaires', () => {
         language: 'fr' as const,
         expected_taxonomy: [],
         text_content: SAMPLE_CG_TEXT,
-      },
+      } as C1Input & { text_content: string },
       'a0000000-0000-4000-8000-000000000001',
       'a0000000-0000-4000-8000-000000000002',
     );

@@ -1,4 +1,4 @@
-import { Client, BankStatement, AuditReport, Transaction, Anomaly, Bank } from '../../../types';
+import { Client, BankStatement, ClientReport, Transaction, Anomaly, Bank } from '../../../types';
 
 export type TabType = 'overview' | 'info' | 'import' | 'statements' | 'savings' | 'reports';
 
@@ -70,7 +70,7 @@ export interface TabProps {
   clientTransactions: Transaction[];
   clientAnomalies: Anomaly[];
   clientStatements: BankStatement[];
-  clientReports: AuditReport[];
+  clientReports: ClientReport[];
   banks: Bank[];
   navigate: (path: string) => void;
   setShowAddAccount: (show: boolean) => void;

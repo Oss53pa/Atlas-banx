@@ -30,9 +30,9 @@ import {
   type Invoice,
   type InvoiceStatus,
   type BillingSettings,
-  type DocumentKind,
   INVOICE_STATUS_LABELS,
 } from '../../billing';
+import type { DocumentKind } from '../../billing/types';
 import { useClientStore } from '../../store/clientStore';
 import { formatCurrency } from '../../utils';
 

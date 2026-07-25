@@ -110,7 +110,7 @@ export class AccountFeesAudit {
 
       // Vérifier les frais de tenue de compte
       if (desc.includes('tenue') && contractFees.tenueCompte) {
-        const expected = contractFees.tenueCompte;
+        const expected = contractFees.tenueCompte.particulier;
         const tolerance = expected * this.config.feeTolerance;
 
         if (amount > expected + tolerance) {
@@ -124,8 +124,8 @@ export class AccountFeesAudit {
       }
 
       // Vérifier les frais de relevés
-      if (desc.includes('releve') && contractFees.fraisReleve) {
-        const expected = contractFees.fraisReleve;
+      if (desc.includes('releve') && contractFees.releveCompte?.mensuel) {
+        const expected = contractFees.releveCompte.mensuel;
         const tolerance = expected * this.config.feeTolerance;
 
         if (amount > expected + tolerance) {

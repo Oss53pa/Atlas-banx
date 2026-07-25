@@ -167,7 +167,7 @@ export class PremiumReportService {
     if (reportId) {
       try {
         const certificate = await generateIntegrityCertificate(reportId);
-        const certText = formatCertificateForPdf(certificate);
+        const certText = formatCertificateForPdf(certificate).join('\n');
         drawIntegrityCertificate(ctx, certText);
       } catch (err) {
         console.warn('[PremiumReportService] certificate generation failed:', err);

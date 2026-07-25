@@ -9,6 +9,16 @@ import {
 } from '../types';
 
 /**
+ * Conditions bancaires étendues avec les rubriques de frais (packages, assurances)
+ * exploitées par ce module mais absentes du type de base BankConditions.
+ * Toutes optionnelles : comportement identique lorsqu'elles sont absentes.
+ */
+interface ExtendedBankConditions extends BankConditions {
+  packageFees?: Record<string, number>;
+  insuranceFees?: { paymentMeans?: number };
+}
+
+/**
  * Configuration pour l'audit des packages et assurances
  */
 interface PackagesConfig {
@@ -42,7 +52,7 @@ const DEFAULT_CONFIG: PackagesConfig = {
  */
 export class PackagesAudit {
   private config: PackagesConfig;
-  private bankConditions?: BankConditions;
+  private bankConditions?: ExtendedBankConditions;
 
   constructor(config?: Partial<PackagesConfig>, bankConditions?: BankConditions) {
     this.config = { ...DEFAULT_CONFIG, ...config };

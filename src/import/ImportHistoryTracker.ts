@@ -30,7 +30,6 @@ export class ImportHistoryTracker {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — import_history defined in migration 008
       .from('import_history')
       .select('*')
       .eq('file_hash', fileHash)
@@ -65,7 +64,6 @@ export class ImportHistoryTracker {
 
     const { error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — import_history defined in migration 008
       .from('import_history')
       .insert({
         user_id: userId,
@@ -96,7 +94,6 @@ export class ImportHistoryTracker {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — import_history defined in migration 008
       .from('import_history')
       .select('*')
       .order('imported_at', { ascending: false })

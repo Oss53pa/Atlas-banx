@@ -5,7 +5,7 @@
 // hébergé askProph3t (sensibilité confidential, JWT, dégradation gracieuse).
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Proph3tClient, Proph3tError } from '../../lib/proph3t/sdk';
 import type { KnowledgeHit } from '../../lib/proph3t/sdk';
 
@@ -14,7 +14,7 @@ import type { KnowledgeHit } from '../../lib/proph3t/sdk';
 // ----------------------------------------------------------------------------
 
 function makeFetchMock(payload: unknown, ok = true, status = 200) {
-  return vi.fn(async () =>
+  return vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) =>
     new Response(JSON.stringify(payload), {
       status: ok ? status : status,
       headers: { 'Content-Type': 'application/json' },
@@ -123,7 +123,7 @@ describe('askProph3t (hosted mode B)', () => {
   });
 
   it('sends confidential sensitivity + app JWT to proph3t-ask', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ conversation_id: 'c1', answer: 'ok', citations: [], confidence: 0.8 }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -146,7 +146,7 @@ describe('askProph3t (hosted mode B)', () => {
   });
 
   it('defaults sensitivity to confidential for AtlasBanx', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ conversation_id: 'c1', answer: 'ok', citations: [], confidence: 1 }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -186,7 +186,7 @@ describe('askProph3t (hosted mode B)', () => {
   });
 
   it('falls back to the app Supabase project when VITE_ATLAS_* are absent', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ conversation_id: 'c1', answer: 'ok', citations: [], confidence: 0.9 }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

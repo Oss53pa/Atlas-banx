@@ -41,6 +41,7 @@ export enum AnomalyType {
   AML_ALERT = 'AML_ALERT',                     // Alerte anti-blanchiment
   // Modules d'audit par catégorie de frais
   FEE_ANOMALY = 'FEE_ANOMALY',                 // Anomalie générique de frais
+  LIMIT_EXCEEDED = 'LIMIT_EXCEEDED',           // Dépassement de plafond (ex. retrait journalier)
 }
 
 export enum Severity {
@@ -104,6 +105,8 @@ export interface Anomaly {
   transactions: Transaction[];
   evidence: Evidence[];
   recommendation: string;
+  /** Libellé descriptif optionnel de l'anomalie (résumé lisible). */
+  description?: string;
   status: 'pending' | 'confirmed' | 'dismissed' | 'contested';
   detectedAt: Date;
   reviewedAt?: Date;
@@ -839,6 +842,9 @@ export const ANOMALY_TYPE_LABELS: Record<AnomalyType, string> = {
   [AnomalyType.MULTI_BANK_ISSUE]: 'Problème multi-banques',
   [AnomalyType.OHADA_NON_COMPLIANCE]: 'Non-conformité OHADA',
   [AnomalyType.AML_ALERT]: 'Alerte anti-blanchiment',
+  // Modules d'audit par catégorie de frais
+  [AnomalyType.FEE_ANOMALY]: 'Anomalie de frais',
+  [AnomalyType.LIMIT_EXCEEDED]: 'Dépassement de plafond',
 };
 
 // Severity labels (French)

@@ -38,8 +38,6 @@ interface ReportContentEditorProps {
   readOnly?: boolean;
 }
 
-type ContentType = 'text' | 'table' | 'chart' | 'image' | 'statistics';
-
 interface AIAssistantState {
   isOpen: boolean;
   isLoading: boolean;
@@ -123,22 +121,6 @@ export function ReportContentEditor({
     setEditingSection(null);
   };
 
-  // Add new section to a page (legacy - now opens editor)
-  const _addSection = (pageId: string, type: ContentType) => {
-    const newSection: ReportViewerSection = {
-      id: `section-${Date.now()}`,
-      type: type === 'text' ? 'content' : type === 'statistics' ? 'summary' : type,
-      title: getDefaultTitle(type),
-      content: getDefaultContent(type),
-      visible: true,
-    };
-
-    setEditingSection({
-      pageId,
-      section: newSection,
-    });
-  };
-
   // Remove section
   const removeSection = (pageId: string, sectionId: string) => {
     const updatedPages = report.pages.map((page) => {
@@ -175,40 +157,6 @@ export function ReportContentEditor({
       ...report,
       pages: updatedPages,
     });
-  };
-
-  // Get default title for content type
-  const getDefaultTitle = (type: ContentType): string => {
-    switch (type) {
-      case 'text':
-        return 'Nouvelle section';
-      case 'table':
-        return 'Tableau de donnees';
-      case 'chart':
-        return 'Graphique';
-      case 'image':
-        return 'Illustration';
-      case 'statistics':
-        return 'Statistiques cles';
-      default:
-        return 'Section';
-    }
-  };
-
-  // Get default content for type
-  const getDefaultContent = (type: ContentType): string | { tableId: string } | { chartId: string } | Record<string, never> => {
-    switch (type) {
-      case 'text':
-        return 'Saisissez votre texte ici...';
-      case 'table':
-        return { tableId: 'new-table' };
-      case 'chart':
-        return { chartId: 'new-chart' };
-      case 'statistics':
-        return {};
-      default:
-        return '';
-    }
   };
 
   // Get icon for section type
@@ -287,26 +235,6 @@ export function ReportContentEditor({
     navigator.clipboard.writeText(text);
     setCopiedId(`suggestion-${index}`);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  // Insert suggestion into section
-  const _insertSuggestion = (text: string, pageId: string, sectionId: string) => {
-    const updatedPages = report.pages.map((page) => {
-      if (page.id === pageId) {
-        return {
-          ...page,
-          sections: page.sections.map((s) =>
-            s.id === sectionId ? { ...s, content: text } : s
-          ),
-        };
-      }
-      return page;
-    });
-
-    onUpdateReport({
-      ...report,
-      pages: updatedPages,
-    });
   };
 
   // Available charts from report

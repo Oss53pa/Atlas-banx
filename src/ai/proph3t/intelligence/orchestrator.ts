@@ -109,7 +109,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
   try {
     switch (req.competence_id) {
       case CompetenceId.EXTRACTION_CG: {
-        const result = handleC1(req.context as C1Input);
+        const result = handleC1(req.context as unknown as C1Input);
         output = result;
         modelUsed = 'tesseract'; // C1 baseline is regex, no LLM
         const extracted = result.extracted_conditions.filter(c => c.value_numeric !== null);
@@ -120,7 +120,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.EXTRACTION_CONVENTIONS: {
-        const result = handleC2(req.context as C2Input);
+        const result = handleC2(req.context as unknown as C2Input);
         output = result;
         modelUsed = 'tesseract';
         const c2Extracted = result.extracted_conditions.filter(c => c.value_numeric !== null);
@@ -131,7 +131,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.EXTRACTION_AVENANTS: {
-        const result = handleC3(req.context as C3Input);
+        const result = handleC3(req.context as unknown as C3Input);
         output = result;
         modelUsed = 'tesseract';
         confidenceScore = result.engagement_score;
@@ -139,7 +139,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.OCR_AUGMENTE: {
-        const result = handleC4(req.context as C4Input);
+        const result = handleC4(req.context as unknown as C4Input);
         output = result;
         modelUsed = 'tesseract';
         const avgConf = result.pages.length > 0
@@ -151,8 +151,8 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
 
       case CompetenceId.CATEGORISATION: {
         const result = isLlmAvailable()
-          ? await handleC5WithLlm(req.context as C5Input)
-          : handleC5(req.context as C5Input);
+          ? await handleC5WithLlm(req.context as unknown as C5Input)
+          : handleC5(req.context as unknown as C5Input);
         output = result;
         modelUsed = result.categorized.some(c => c.match_method === 'llm') ? 'ollama-qwen2.5-7b' : 'tesseract';
         const total = result.categorized.length + result.uncategorized.length;
@@ -174,7 +174,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.DIMENSIONS_TARIFAIRES: {
-        const result = handleC7(req.context as C7Input);
+        const result = handleC7(req.context as unknown as C7Input);
         output = result;
         modelUsed = 'tesseract';
         confidenceScore = result.dimensions.length > 0
@@ -185,8 +185,8 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
 
       case CompetenceId.EXPLICATION_ECARTS: {
         const result = isLlmAvailable()
-          ? await handleC8WithLlm(req.context as C8Input)
-          : handleC8(req.context as C8Input);
+          ? await handleC8WithLlm(req.context as unknown as C8Input)
+          : handleC8(req.context as unknown as C8Input);
         output = result;
         modelUsed = isLlmAvailable() ? 'ollama-qwen2.5-7b' : 'tesseract';
         confidenceScore = 85;
@@ -195,8 +195,8 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
 
       case CompetenceId.RAPPORT_AUDIT: {
         const result = isLlmAvailable()
-          ? await handleC9WithLlm(req.context as C9Input)
-          : handleC9(req.context as C9Input);
+          ? await handleC9WithLlm(req.context as unknown as C9Input)
+          : handleC9(req.context as unknown as C9Input);
         output = result;
         modelUsed = isLlmAvailable() ? 'ollama-qwen2.5-7b' : 'tesseract';
         confidenceScore = result.validation_ok ? 90 : 50;
@@ -205,8 +205,8 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
 
       case CompetenceId.QA_CONVERSATIONNEL: {
         const result = isLlmAvailable()
-          ? await handleC10WithLlm(req.context as C10Input)
-          : handleC10(req.context as C10Input);
+          ? await handleC10WithLlm(req.context as unknown as C10Input)
+          : handleC10(req.context as unknown as C10Input);
         output = result;
         modelUsed = isLlmAvailable() ? 'ollama-qwen2.5-7b' : 'tesseract';
         confidenceScore = result.requires_investigation ? 20 : 75;
@@ -214,7 +214,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.ANOMALIES_STATS: {
-        const result = handleC11(req.context as C11Input);
+        const result = handleC11(req.context as unknown as C11Input);
         output = result;
         modelUsed = 'tesseract'; // C11 baseline is TS-based stats
         confidenceScore = result.anomalies.length > 0
@@ -224,7 +224,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.PATTERNS_FRAUDULEUX: {
-        const result = handleC12(req.context as C12Input);
+        const result = handleC12(req.context as unknown as C12Input);
         output = result;
         modelUsed = 'tesseract'; // C12 baseline is rule-based TS
         confidenceScore = result.patterns.length > 0
@@ -234,7 +234,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.MAPPING_RUBRIQUES: {
-        const result = handleC13(req.context as C13Input);
+        const result = handleC13(req.context as unknown as C13Input);
         output = result;
         modelUsed = 'tesseract'; // C13 baseline is text similarity
         confidenceScore = result.best_match?.confidence ?? 0;
@@ -242,7 +242,7 @@ export async function orchestrate(req: IntelligenceRequest): Promise<Orchestrato
       }
 
       case CompetenceId.ASSISTANT_SAISIE: {
-        const result = handleC14(req.context as C14Input);
+        const result = handleC14(req.context as unknown as C14Input);
         output = result;
         modelUsed = 'tesseract'; // C14 baseline is rule-based
         confidenceScore = result.suggestions.length > 0 ? 80 : 100;

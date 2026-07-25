@@ -226,7 +226,7 @@ class GoogleDriveServiceClass {
 
       if (response.result.files && response.result.files.length > 0) {
         this.atlasbanxFolderId = response.result.files[0].id;
-        return this.atlasbanxFolderId;
+        return this.atlasbanxFolderId!;
       }
 
       // Fallback: adopter le dossier legacy s'il existe
@@ -237,7 +237,7 @@ class GoogleDriveServiceClass {
 
       if (legacyResponse.result.files && legacyResponse.result.files.length > 0) {
         this.atlasbanxFolderId = legacyResponse.result.files[0].id;
-        return this.atlasbanxFolderId;
+        return this.atlasbanxFolderId!;
       }
 
       // Creer le nouveau dossier
@@ -250,7 +250,7 @@ class GoogleDriveServiceClass {
       });
 
       this.atlasbanxFolderId = createResponse.result.id;
-      return this.atlasbanxFolderId;
+      return this.atlasbanxFolderId!;
     } catch (error) {
       console.error('Erreur creation dossier:', error);
       throw error;
@@ -275,7 +275,7 @@ class GoogleDriveServiceClass {
 
       if (existingFile) {
         // Mettre a jour le fichier existant
-        const _response = await this.updateFile(existingFile.id, blob);
+        await this.updateFile(existingFile.id, blob);
         return {
           success: true,
           fileId: existingFile.id,

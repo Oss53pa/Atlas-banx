@@ -23,12 +23,11 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { Bank, ConditionGrid } from '../types';
+import type { Bank } from '../types';
 import { formatCurrency } from '../utils';
 import {
   computeAggressiveness,
   computeCostBasket,
-  computeDistribution,
   detectOutliers,
   forecastBank,
   getActiveGrid,

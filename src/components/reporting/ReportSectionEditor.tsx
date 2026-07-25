@@ -161,7 +161,7 @@ export function ReportSectionEditor({
               ].map(({ type, label, icon: Icon }) => (
                 <button
                   key={type}
-                  onClick={() => setSectionType(type)}
+                  onClick={() => setSectionType(type as typeof sectionType)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-colors ${
                     sectionType === type
                       ? 'border-primary-900 bg-primary-50 text-primary-900'

@@ -6,7 +6,21 @@ import {
   AnomalyType,
   Severity,
   BankConditions,
+  CheckFees,
+  TransferFees,
 } from '../types';
+
+/**
+ * Conditions bancaires étendues avec les rubriques de frais exploitées par
+ * ce module mais absentes du type de base BankConditions.
+ * Toutes optionnelles : comportement identique lorsqu'elles sont absentes.
+ */
+interface ExtendedBankConditions extends BankConditions {
+  checkFees?: CheckFees & { chequebook?: number; opposition?: number };
+  transferFees?: TransferFees & { domestic?: number };
+  billOfExchangeFees?: { unpaid?: number };
+  directDebitFees?: { mandate?: number };
+}
 
 /**
  * Configuration pour l'audit des moyens de paiement
@@ -40,7 +54,7 @@ const DEFAULT_CONFIG: PaymentMethodsConfig = {
  */
 export class PaymentMethodsAudit {
   private config: PaymentMethodsConfig;
-  private bankConditions?: BankConditions;
+  private bankConditions?: ExtendedBankConditions;
 
   constructor(config?: Partial<PaymentMethodsConfig>, bankConditions?: BankConditions) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -137,8 +151,6 @@ export class PaymentMethodsAudit {
     );
 
     if (unpaidChecks.length > 0) {
-      const _totalUnpaidFees = unpaidChecks.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
       // Regrouper par mois
       const monthlyUnpaid = new Map<string, Transaction[]>();
       for (const check of unpaidChecks) {
@@ -286,7 +298,8 @@ export class PaymentMethodsAudit {
 
     // Catégoriser les virements
     const domesticTransfers = transferFees.filter(t => this.isDomesticTransfer(t));
-    const _internationalTransfers = transferFees.filter(t => this.isInternationalTransfer(t));
+    // Les virements internationaux sont identifiés ici (analyse dédiée à venir).
+    void transferFees.filter(t => this.isInternationalTransfer(t));
 
     // Analyser les virements domestiques
     if (domesticTransfers.length > 0 && this.bankConditions?.transferFees?.domestic) {

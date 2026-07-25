@@ -3,7 +3,7 @@
 // Creation de templates personnalises par annotation utilisateur
 // ============================================================================
 
-import type { BankTemplate, ZoneDefinition, CustomBankTemplate } from './BankTemplateTypes';
+import type { ZoneDefinition, CustomBankTemplate } from './BankTemplateTypes';
 
 /**
  * Annotations de zones par l'utilisateur

@@ -153,7 +153,6 @@ export class ExtractionLayer {
     if (!amounts.length) return null;
 
     // Le libelle est tout sauf les montants
-    const lastAmountPos = afterDates.lastIndexOf(amounts[amounts.length - 1].raw);
     const firstAmountPos = afterDates.indexOf(amounts[0].raw);
     const description = afterDates.slice(0, firstAmountPos).trim();
 

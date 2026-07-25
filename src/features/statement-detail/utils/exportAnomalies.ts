@@ -146,12 +146,6 @@ function statusFr(s: string): string {
     : s === 'validated' ? 'Validée' : s === 'signed' ? 'Signée'
     : s === 'closed' ? 'Clôturée' : s === 'false_positive' ? 'Faux positif' : s;
 }
-function sevColorRgb(severity: string): [number, number, number] {
-  return severity === 'critical' ? [185, 28, 28]
-    : severity === 'high' ? [194, 65, 12]
-    : severity === 'medium' ? [161, 98, 7]
-    : [107, 114, 128];
-}
 function sevColorHex(s: string): string {
   return s === 'critical' ? '#b91c1c' : s === 'high' ? '#c2410c' : s === 'medium' ? '#a16207' : '#6b7280';
 }

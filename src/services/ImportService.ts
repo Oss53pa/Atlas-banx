@@ -199,7 +199,7 @@ export class ImportService {
             const key = headers[index] || `Col${index + 1}`;
             // Handle ExcelJS date objects
             if (value instanceof Date) {
-              rowObj[key] = value;
+              rowObj[key] = value as unknown as string | number | null;
             } else {
               rowObj[key] = value;
             }
@@ -256,17 +256,17 @@ export class ImportService {
           description: tx.description,
           amount: String(tx.amount),
           balance: tx.balance !== undefined ? String(tx.balance) : undefined,
-          currency: tx.currency,
+          currency: (tx as { currency?: unknown }).currency,
           reference: tx.reference,
           type: tx.type,
-        }));
+        })) as unknown as ImportedRow[];
 
         const processed = this.processRows(rows, config);
         // Augment errors with extraction warnings as informational
         if (result.warnings.length > 0) {
           processed.errors = [
             ...processed.errors,
-            ...result.warnings.map((w, i) => ({ row: 0, message: `[info] ${w}`, severity: 'info' as const })).slice(0, 3),
+            ...result.warnings.map((w) => ({ row: 0, message: `[info] ${w}`, severity: 'info' as const })).slice(0, 3),
           ];
         }
         return processed;
@@ -476,7 +476,7 @@ export class ImportService {
               .replace(/\s/g, '')
               .replace(',', '.')
           : undefined,
-      });
+      } as unknown as ImportedRow);
     }
 
     return rows;
@@ -825,7 +825,7 @@ export class ImportService {
             const rowObj: ImportedRow = {};
             cleanValues.forEach((value, index) => {
               const key = headers[index] || `Col${index + 1}`;
-              rowObj[key] = value instanceof Date ? value : value;
+              rowObj[key] = (value instanceof Date ? value : value) as string | number | null;
             });
             rows.push(rowObj);
           }
@@ -847,7 +847,7 @@ export class ImportService {
    */
   static async parseWithOcrPipeline(
     file: File,
-    config: Partial<ImportConfig>,
+    _config: Partial<ImportConfig>,
     bankCode?: string
   ): Promise<{ importResult: ImportResult; ocrOutput?: OcrStructuredOutput }> {
     try {
@@ -895,8 +895,8 @@ export class ImportService {
           const amount = row.credit ? row.credit : row.debit ? -row.debit : 0;
           const tx: Transaction = {
             id: uuidv4(),
-            date: row.date,
-            valueDate: row.valueDate || row.date,
+            date: row.date as unknown as Date,
+            valueDate: (row.valueDate || row.date) as unknown as Date,
             description: row.description,
             amount,
             balance: row.balance || 0,
@@ -905,7 +905,7 @@ export class ImportService {
             reference: row.reference || '',
             currency: ocrOutput.metadata.currency || 'XAF',
             bankCode: ocrOutput.metadata.bankCode || bankCode || '',
-          };
+          } as unknown as Transaction;
           transactions.push(tx);
         } catch (err) {
           errors.push({

@@ -354,6 +354,25 @@ export class CdcService {
   }
 
   // ==========================================================================
+  // Workflow à 2 yeux (CDC §8.4) — délégation au DAO
+  // ==========================================================================
+
+  /** Étape 1 — soumet une version brouillon à validation par un pair. */
+  async submitBankReferenceVersion(versionId: string): Promise<void> {
+    return this.dao.submitBankReferenceVersion(versionId);
+  }
+
+  /** Étape 2 — un autre utilisateur valide (RLS impose l'altérité). */
+  async validateBankReferenceVersion(versionId: string): Promise<void> {
+    return this.dao.validateBankReferenceVersion(versionId);
+  }
+
+  /** Étape 3 — publication effective après validation. */
+  async publishBankReferenceVersion(versionId: string): Promise<void> {
+    return this.dao.publishBankReferenceVersion(versionId);
+  }
+
+  // ==========================================================================
   // Regulatory CRUD
   // ==========================================================================
 

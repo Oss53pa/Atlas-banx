@@ -1,6 +1,6 @@
 import { formatNumber } from '../../utils';
 import { useState, useRef, useEffect } from 'react';
-import { Bell, X, AlertTriangle, CheckCircle, FileText, Upload, Clock, Play, DollarSign } from 'lucide-react';
+import { Bell, X, AlertTriangle, CheckCircle, FileText, Upload, Clock, Play } from 'lucide-react';
 import { Button } from '../ui';
 import { useAppStore } from '../../store';
 import { AIProviderFactory } from '../../ai';

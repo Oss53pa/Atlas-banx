@@ -212,7 +212,7 @@ export class OverchargeAnalyzer {
    */
   private calculateExpectedAmount(
     fee: FeeSchedule,
-    chargedAmount: number,
+    _chargedAmount: number,
     baseTransactionAmount?: number
   ): number {
     switch (fee.type) {
