@@ -18,7 +18,7 @@ import {
   Alert,
   Badge,
 } from '../ui';
-import { MfaSetupPanel } from './MfaSetupPanel';
+import { MfaSettings } from './MfaSettings';
 import {
   IpAllowlistService,
   type IpAllowlistRule,
@@ -29,7 +29,7 @@ import {
 export function SecuritySettings() {
   return (
     <div className="space-y-6">
-      <MfaSetupPanel />
+      <MfaSettings />
       <IpAllowlistCard />
       <DataErasureCard />
       <SecurityDocumentationCard />

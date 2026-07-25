@@ -57,6 +57,17 @@ bancaires clientes réelles**. Cochez chaque point avant le GO.
 - [ ] SOC 2 Type II / ISO 27001 : démarches organisationnelles (audit sur
       6–12 mois), non couvertes par le code.
 
+### MFA TOTP — prérequis Supabase
+- [ ] **Activer TOTP au niveau du projet Supabase** : Dashboard →
+      Authentication → Providers / MFA → activer **TOTP**. Sans cette
+      activation, `supabase.auth.mfa.enroll()` échoue et le flux MFA de l'app
+      (enrôlement + vérification) ne fonctionne pas.
+- L'**enforcement cabinet est app-side** : `MfaGate` impose l'enrôlement d'un
+  facteur TOTP vérifié aux comptes cabinet avant l'accès aux zones sensibles.
+  C'est un **garde-fou produit** (fail-safe — n'enferme pas l'utilisateur en cas
+  d'erreur/backend indisponible), **pas** une frontière de sécurité : la vraie
+  protection reste la RLS + l'AAL2 côté API si des politiques l'exigent.
+
 ---
 
 ## 3. Qualité & CI
