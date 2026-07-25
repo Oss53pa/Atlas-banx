@@ -23,7 +23,7 @@ import { AnalysisTab } from '../components/AnalysisTab';
 import { AnomaliesTab } from '../components/AnomaliesTab/AnomaliesTab';
 import { ReconciliationTab } from '../components/ReconciliationTab/ReconciliationTab';
 import { ReportTab } from '../components/ReportTab/ReportTab';
-import { SynthesisTab } from '../components/SynthesisTab/index';
+import { SynthesisTab } from '../components/SynthesisTab';
 import { TransactionsTab } from '../components/TransactionsTab';
 import { ProphetDrawer } from '../../prophet-copilot/components/ProphetDrawer';
 import { CompareStatementModal } from '../components/CompareStatementModal';
