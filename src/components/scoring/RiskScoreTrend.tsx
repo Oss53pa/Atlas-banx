@@ -6,6 +6,7 @@
  */
 
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts';
+import type { Formatter } from 'recharts/types/component/DefaultTooltipContent';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { RiskScoreHistoryEntry } from '../../scoring';
@@ -58,11 +59,11 @@ export function RiskScoreTrend({ history, height = 120 }: RiskScoreTrendProps) {
               border: '1px solid #e2e8f0',
               padding: '6px 10px',
             }}
-            formatter={(value: number) => [`${value}/100`, 'Score']}
-            labelFormatter={(_: string, payload) => {
+            formatter={((value: number) => [`${value}/100`, 'Score']) as unknown as Formatter<number, string>}
+            labelFormatter={((_: unknown, payload: readonly { payload?: { fullDate?: string } }[]) => {
               const item = payload?.[0]?.payload as { fullDate?: string } | undefined;
               return item?.fullDate ?? '';
-            }}
+            }) as unknown as (label: unknown, payload: readonly unknown[]) => string}
           />
           <ReferenceLine y={25} stroke="#16a34a" strokeDasharray="3 3" />
           <ReferenceLine y={50} stroke="#d97706" strokeDasharray="3 3" />

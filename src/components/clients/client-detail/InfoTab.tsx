@@ -328,7 +328,7 @@ export const InfoTab = memo(function InfoTab({
                           <span className="text-sm text-primary-700 font-mono">{account.accountNumber}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-primary-500 font-mono">{account.iban || '-'}</span>
+                          <span className="text-sm text-primary-500 font-mono">{(account as { iban?: string }).iban || '-'}</span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <Badge variant={account.isActive ? 'success' : 'secondary'}>

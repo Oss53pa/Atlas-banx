@@ -15,7 +15,7 @@ function isDemoMode(): boolean {
 
 // Debounced draft persistence — coalesces rapid mutations into one upsert
 let draftSyncTimer: ReturnType<typeof setTimeout> | null = null;
-function scheduleDraftSync(getDraft: () => ReportDraft | null) {
+export function scheduleDraftSync(getDraft: () => ReportDraft | null) {
   if (isDemoMode()) return;
   const userId = currentUserId();
   if (!userId) return;

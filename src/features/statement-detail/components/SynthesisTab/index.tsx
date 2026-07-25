@@ -88,7 +88,7 @@ export function SynthesisTab(props: SynthesisTabProps) {
   );
 }
 
-function buildFallbackSuggestion(txs: BankTransaction[], anomalies: Anomaly[]): string {
+function buildFallbackSuggestion(_txs: BankTransaction[], anomalies: Anomaly[]): string {
   const tariffaires = anomalies.filter(
     (a) => ['commission_excessive', 'agio_errone', 'frais_double', 'convention_violee'].includes(a.type)
       && (a.status === 'qualified' || a.status === 'validated' || a.status === 'detected'),

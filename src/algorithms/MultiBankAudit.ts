@@ -344,7 +344,8 @@ export class MultiBankAudit {
     // Chercher les comptes avec solde moyen élevé mais frais élevés
     for (const stat of stats) {
       if (stat.avgBalance > 5000000 && stat.totalFees > 50000) { // > 5M solde, > 50k frais
-        const _conditions = this.bankConditions.get(stat.bankCode);
+        // Conditions de la banque récupérées pour une comparaison tarifaire ultérieure.
+        void this.bankConditions.get(stat.bankCode);
 
         anomalies.push({
           id: uuidv4(),

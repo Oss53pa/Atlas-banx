@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import type { Formatter } from 'recharts/types/component/DefaultTooltipContent';
 import { ExternalLink } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardBody, DetectionBadge } from '../../ui';
 import { formatCurrency, formatDate } from '../../../utils';
@@ -88,7 +89,7 @@ export const SavingsTab = memo(function SavingsTab({
                 <XAxis dataKey="month" stroke="#737373" fontSize={12} />
                 <YAxis stroke="#737373" fontSize={12} tickFormatter={(v) => `${v / 1000}k`} />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value, 'XAF')}
+                  formatter={((value: number) => formatCurrency(value, 'XAF')) as unknown as Formatter<number, string>}
                   contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e5e5', borderRadius: '8px' }}
                 />
                 <Area

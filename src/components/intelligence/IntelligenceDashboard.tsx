@@ -3,7 +3,7 @@
 // Monitoring des inferences: metriques par competence, latences, confiance
 // ============================================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   CompetenceId,
   COMPETENCE_LABELS,
@@ -67,6 +67,7 @@ export function IntelligenceDashboard() {
 
     try {
       const supabase = getSupabaseClient();
+      if (!supabase) throw new Error('Supabase non configure');
       const { data, error } = await supabase
         .schema('atlasbanx' as 'public')
         .from('proph3t_competence_metrics')

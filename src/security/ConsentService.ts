@@ -46,7 +46,6 @@ export class ConsentService {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — policy_versions defined in migration 005, types pending
       .from('policy_versions')
       .select('*')
       .eq('language', language)
@@ -101,7 +100,6 @@ export class ConsentService {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — user_consents defined in migration 005, types pending
       .from('user_consents')
       .select(`
         id,
@@ -115,7 +113,7 @@ export class ConsentService {
     if (error || !data) return [];
 
     return (
-      data as Array<{
+      data as unknown as Array<{
         id: string;
         user_id: string;
         policy_version_id: string;
@@ -164,7 +162,6 @@ export class ConsentService {
 
     const { error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — user_consents defined in migration 005, types pending
       .from('user_consents')
       .insert({
         user_id: userId,

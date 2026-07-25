@@ -4,9 +4,7 @@
 // Baseline V1: coherence checks and suggestions based on taxonomy + known ranges
 // ============================================================================
 
-import type { C14Input, C14Output, AssistantSuggestion, AssistantSuggestionType } from '../types';
-import { RUBRICS_TAXONOMY } from '../../../../cdc/taxonomy/rubrics';
-import { FIELD_DEFINITIONS } from '../../../../extraction/FieldRegistry';
+import type { C14Input, C14Output, AssistantSuggestion } from '../types';
 
 // ----------------------------------------------------------------------------
 // Known value ranges per rubric category (FCFA, typical CEMAC/UEMOA)

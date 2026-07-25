@@ -35,6 +35,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import type { Formatter } from 'recharts/types/component/DefaultTooltipContent';
 import { Card, CardHeader, CardTitle, CardBody, Button } from '../ui';
 import { useClientStore } from '../../store/clientStore';
 import { useBankStore } from '../../store/bankStore';
@@ -226,13 +227,6 @@ export function DashboardPage() {
       }));
   }, [stats.byType]);
 
-  // Risk distribution for radial chart
-  const _riskData = [
-    { name: 'Critique', value: stats.criticalCount, fill: '#ef4444' },
-    { name: 'Haute', value: stats.highCount, fill: '#f97316' },
-    { name: 'Moyenne', value: stats.mediumCount, fill: '#eab308' },
-    { name: 'Basse', value: stats.lowCount, fill: '#22c55e' },
-  ];
 
   // Calculate growth percentages
   const anomalyGrowth = stats.anomaliesLastMonth > 0
@@ -388,10 +382,10 @@ export function DashboardPage() {
                   <YAxis yAxisId="right" orientation="right" stroke="#059669" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v / 1000}k`} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#fff', border: '1px solid rgb(218 214 200)', borderRadius: '12px', boxShadow: '0 12px 32px -8px rgb(15 14 10 / 0.12)', fontSize: 12 }}
-                    formatter={(value: number, name: string) => [
+                    formatter={((value: number, name: string) => [
                       name === 'savings' ? formatCurrency(value, 'XAF') : value,
                       name === 'savings' ? 'Economies' : name === 'anomalies' ? 'Anomalies' : 'Critiques'
-                    ]}
+                    ]) as unknown as Formatter<number, string>}
                   />
                   <Legend />
                   <Area
@@ -484,7 +478,7 @@ export function DashboardPage() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => [`${value} tx`, 'Vol.']} />
+                    <Tooltip formatter={((value: number) => [`${value} tx`, 'Vol.']) as unknown as Formatter<number, string>} />
                     <Legend layout="vertical" align="right" verticalAlign="middle" formatter={(value) => <span className="text-xs">{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>

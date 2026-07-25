@@ -6,6 +6,7 @@ import {
   AnomalyType,
   Severity,
   TransactionType,
+  Evidence,
 } from '../types';
 
 /**

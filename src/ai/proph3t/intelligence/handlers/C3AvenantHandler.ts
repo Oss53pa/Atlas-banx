@@ -43,8 +43,6 @@ const DATE_PATTERNS: RegExp[] = [
   /(?:jusqu['´]?au|valable\s+jusqu)\s+(\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})/i,
 ];
 
-// Value extraction (simple numbers near rubric keywords)
-const VALUE_PATTERN = /(\d[\d\s\u00A0.,]{0,12})\s*(%|FCFA|XAF|XOF)/gi;
 
 // ----------------------------------------------------------------------------
 // Core logic
@@ -135,9 +133,9 @@ function extractEffectivePeriod(text: string): C3Output['effective_period'] {
 // ----------------------------------------------------------------------------
 
 export function handleC3(input: C3Input): C3Output {
-  const text = (input as Record<string, unknown>).text_content as string | undefined ?? '';
+  const text = (input as unknown as Record<string, unknown>).text_content as string | undefined ?? '';
 
-  const { score, signals } = computeEngagementScore(text);
+  const { score } = computeEngagementScore(text);
   const conditions = extractConditionsFromText(text);
   const effectivePeriod = extractEffectivePeriod(text);
 

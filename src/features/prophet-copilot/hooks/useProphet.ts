@@ -297,7 +297,7 @@ function computeLocalReply(question: string, args: UseProphetArgs): ProphetMessa
   if (/montant.*(sup|plus|>|dessus|\d)|gros|important|eleve/i.test(q)) {
     const match = q.match(/(\d[\d\s]*)/);
     const threshold = match ? parseInt(match[1].replace(/\s/g, ''), 10) * 100 : 500_000_00;
-    const out = searchTransactions(txs, { amountMin: threshold });
+    const out = searchTransactions(txs, { minAmountCentimes: threshold });
     return reply(
       out.transactions.length === 0
         ? 'Aucune transaction au-dessus de ce seuil.'

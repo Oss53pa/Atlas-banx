@@ -9,6 +9,16 @@ import {
 } from '../types';
 
 /**
+ * Conditions bancaires étendues avec les rubriques de frais annexes
+ * exploitées par ce module mais absentes du type de base BankConditions.
+ * Toutes optionnelles : le comportement reste identique lorsqu'elles sont absentes.
+ */
+interface ExtendedBankConditions extends BankConditions {
+  onlineBankingFees?: { subscription?: number; token?: number };
+  certificationFees?: { rib?: number; attestation?: number; certification?: number };
+}
+
+/**
  * Configuration pour l'audit des services annexes
  */
 interface AncillaryServicesConfig {
@@ -42,7 +52,7 @@ const DEFAULT_CONFIG: AncillaryServicesConfig = {
  */
 export class AncillaryServicesAudit {
   private config: AncillaryServicesConfig;
-  private bankConditions?: BankConditions;
+  private bankConditions?: ExtendedBankConditions;
 
   constructor(config?: Partial<AncillaryServicesConfig>, bankConditions?: BankConditions) {
     this.config = { ...DEFAULT_CONFIG, ...config };

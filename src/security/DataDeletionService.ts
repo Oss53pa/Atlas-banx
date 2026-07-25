@@ -51,7 +51,6 @@ export class DataDeletionService {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — data_deletion_requests defined in migration 005
       .from('data_deletion_requests')
       .insert({
         user_id: userId,
@@ -78,7 +77,6 @@ export class DataDeletionService {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — data_deletion_requests defined in migration 005
       .from('data_deletion_requests')
       .select('*')
       .order('requested_at', { ascending: false });

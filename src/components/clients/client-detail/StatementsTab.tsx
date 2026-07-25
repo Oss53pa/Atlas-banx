@@ -3,8 +3,8 @@ import {
   FileText, Upload, Clock, Landmark, ExternalLink,
   ChevronDown, ChevronRight, CreditCard,
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardBody, Button, Badge } from '../../ui';
-import { formatCurrency, formatDate } from '../../../utils';
+import { Card, CardBody, Button, Badge } from '../../ui';
+import { formatDate } from '../../../utils';
 import type { Bank, BankStatement, BankAccount, Transaction } from '../../../types';
 
 interface StatementsTabProps {
@@ -227,7 +227,7 @@ function BankSection({
 
 function AccountSection({
   accNode,
-  transactions,
+  transactions: _transactions,
   onOpenStatement,
 }: {
   accNode: AccountNode;

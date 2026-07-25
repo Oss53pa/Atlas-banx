@@ -26,23 +26,22 @@ import { useTransactionStore } from '../../store/transactionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAccountType } from '../../hooks/useAccountType';
 import { formatCurrency, formatDate } from '../../utils';
-import { AnomalyType, Severity, ANOMALY_TYPE_LABELS, DetectionSource, DEFAULT_THRESHOLDS, Anomaly, Transaction, clientTypeToSegment, deriveClientType } from '../../types';
+import { AnomalyType, Severity, ANOMALY_TYPE_LABELS, DetectionSource, DEFAULT_THRESHOLDS, Anomaly, AnalysisSummary, Transaction, TransactionType, clientTypeToSegment, deriveClientType } from '../../types';
 import { getAnalysisService, ClaudeService, PremiumReportService, BankConditionsResolver, gridToBankConditions, mergeAnalysisResults } from '../../services';
-import type { ResolutionResult } from '../../services';
 
 type ViewMode = 'config' | 'viewer';
 
 // Données de démonstration
-const DEMO_TRANSACTIONS: Transaction[] = [
-  { id: 'demo-1', date: new Date('2024-01-15'), description: 'VIREMENT SALAIRE', amount: 2500000, balance: 5000000, type: 'credit', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-2', date: new Date('2024-01-16'), description: 'FRAIS DE TENUE DE COMPTE', amount: -15000, balance: 4985000, type: 'fee', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-3', date: new Date('2024-01-16'), description: 'FRAIS DE TENUE DE COMPTE', amount: -15000, balance: 4970000, type: 'fee', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-4', date: new Date('2024-01-17'), description: 'COMMISSION VIREMENT', amount: -25000, balance: 4945000, type: 'fee', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-5', date: new Date('2024-01-18'), description: 'AGIOS DEBITEURS', amount: -185000, balance: 4760000, type: 'interest', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-6', date: new Date('2024-01-19'), description: 'FRAIS DIVERS', amount: -50000, balance: 4710000, type: 'fee', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-7', date: new Date('2024-01-20'), description: 'PAIEMENT FACTURE ELEC', amount: -125000, balance: 4585000, type: 'debit', clientId: 'demo', bankCode: 'SGBC' },
-  { id: 'demo-8', date: new Date('2024-01-21'), description: 'RETRAIT DAB', amount: -200000, balance: 4385000, type: 'debit', clientId: 'demo', bankCode: 'SGBC' },
-];
+const DEMO_TRANSACTIONS = [
+  { id: 'demo-1', date: new Date('2024-01-15'), description: 'VIREMENT SALAIRE', amount: 2500000, balance: 5000000, type: TransactionType.CREDIT, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-2', date: new Date('2024-01-16'), description: 'FRAIS DE TENUE DE COMPTE', amount: -15000, balance: 4985000, type: TransactionType.FEE, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-3', date: new Date('2024-01-16'), description: 'FRAIS DE TENUE DE COMPTE', amount: -15000, balance: 4970000, type: TransactionType.FEE, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-4', date: new Date('2024-01-17'), description: 'COMMISSION VIREMENT', amount: -25000, balance: 4945000, type: TransactionType.FEE, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-5', date: new Date('2024-01-18'), description: 'AGIOS DEBITEURS', amount: -185000, balance: 4760000, type: TransactionType.INTEREST, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-6', date: new Date('2024-01-19'), description: 'FRAIS DIVERS', amount: -50000, balance: 4710000, type: TransactionType.FEE, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-7', date: new Date('2024-01-20'), description: 'PAIEMENT FACTURE ELEC', amount: -125000, balance: 4585000, type: TransactionType.DEBIT, clientId: 'demo', bankCode: 'SGBC' },
+  { id: 'demo-8', date: new Date('2024-01-21'), description: 'RETRAIT DAB', amount: -200000, balance: 4385000, type: TransactionType.DEBIT, clientId: 'demo', bankCode: 'SGBC' },
+] as unknown as Transaction[];
 
 const DEMO_ANOMALIES: Anomaly[] = [
   {
@@ -444,13 +443,13 @@ export function AnalysesPage() {
         potentialSavings: totalSavings,
       };
 
-      const summary = currentAnalysis?.summary ?? {
+      const summary: AnalysisSummary = currentAnalysis?.summary ?? {
         status: criticalCount > 0 ? 'CRITICAL' : highCount > 0 ? 'WARNING' : 'OK',
         message: `${anomalies.length} anomalie${anomalies.length > 1 ? 's' : ''} détectée${anomalies.length > 1 ? 's' : ''} pour un montant total de ${formatCurrency(totalSavings, 'XAF')}.`,
-        keyFindings: anomalies.slice(0, 5).map((a) => a.description).filter(Boolean),
+        keyFindings: anomalies.slice(0, 5).map((a) => a.description).filter((d): d is string => Boolean(d)),
         recommendations: anomalies.slice(0, 5).map((a) => a.recommendation).filter(Boolean),
         estimatedRecovery: totalSavings,
-      } as const;
+      };
 
       const dates = displayTransactions.length > 0
         ? displayTransactions.map((t) => new Date(t.date).getTime())

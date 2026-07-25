@@ -12,6 +12,7 @@ import {
   Cpu,
   Settings2,
   Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   Card,
@@ -30,6 +31,20 @@ import { AIProviderFactory } from '../../ai';
 interface AIProviderSettingsProps {
   onSave?: () => void;
 }
+
+type ProviderInfo = {
+  name: string;
+  icon: LucideIcon;
+  color: string;
+  models: { value: string; label: string }[];
+  placeholder: string;
+  description: string;
+  noApiKey?: boolean;
+  hasBaseUrl?: boolean;
+  hasOrganization?: boolean;
+  hasProjectId?: boolean;
+  customModel?: boolean;
+};
 
 // Provider configurations
 const PROVIDERS = {
@@ -204,7 +219,7 @@ export function AIProviderSettings({ onSave }: AIProviderSettingsProps) {
   const renderProviderCard = (providerKey: AIProviderType) => {
     if (providerKey === 'none') return null;
 
-    const provider = PROVIDERS[providerKey as keyof typeof PROVIDERS];
+    const provider = PROVIDERS[providerKey as keyof typeof PROVIDERS] as ProviderInfo;
     if (!provider) return null;
 
     const config = aiProviders.providers[providerKey as keyof typeof aiProviders.providers];

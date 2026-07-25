@@ -7,6 +7,7 @@ import {
   TransactionType,
   DetectionThresholds,
   BankConditions,
+  Evidence,
 } from '../types';
 import { feeDescriptionSuspicionScore, isRoundAmount, shannonEntropy } from './utils/entropy';
 import { descriptionSimilarity } from './utils/similarity';

@@ -9,7 +9,6 @@ import {
   COMPETENCE_LABELS,
   type CompetenceIOMap,
   type IntelligenceResponse,
-  type IntelligenceError,
   type OrchestratorResult,
   orchestrate,
 } from '../ai/proph3t/intelligence';

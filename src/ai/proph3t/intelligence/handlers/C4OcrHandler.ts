@@ -5,7 +5,7 @@
 // Pipeline: Tesseract FR → table detection → LLM reconstitution → fallback Claude
 // ============================================================================
 
-import type { C4Input, C4Output, IntelligenceModel } from '../types';
+import type { C4Input, C4Output } from '../types';
 
 // ----------------------------------------------------------------------------
 // Public handler (stub)

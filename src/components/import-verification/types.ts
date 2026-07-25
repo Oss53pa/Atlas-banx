@@ -110,7 +110,7 @@ export interface VerificationPayload {
 // ───────────────────────────────────────────────────────────────────────
 
 /** Get the effective field value (edit takes precedence over original data). */
-export function getEffective<T extends Record<string, unknown>>(
+export function getEffective<T>(
   row: { data: T; edits?: Partial<T> },
   key: keyof T,
 ): T[keyof T] {

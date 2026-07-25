@@ -26,6 +26,7 @@ import {
   Legend,
   Line,
 } from 'recharts';
+import type { Formatter } from 'recharts/types/component/DefaultTooltipContent';
 import { Card, CardHeader, CardTitle, CardBody } from '../../ui';
 import { formatCurrency } from '../../../utils';
 import { ClientAnalytics, TabProps } from './types';
@@ -173,10 +174,10 @@ export const OverviewTab = memo(function OverviewTab({
                   <YAxis yAxisId="right" orientation="right" stroke="#22c55e" fontSize={12} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e5e5', borderRadius: '8px' }}
-                    formatter={(value: number, name: string) => [
+                    formatter={((value: number, name: string) => [
                       name === 'savings' || name === 'volume' ? formatCurrency(value, 'XAF') : value,
                       name === 'volume' ? 'Volume' : name === 'savings' ? 'Economies' : name === 'transactions' ? 'Transactions' : 'Anomalies'
-                    ]}
+                    ]) as unknown as Formatter<number, string>}
                   />
                   <Legend />
                   <Area
@@ -303,7 +304,7 @@ export const OverviewTab = memo(function OverviewTab({
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => [`${value} transactions`, 'Volume']} />
+                    <Tooltip formatter={((value: number) => [`${value} transactions`, 'Volume']) as unknown as Formatter<number, string>} />
                     <Legend
                       layout="horizontal"
                       align="center"

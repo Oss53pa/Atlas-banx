@@ -85,7 +85,7 @@ const PLACEHOLDER_BBOX: BoundingBox = { x: 0, y: 0, w: 100, h: 10 };
 
 function extractFromText(
   text: string,
-  bankCode: string | undefined,
+  _bankCode: string | undefined,
   expectedTaxonomy: string[],
 ): ExtractedCondition[] {
   const conditions: ExtractedCondition[] = [];
@@ -216,7 +216,7 @@ function detectMetadata(text: string, bankId: string): C1Output['document_metada
 export function handleC1(input: C1Input): C1Output {
   // V1 baseline: expects text_content in context (extracted upstream)
   // In production, the gateway will run OCR/PDF extraction before calling C1
-  const text = (input as Record<string, unknown>).text_content as string | undefined ?? '';
+  const text = (input as unknown as Record<string, unknown>).text_content as string | undefined ?? '';
 
   const conditions = extractFromText(text, input.bank_id, input.expected_taxonomy);
   const metadata = detectMetadata(text, input.bank_id);

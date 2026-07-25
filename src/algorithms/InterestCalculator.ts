@@ -177,7 +177,7 @@ export class InterestCalculator {
     const usuryViolation = this.checkUsuryViolation(appliedRate, zone);
 
     // Mettre à jour la raison si violation d'usure
-    if (usuryViolation.isViolation) {
+    if (usuryViolation?.isViolation) {
       reason = `VIOLATION DU TAUX D'USURE: Taux appliqué ${usuryViolation.appliedRate.toFixed(2)}% dépasse le plafond légal de ${usuryViolation.usuryRate}%`;
     }
 

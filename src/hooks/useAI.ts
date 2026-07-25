@@ -478,7 +478,7 @@ export function useAI(): UseAIResult {
       const chatMessages: AIChatMessage[] = [...(history || [])];
       // Append the user's current message to the conversation
       if (message.trim()) {
-        chatMessages.push({ role: 'user', content: message });
+        chatMessages.push({ role: 'user', content: message } as AIChatMessage);
       }
       const result = await provider.chat(chatMessages, { context });
       updateAIUsage(result.tokensUsed.total);
@@ -617,7 +617,7 @@ export function useAI(): UseAIResult {
   // ============================================================================
 
   const [gatewayBudgetStatus, setGatewayBudgetStatus] = useState<GatewayBudgetStatus | null>(null);
-  const [gatewayInstance] = useState<PremiumGateway | null>(() => {
+  useState<PremiumGateway | null>(() => {
     if (gatewayConfig && gatewayConfig.strategy !== 'proph3t_only') {
       return new PremiumGateway(gatewayConfig);
     }

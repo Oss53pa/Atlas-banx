@@ -226,7 +226,7 @@ describe('GhostFeeDetector', () => {
           }),
         ];
 
-        const _anomalies = detector.detectGhostFees(transactions);
+        detector.detectGhostFees(transactions);
         // These should be recognized as potential fees
         // (actual detection depends on other factors)
       });

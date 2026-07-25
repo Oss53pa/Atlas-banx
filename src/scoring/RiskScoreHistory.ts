@@ -38,7 +38,6 @@ export class RiskScoreHistory {
 
     const { error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — risk_score_history defined in migration 006
       .from(TABLE)
       .insert({
         user_id: userId,
@@ -64,7 +63,6 @@ export class RiskScoreHistory {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — risk_score_history defined in migration 006
       .from(TABLE)
       .select('*')
       .eq('client_id', clientId)
@@ -89,7 +87,6 @@ export class RiskScoreHistory {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — risk_score_history defined in migration 006
       .from(TABLE)
       .select('*')
       .eq('client_id', clientId)
@@ -113,7 +110,6 @@ export class RiskScoreHistory {
     // nécessite une vue ou une RPC).
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — risk_score_history defined in migration 006
       .from(TABLE)
       .select('*')
       .in('risk_level', ['high', 'critical'] as RiskLevel[])

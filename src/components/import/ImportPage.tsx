@@ -56,7 +56,6 @@ export function ImportPage({ pinnedClientId, embedded = false, onAfterImport }: 
   const [selectedBankCode, setSelectedBankCode] = useState<string>('');
   const [showNewAccount, setShowNewAccount] = useState(false);
   const [newAccountNumber, setNewAccountNumber] = useState('');
-  const [useAdvancedOcr, setUseAdvancedOcr] = useState(false);
 
   // Verification modal state — opened when a PDF is staged for review
   const [verification, setVerification] = useState<{
@@ -90,16 +89,10 @@ export function ImportPage({ pinnedClientId, embedded = false, onAfterImport }: 
     [selectedClient, selectedAccountId]
   );
 
-  // Get selected bank
-  const _selectedBank = useMemo(() =>
-    banks.find(b => b.code === selectedBankCode),
-    [banks, selectedBankCode]
-  );
-
   interface ImportInfo {
     transactions: Transaction[];
     fileName: string;
-    fileType: 'csv' | 'excel' | 'pdf';
+    fileType: 'csv' | 'excel' | 'pdf' | 'image';
     periodStart: Date;
     periodEnd: Date;
   }
@@ -132,7 +125,7 @@ export function ImportPage({ pinnedClientId, embedded = false, onAfterImport }: 
       bankCode,
       bankName: bank?.name || bankCode,
       fileName: info.fileName,
-      fileType: info.fileType,
+      fileType: info.fileType as 'csv' | 'excel' | 'pdf',
       periodStart: info.periodStart,
       periodEnd: info.periodEnd,
       transactionCount: info.transactions.length,

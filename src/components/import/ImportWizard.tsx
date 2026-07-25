@@ -109,7 +109,7 @@ export function ImportWizard({ onCancel }: ImportWizardProps) {
         <div className="space-y-6">
           {/* Stepper */}
           <StepProgress
-            steps={STEPS.map((s) => s.label)}
+            steps={STEPS.map((s) => ({ label: s.label }))}
             currentStep={currentIndex}
           />
 

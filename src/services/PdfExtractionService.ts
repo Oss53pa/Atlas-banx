@@ -20,12 +20,6 @@ export interface ExtractionResult {
   confidence: number;
 }
 
-interface _ExtractedAmount {
-  value: number;
-  text: string;
-  context: string;
-}
-
 /**
  * Service d'extraction de conditions bancaires depuis des fichiers PDF
  * Utilise PDF.js pour l'extraction de texte et des regex pour l'analyse

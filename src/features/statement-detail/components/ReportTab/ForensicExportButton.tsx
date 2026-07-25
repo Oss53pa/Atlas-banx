@@ -77,7 +77,7 @@ export function ForensicExportButton(props: ForensicExportButtonProps) {
           mimeType: 'application/pdf',
         },
         receipts: props.receipts ?? [],
-        agreements: props.convention ? [{
+        agreements: (props.convention ? [{
           agreement: {
             id: props.convention.id,
             layer: 4,
@@ -98,7 +98,7 @@ export function ForensicExportButton(props: ForensicExportButtonProps) {
             createdAt: new Date(props.convention.createdAt),
           },
           conditions: [],
-        }] : [],
+        }] : []) as ForensicBundle['agreements'],
         bankReferenceVersions: [],
         calculations: {},
         ecarts: props.anomalies.map((a) => ({

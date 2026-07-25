@@ -9,7 +9,7 @@
 //   5. Contenu de l'onglet actif
 // ============================================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useAuthStore } from '../../../store/authStore';
 import { useStatement } from '../hooks/useStatement';
 import { useAnomalies } from '../hooks/useAnomalies';
@@ -23,7 +23,7 @@ import { AnalysisTab } from '../components/AnalysisTab';
 import { AnomaliesTab } from '../components/AnomaliesTab/AnomaliesTab';
 import { ReconciliationTab } from '../components/ReconciliationTab/ReconciliationTab';
 import { ReportTab } from '../components/ReportTab/ReportTab';
-import { SynthesisTab } from '../components/SynthesisTab';
+import { SynthesisTab } from '../components/SynthesisTab/index';
 import { TransactionsTab } from '../components/TransactionsTab';
 import { ProphetDrawer } from '../../prophet-copilot/components/ProphetDrawer';
 import { CompareStatementModal } from '../components/CompareStatementModal';
@@ -34,7 +34,6 @@ import { StatementHeader } from '../components/StatementHeader';
 import { StatementStatusBanner } from '../components/StatementStatusBanner';
 import { TabsBar, type StatementTabKey, STATEMENT_TAB_KEYS } from '../components/TabsBar';
 import { getSupabaseClient, isSupabaseConfigured } from '../../../lib/supabase';
-import { BANK_DIRECTORY } from '../data/bankDirectory';
 
 type TabKey = StatementTabKey;
 
@@ -235,7 +234,7 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
               bankLabel: meta.bankLegalName,
               clientTypeLabel: CLIENT_TYPE_LABEL[meta.clientType],
               cabinetName: workspace?.name ?? 'AtlasBanx',
-            }}
+            } as ComponentProps<typeof AnomaliesTab>['exportContext']}
             onAnomalyAction={async (kind, anomaly, comment) => {
               if (!role || !userId) return;
               await anomaliesH.performAction(kind, anomaly.id, userHandle, userId, role, comment);

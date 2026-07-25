@@ -3,10 +3,9 @@
 // Routage intelligent des taches IA vers PROPH3T ou providers premium
 // ============================================================================
 
-import { AIProviderFactory } from '../AIProviderFactory';
 import { CostCalculator } from './CostCalculator';
 import { BudgetTracker } from './BudgetTracker';
-import type { AIProviderType, IAIProvider } from '../types';
+import type { AIProviderType } from '../types';
 import {
   DEFAULT_GATEWAY_CONFIG,
   type GatewayConfig,

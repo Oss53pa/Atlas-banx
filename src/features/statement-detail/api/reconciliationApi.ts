@@ -86,7 +86,7 @@ export async function saveReconciliation(args: {
   const { data, error } = await sb
     .schema('atlasbanx' as never)
     .from('bank_reconciliations' as never)
-    .insert(payload)
+    .insert(payload as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert reconciliation: ${error?.message}`);
@@ -106,9 +106,37 @@ export async function markReconciliationGenerated(
     .update({
       reconciliation_state_url: pdfUrl,
       generated_at: new Date().toISOString(),
-    })
+    } as never)
     .eq('id', reconciliationId);
   if (error) throw new Error(`Update reconciliation: ${error.message}`);
+}
+
+/**
+ * Pousse un écart de rapprochement vers Atlas Finance via l'Edge Function
+ * `atlas-finance-push`. Retourne la référence de suivi (externe si Atlas
+ * Finance est configuré, locale sinon).
+ */
+export async function pushDiscrepancyToAtlas(
+  statementId: string,
+  discrepancy: ReconciliationDiscrepancy,
+): Promise<{ trackingRef: string; forwarded: boolean; notice?: string }> {
+  const sb = getSupabaseClient();
+  if (!sb) throw new Error('Supabase non configuré');
+
+  const { data, error } = await sb.functions.invoke('atlas-finance-push', {
+    body: { statementId, discrepancy },
+  });
+  if (error) {
+    throw new Error(`Atlas Finance: ${error.message ?? 'échec de la synchronisation'}`);
+  }
+  if (!data?.trackingRef) {
+    throw new Error(data?.error ?? 'atlas-finance-push: réponse incomplète');
+  }
+  return {
+    trackingRef: data.trackingRef as string,
+    forwarded: Boolean(data.forwarded),
+    notice: data.notice as string | undefined,
+  };
 }
 
 // ============================================================================

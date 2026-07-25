@@ -40,7 +40,6 @@ export class IpAllowlistService {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — ip_allowlists defined in migration 005
       .from('ip_allowlists')
       .select('*')
       .order('created_at', { ascending: false });
@@ -67,7 +66,6 @@ export class IpAllowlistService {
 
     const { data, error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — ip_allowlists defined in migration 005
       .from('ip_allowlists')
       .insert({ user_id: userId, cidr, label, active: true })
       .select()
@@ -88,7 +86,6 @@ export class IpAllowlistService {
 
     const { error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — ip_allowlists defined in migration 005
       .from('ip_allowlists')
       .update({ active })
       .eq('id', id);
@@ -105,7 +102,6 @@ export class IpAllowlistService {
 
     const { error } = await supabase
       .schema('atlasbanx')
-      // @ts-expect-error — ip_allowlists defined in migration 005
       .from('ip_allowlists')
       .delete()
       .eq('id', id);

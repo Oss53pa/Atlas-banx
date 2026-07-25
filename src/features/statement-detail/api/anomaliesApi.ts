@@ -169,7 +169,7 @@ export async function performTransition(
   const { error: errUp } = await sb
     .schema('atlasbanx' as never)
     .from('anomalies' as never)
-    .update(patch)
+    .update(patch as never)
     .eq('id', anomalyId);
   if (errUp) throw new Error(`Update anomalie: ${errUp.message}`);
 
@@ -203,7 +203,7 @@ export async function addComment(
       author_id: authorId,
       content,
       mentions,
-    })
+    } as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert comment: ${error?.message}`);
@@ -274,7 +274,7 @@ async function persistAudit(args: PersistAuditArgs): Promise<AuditEntry> {
       payload: args.payload,
       integrity_hash: hash,
       previous_hash: prevHash,
-    })
+    } as never)
     .select('*')
     .single();
   if (error || !data) throw new Error(`Insert audit: ${error?.message}`);

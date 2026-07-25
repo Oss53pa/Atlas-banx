@@ -27,6 +27,7 @@ import {
   loadLedgerEntries,
   saveReconciliation,
   markReconciliationGenerated,
+  pushDiscrepancyToAtlas as pushDiscrepancyToAtlasApi,
 } from '../api/reconciliationApi';
 
 export interface UseReconciliationResult {
@@ -187,10 +188,37 @@ export function useReconciliation(statementId: string): UseReconciliationResult 
     [bankTxs, statementId],
   );
 
-  const pushDiscrepancyToAtlas = useCallback(async (_id: string) => {
-    // TODO : Edge Function vers Atlas Finance API
-    await new Promise((r) => setTimeout(r, 200));
-  }, []);
+  const pushDiscrepancyToAtlas = useCallback(
+    async (id: string) => {
+      const target = reconciliation?.discrepancies.find((d) => d.id === id);
+      if (!target) return;
+
+      // Sans Supabase (mode démo) : pas d'API distante, on retire simplement
+      // l'écart de la liste ouverte pour refléter sa prise en charge.
+      if (!isSupabaseConfigured()) {
+        setReconciliation((prev) =>
+          prev
+            ? { ...prev, discrepancies: prev.discrepancies.filter((d) => d.id !== id) }
+            : prev,
+        );
+        return;
+      }
+
+      try {
+        await pushDiscrepancyToAtlasApi(statementId, target);
+        // Poussé avec succès → l'écart quitte la liste des écarts à traiter.
+        setReconciliation((prev) =>
+          prev
+            ? { ...prev, discrepancies: prev.discrepancies.filter((d) => d.id !== id) }
+            : prev,
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Échec du push vers Atlas Finance');
+        throw err;
+      }
+    },
+    [reconciliation, statementId],
+  );
 
   const ignoreDiscrepancy = useCallback(
     (id: string) => {

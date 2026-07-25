@@ -132,7 +132,7 @@ function detectDerogations(text: string): { hasDerogations: boolean; texts: stri
 // ----------------------------------------------------------------------------
 
 export function handleC2(input: C2Input): C2Output {
-  const text = (input as Record<string, unknown>).text_content as string | undefined ?? '';
+  const text = (input as unknown as Record<string, unknown>).text_content as string | undefined ?? '';
 
   // Run C1 extraction as base
   const c1Result = handleC1(input as C1Input);

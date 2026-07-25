@@ -90,7 +90,7 @@ export async function llmCallJson<T>(
 
   if (!result) return null;
 
-  const parsed = JsonValidator.parseAndValidate<T>(result.content, requiredKeys);
+  const parsed = JsonValidator.parseAndValidate<Record<string, unknown>>(result.content, requiredKeys) as T | null;
   if (!parsed) return null;
 
   return {

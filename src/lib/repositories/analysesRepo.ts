@@ -34,8 +34,8 @@ interface AnalysisRowWithAnomalies extends DbAnalysis {
 
 function dbToAnalysis(row: AnalysisRowWithAnomalies): AnalysisResult {
   const anomalies = (row.anomalies ?? []).map(dbToAnomaly);
-  const config = (row.config ?? {}) as AnalysisResult['config'];
-  const summary = (row.summary ?? {}) as AnalysisResult['summary'];
+  const config = (row.config ?? {}) as unknown as AnalysisResult['config'];
+  const summary = (row.summary ?? {}) as unknown as AnalysisResult['summary'];
   // Statistics derived from anomalies snapshot (kept on row.metadata if persisted).
   const statistics =
     ((row.metadata?.statistics) as AnalysisResult['statistics'] | undefined) ?? {
@@ -71,7 +71,7 @@ function dbToAnomaly(row: DbAnomaly): Anomaly {
     severity: row.severity as Severity,
     confidence: row.confidence,
     amount: row.amount,
-    transactions: (row.transactions ?? []) as Anomaly['transactions'],
+    transactions: (row.transactions ?? []) as unknown as Anomaly['transactions'],
     evidence: ((reasoning.evidence as Anomaly['evidence']) ?? []),
     recommendation: (reasoning.recommendation as string) ?? '',
     status: row.status,
@@ -94,9 +94,9 @@ function analysisToDb(
     ...(internalId ? { id: internalId } : {}),
     user_id: userId,
     external_id: result.id,
-    status: result.status as DbAnalysisInsert['status'],
-    config: (result.config ?? {}) as Record<string, unknown>,
-    summary: (result.summary ?? {}) as Record<string, unknown>,
+    status: result.status as unknown as DbAnalysisInsert['status'],
+    config: (result.config ?? {}) as unknown as Record<string, unknown>,
+    summary: (result.summary ?? {}) as unknown as Record<string, unknown>,
     total_savings: result.statistics?.potentialSavings ?? 0,
     anomaly_count: result.anomalies?.length ?? 0,
     is_current: isCurrent,
@@ -117,7 +117,7 @@ function anomalyToDb(
     analysis_id: analysisInternalId,
     external_id: anomaly.id,
     type: anomaly.type as string,
-    severity: anomaly.severity as DbAnomalyInsert['severity'],
+    severity: anomaly.severity as unknown as DbAnomalyInsert['severity'],
     status: anomaly.status,
     amount: anomaly.amount,
     confidence: anomaly.confidence,

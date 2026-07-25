@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { handleC11 } from '../../ai/proph3t/intelligence/handlers/C11AnomaliesHandler';
-import type { C11Input } from '../../ai/proph3t/intelligence/types';
 
 describe('C11 — Detection anomalies statistiques', () => {
   it('detects amount outliers via Z-score', () => {

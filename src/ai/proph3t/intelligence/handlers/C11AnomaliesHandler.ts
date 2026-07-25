@@ -5,7 +5,7 @@
 // Production: Python FastAPI microservice (Isolation Forest, full Benford, etc.)
 // ============================================================================
 
-import type { C11Input, C11Output, StatisticalAnomaly, AnomalyType, AnomalySeverity } from '../types';
+import type { C11Input, C11Output, StatisticalAnomaly, AnomalySeverity } from '../types';
 
 // ----------------------------------------------------------------------------
 // Z-score outlier detection

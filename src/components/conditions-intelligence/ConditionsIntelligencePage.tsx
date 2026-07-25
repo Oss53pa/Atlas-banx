@@ -40,10 +40,7 @@ import type { Bank, ConditionGrid } from '../../types';
 import { formatCurrency } from '../../utils';
 import {
   computeAggressiveness,
-  computeCoverage,
   computeCostBasket,
-  computeDistribution,
-  detectOutliers,
   forecastBank,
   PROFILE_BASKETS,
   type ClientProfile,

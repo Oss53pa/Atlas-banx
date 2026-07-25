@@ -61,19 +61,11 @@ export class AnalysisService {
   private overchargeAnalyzer: OverchargeAnalyzer;
   private interestCalculator: InterestCalculator;
   // Nouveaux modules
-  private valueDateAudit: ValueDateAudit;
   private suspiciousAudit: SuspiciousAudit;
   private cashflowAudit: CashflowAudit;
   private reconciliationAudit: ReconciliationAudit;
   private ohadaAudit: OhadaAudit;
   private amlAudit: AmlAudit;
-  // Modules d'audit par catégorie de frais
-  private accountFeesAudit: AccountFeesAudit;
-  private cardFeesAudit: CardFeesAudit;
-  private paymentMethodsAudit: PaymentMethodsAudit;
-  private internationalAudit: InternationalAudit;
-  private ancillaryServicesAudit: AncillaryServicesAudit;
-  private packagesAudit: PackagesAudit;
   // Worker pool for parallel execution
   private workerPool: DetectionWorkerPool | null = null;
   private thresholds?: DetectionThresholds;
@@ -86,19 +78,19 @@ export class AnalysisService {
     this.overchargeAnalyzer = new OverchargeAnalyzer(thresholds?.overchargeDetection);
     this.interestCalculator = new InterestCalculator(thresholds?.interestCalculation);
     // Nouveaux modules (pas de thresholds custom pour l'instant)
-    this.valueDateAudit = new ValueDateAudit();
+    new ValueDateAudit();
     this.suspiciousAudit = new SuspiciousAudit();
     this.cashflowAudit = new CashflowAudit();
     this.reconciliationAudit = new ReconciliationAudit();
     this.ohadaAudit = new OhadaAudit();
     this.amlAudit = new AmlAudit();
     // Modules d'audit par catégorie de frais
-    this.accountFeesAudit = new AccountFeesAudit();
-    this.cardFeesAudit = new CardFeesAudit();
-    this.paymentMethodsAudit = new PaymentMethodsAudit();
-    this.internationalAudit = new InternationalAudit();
-    this.ancillaryServicesAudit = new AncillaryServicesAudit();
-    this.packagesAudit = new PackagesAudit();
+    new AccountFeesAudit();
+    new CardFeesAudit();
+    new PaymentMethodsAudit();
+    new InternationalAudit();
+    new AncillaryServicesAudit();
+    new PackagesAudit();
   }
 
   /**
@@ -648,6 +640,7 @@ export class AnalysisService {
       [AnomalyType.AML_ALERT]: 0,
       // Modules d'audit par catégorie de frais
       [AnomalyType.FEE_ANOMALY]: 0,
+      [AnomalyType.LIMIT_EXCEEDED]: 0,
     };
 
     // Count by severity
@@ -775,6 +768,7 @@ export class AnalysisService {
       [AnomalyType.AML_ALERT]: 'alertes anti-blanchiment',
       // Modules d'audit par catégorie
       [AnomalyType.FEE_ANOMALY]: 'anomalies de frais',
+      [AnomalyType.LIMIT_EXCEEDED]: 'dépassements de plafond',
     };
 
     // Group by type
@@ -804,7 +798,7 @@ export class AnalysisService {
    * Generate recommendations
    */
   private generateRecommendations(
-    anomalies: Anomaly[],
+    _anomalies: Anomaly[],
     statistics: AnalysisStatistics
   ): string[] {
     const recommendations: string[] = [];
@@ -925,6 +919,7 @@ export class AnalysisService {
         [AnomalyType.AML_ALERT]: 0,
         // Modules d'audit par catégorie
         [AnomalyType.FEE_ANOMALY]: 0,
+        [AnomalyType.LIMIT_EXCEEDED]: 0,
       },
       anomaliesBySeverity: {
         [Severity.LOW]: 0,

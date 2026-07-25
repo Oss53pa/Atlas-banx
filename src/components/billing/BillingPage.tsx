@@ -38,12 +38,13 @@ import {
   Legend,
   ComposedChart,
 } from 'recharts';
+import type { Formatter } from 'recharts/types/component/DefaultTooltipContent';
 import { Card, CardHeader, CardTitle, CardBody, Button, Input, Select, Modal, Badge } from '../ui';
 import { useBillingStore } from '../../store/billingStore';
 import { useClientStore } from '../../store/clientStore';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { formatCurrency, formatDate } from '../../utils';
-import type { Invoice } from '../../types';
+import type { Invoice, InvoiceLine } from '../../types';
 import { ANOMALY_TYPE_LABELS, AnomalyType } from '../../types';
 
 type TabType = 'dashboard' | 'invoices' | 'calculator';
@@ -52,7 +53,6 @@ export function BillingPage() {
   const {
     invoices,
     addInvoice,
-    getMonthlyStats,
     generateInvoiceNumber,
   } = useBillingStore();
   const { clients } = useClientStore();
@@ -66,7 +66,6 @@ export function BillingPage() {
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
 
   const now = new Date();
-  const _monthlyStats = getMonthlyStats(now.getFullYear(), now.getMonth());
 
   // Comprehensive billing analytics
   const analytics = useMemo(() => {
@@ -86,12 +85,12 @@ export function BillingPage() {
     const paymentRate = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 100) : 0;
 
     // DSO (Days Sales Outstanding) - average days to get paid
-    const paidInvoices = invoices.filter((inv) => inv.status === 'paid' && inv.paidAt);
+    const paidInvoices = invoices.filter((inv) => inv.status === 'paid' && inv.datePaiement);
     const avgDSO = paidInvoices.length > 0
       ? Math.round(
           paidInvoices.reduce((sum, inv) => {
             const issued = new Date(inv.dateEmission).getTime();
-            const paid = new Date(inv.paidAt!).getTime();
+            const paid = new Date(inv.datePaiement!).getTime();
             return sum + (paid - issued) / (1000 * 60 * 60 * 24);
           }, 0) / paidInvoices.length
         )
@@ -227,8 +226,6 @@ export function BillingPage() {
     purple: '#8b5cf6',
     gray: '#737373',
   };
-
-  const _pieColors = [COLORS.primary, COLORS.info, COLORS.success, COLORS.warning, COLORS.purple];
 
   const getStatusBadge = (status: Invoice['status']) => {
     switch (status) {
@@ -510,7 +507,7 @@ export function BillingPage() {
                       <XAxis dataKey="month" stroke="#737373" fontSize={12} />
                       <YAxis stroke="#737373" fontSize={12} tickFormatter={(v) => `${v / 1000000}M`} />
                       <Tooltip
-                        formatter={(value: number) => formatCurrency(value, 'XAF')}
+                        formatter={((value: number) => formatCurrency(value, 'XAF')) as unknown as Formatter<number, string>}
                         contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e5e5', borderRadius: '8px' }}
                       />
                       <Legend />
@@ -563,7 +560,7 @@ export function BillingPage() {
                           <Cell fill={COLORS.info} />
                           <Cell fill={COLORS.success} />
                         </Pie>
-                        <Tooltip formatter={(value: number) => formatCurrency(value, 'XAF')} />
+                        <Tooltip formatter={((value: number) => formatCurrency(value, 'XAF')) as unknown as Formatter<number, string>} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -947,7 +944,7 @@ function CreateInvoiceModal({ isOpen, onClose, clients, onSave, generateNumber }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Nouvelle facture" className="max-w-2xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Nouvelle facture" size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-primary-700 mb-1">Client *</label>

@@ -9,6 +9,17 @@ import {
 } from '../types';
 
 /**
+ * Conditions bancaires étendues avec les rubriques de frais internationaux
+ * exploitées par ce module mais absentes du type de base BankConditions.
+ * Toutes optionnelles : comportement identique lorsqu'elles sont absentes.
+ */
+interface ExtendedBankConditions extends BankConditions {
+  internationalFees?: { swift?: number };
+  exchangeFees?: { commission?: number };
+  documentaryFees?: { remise?: number };
+}
+
+/**
  * Configuration pour l'audit des opérations internationales
  */
 interface InternationalConfig {
@@ -53,7 +64,7 @@ const REFERENCE_RATES: Record<string, number> = {
  */
 export class InternationalAudit {
   private config: InternationalConfig;
-  private bankConditions?: BankConditions;
+  private bankConditions?: ExtendedBankConditions;
 
   constructor(config?: Partial<InternationalConfig>, bankConditions?: BankConditions) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -99,11 +110,6 @@ export class InternationalAudit {
     // Catégoriser par type de virement
     const swiftFees = internationalFees.filter(t =>
       t.description.toLowerCase().includes('swift')
-    );
-
-    const _targetFees = internationalFees.filter(t =>
-      t.description.toLowerCase().includes('target') ||
-      t.description.toLowerCase().includes('sepa')
     );
 
     // Vérifier les frais SWIFT
