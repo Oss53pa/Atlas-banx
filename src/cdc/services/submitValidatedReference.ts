@@ -32,6 +32,12 @@ export interface SubmitReferenceInput {
    * `dimensions.profil`. Absent = condition « catch-all » (tous segments).
    */
   segment?: 'particulier' | 'pme' | 'corporate';
+  /**
+   * Métadonnées de banque pour l'auto-création dans cdc_banks si le code n'y
+   * existe pas encore (console admin sur une banque de l'app pas encore
+   * présente au référentiel CDC).
+   */
+  bankMeta?: { legalName: string; countryIso: string; zone: 'UEMOA' | 'CEMAC' };
 }
 
 export interface SubmitReferenceResult {
@@ -93,13 +99,25 @@ export async function submitValidatedReference(
 
   const service = new CdcService();
 
-  // 1. Résoudre la banque CDC par code
+  // 1. Résoudre la banque CDC par code — auto-création si absente et métadonnées fournies.
   const banks = await service.listBanks();
-  const bank = banks.find((b) => b.code === input.bankCode);
+  let bank = banks.find((b) => b.code === input.bankCode);
   if (!bank) {
-    throw new Error(
-      `Banque « ${input.bankCode} » introuvable dans le référentiel CDC (cdc_banks).`,
-    );
+    if (!input.bankMeta) {
+      throw new Error(
+        `Banque « ${input.bankCode} » introuvable dans le référentiel CDC (cdc_banks).`,
+      );
+    }
+    bank = await service.createBank({
+      code: input.bankCode,
+      legalName: input.bankMeta.legalName,
+      countryIso: input.bankMeta.countryIso,
+      zone: input.bankMeta.zone,
+      jurisdictionIds: [],
+      swiftBic: null,
+      parentGroup: null,
+      isActive: true,
+    });
   }
 
   // 2. Créer la version brouillon

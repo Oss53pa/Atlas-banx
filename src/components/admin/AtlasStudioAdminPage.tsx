@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { MutualizedImportPanel } from './MutualizedImportPanel';
+import { AdminBanksConsole } from './AdminBanksConsole';
 
 export default function AtlasStudioAdminPage() {
   const navigate = useNavigate();
@@ -43,7 +43,7 @@ export default function AtlasStudioAdminPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-ink-900 via-ink-950 to-black text-white">
-      <div className="mx-auto max-w-3xl px-6 py-14">
+      <div className="mx-auto max-w-6xl px-6 py-14">
         {/* En-tête discret */}
         <div className="mb-10 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -125,10 +125,17 @@ export default function AtlasStudioAdminPage() {
           </div>
         )}
 
-        {/* --- Admin : interface d'import mutualisé --- */}
+        {/* --- Admin : console d'import mutualisé (liste banques + rubriques) --- */}
         {authed && isAdmin && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7">
-            <MutualizedImportPanel />
+          <div>
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold text-white">Import des conditions mutualisées</h2>
+              <p className="mt-1 text-sm text-white/50">
+                Référentiel banque L2 — partagé par tous les clients. Sélectionnez une banque, renseignez
+                les rubriques (ou importez le PDF), puis soumettez au workflow deux yeux.
+              </p>
+            </div>
+            <AdminBanksConsole />
           </div>
         )}
       </div>
