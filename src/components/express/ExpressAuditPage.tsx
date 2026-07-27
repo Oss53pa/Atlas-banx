@@ -227,20 +227,29 @@ export default function ExpressAuditPage() {
           </button>
         </header>
 
-        {/* Stepper horizontal (progression des étapes) */}
-        <div className="flex items-center justify-center gap-1 border-b border-primary-100/70 bg-white/40 px-4 py-3">
-          {STEPS.map((s, i) => (
-            <div key={s.id} className="flex items-center">
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                i < currentIndex ? 'bg-emerald-500 text-white' : i === currentIndex ? 'bg-accent-500 text-white' : 'bg-primary-100 text-ink-400'
-              }`}>{i < currentIndex ? '✓' : i + 1}</span>
-              {i < STEPS.length - 1 && <span className={`mx-1 h-px w-5 ${i < currentIndex ? 'bg-emerald-400' : 'bg-primary-200'}`} />}
-            </div>
-          ))}
+        {/* Stepper horizontal (progression des étapes) — étapes nommées */}
+        <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-2 border-b border-primary-100/70 bg-white/40 px-4 py-3">
+          {STEPS.map((s, i) => {
+            const done = i < currentIndex;
+            const active = i === currentIndex;
+            return (
+              <div key={s.id} className="flex items-center">
+                <div className="flex items-center gap-2">
+                  <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                    done ? 'bg-emerald-500 text-white' : active ? 'bg-accent-500 text-white' : 'bg-primary-100 text-ink-400'
+                  }`}>{done ? '✓' : i + 1}</span>
+                  <span className={`text-xs font-medium sm:text-[13px] ${
+                    done ? 'text-emerald-700' : active ? 'text-ink-900' : 'text-ink-400'
+                  }`}>{s.label}</span>
+                </div>
+                {i < STEPS.length - 1 && <span className={`mx-2 hidden h-px w-6 sm:block lg:w-10 ${done ? 'bg-emerald-400' : 'bg-primary-200'}`} />}
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex-1 px-5 py-8 sm:px-10 sm:py-12">
-          <div className="mx-auto w-full max-w-4xl">
+          <div className="w-full">
             {/* Titre de section */}
             <h1 className="font-display text-4xl sm:text-5xl text-ink-900 leading-tight">
               {step === 'import' && 'Importez votre relevé'}
