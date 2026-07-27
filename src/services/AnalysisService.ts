@@ -507,7 +507,14 @@ export class AnalysisService {
 
     if (!this.workerPool.isInitialized) {
       const ok = this.workerPool.initialize();
-      if (!ok) return []; // Fallback: caller will use sequential
+      // IMPORTANT : lever une erreur (et NON `return []`) quand le pool de
+      // workers ne peut pas s'initialiser. Le catch appelant bascule alors sur
+      // la détection séquentielle. Avec `return []`, l'appelant interprétait le
+      // tableau vide comme un succès (`workerAnomalies.length >= 0` toujours
+      // vrai) et renvoyait 0 anomalie SANS exécuter les détecteurs séquentiels
+      // — l'audit paraissait « ne rien faire » en production (CSP stricte /
+      // build single-file où le worker ne se charge pas).
+      if (!ok) throw new Error('DetectionWorkerPool: initialisation impossible — bascule séquentielle');
     }
 
     // Build detector type list from enabled detectors

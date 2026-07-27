@@ -73,6 +73,12 @@ export async function runFullAudit(params: RunFullAuditParams): Promise<Analysis
     params.transactions,
     params.bankConditions ?? { ...EMPTY_BANK_CONDITIONS, bankName: params.bankCode ?? '' },
     config,
-    { useWorkers: true, onProgress: params.onProgress },
+    // useWorkers: false — chemin de détection SÉQUENTIEL, robuste en production.
+    // Le pool de Web Workers ne s'initialise pas toujours (CSP stricte, build
+    // single-file) ; sur échec l'audit renvoyait 0 anomalie sans exécuter les
+    // détecteurs. Ce point d'entrée partagé (funnel particulier, détail relevé)
+    // privilégie la fiabilité — quelques centaines de transactions s'analysent
+    // instantanément en séquentiel.
+    { useWorkers: false, onProgress: params.onProgress },
   );
 }
