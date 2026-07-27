@@ -170,7 +170,7 @@ export default function ExpressAuditPage() {
   return (
     <div className="min-h-screen flex bg-canvas-100 font-sans text-ink-800">
       {/* ================= SIDEBAR BLEUE — note explicative ================= */}
-      <aside className="hidden lg:flex w-80 flex-col justify-between bg-gradient-to-b from-ink-800 via-ink-900 to-ink-950 px-8 py-9 text-white">
+      <aside className="hidden md:flex w-72 lg:w-80 flex-shrink-0 flex-col justify-between bg-gradient-to-b from-ink-800 via-ink-900 to-ink-950 px-7 py-9 text-white lg:px-8">
         <div>
           <button onClick={() => navigate('/landing')} className="font-display text-3xl text-gradient-gold leading-none">
             AtlasBanx
@@ -220,8 +220,8 @@ export default function ExpressAuditPage() {
       {/* ================= CONTENU (largeur restante) ================= */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Barre du haut (mobile + retour) */}
-        <header className="flex h-16 items-center justify-between border-b border-primary-100/70 bg-white/70 px-5 backdrop-blur lg:justify-end">
-          <button onClick={() => navigate('/landing')} className="font-display text-2xl text-ink-900 lg:hidden">AtlasBanx</button>
+        <header className="flex h-16 items-center justify-between border-b border-primary-100/70 bg-white/70 px-5 backdrop-blur md:justify-end">
+          <button onClick={() => navigate('/landing')} className="font-display text-2xl text-ink-900 md:hidden">AtlasBanx</button>
           <button onClick={() => navigate('/landing')} className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-800">
             <ArrowLeft className="h-4 w-4" /> Accueil
           </button>
@@ -240,7 +240,7 @@ export default function ExpressAuditPage() {
         </div>
 
         <div className="flex-1 px-5 py-8 sm:px-10 sm:py-12">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="mx-auto w-full max-w-4xl">
             {/* Titre de section */}
             <h1 className="font-display text-4xl sm:text-5xl text-ink-900 leading-tight">
               {step === 'import' && 'Importez votre relevé'}

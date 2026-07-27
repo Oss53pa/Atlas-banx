@@ -58,7 +58,7 @@ export function LandingPage() {
         <HowItWorks />
         <Metrics />
         <Testimonials />
-        <Pricing onCta={goToApp} />
+        <Pricing onCta={goToApp} onExpress={() => navigate('/audit-express')} />
         <FAQ />
         <FinalCta onCta={goToApp} />
       </main>
@@ -870,13 +870,34 @@ function Testimonials() {
 /* ============================================================================
    PRICING
    ============================================================================ */
-function Pricing({ onCta }: { onCta: () => void }) {
+function Pricing({ onCta, onExpress }: { onCta: () => void; onExpress: () => void }) {
   const plans = [
+    {
+      name: 'Particulier',
+      audience: 'Sans compte',
+      price: '15 000',
+      period: '/audit · 3 mois',
+      euroNote: '≈ 25 € · paiement unique, sans abonnement',
+      desc: 'Auditez votre relevé bancaire ponctuellement, sans créer de compte.',
+      features: [
+        'Sans création de compte',
+        'Import PDF · OCR pour les scans',
+        'Audit complet — 19 détecteurs',
+        'Rapport détaillé téléchargeable',
+        'Forfaits : 3 mois 15 000 · 6 mois 25 000 · 1 an 40 000',
+        'Paiement mobile money',
+        'Aucune donnée conservée',
+      ],
+      cta: 'Auditer mon relevé',
+      highlighted: false,
+      target: 'express' as const,
+    },
     {
       name: 'Entreprise',
       audience: 'Direction financière',
       price: '89 000',
       period: '/mois',
+      euroNote: '≈ 135 € / mois · sans engagement',
       desc: 'Pour les directions financières qui veulent maîtriser leurs frais bancaires.',
       features: [
         'Une société · comptes bancaires illimités',
@@ -890,12 +911,14 @@ function Pricing({ onCta }: { onCta: () => void }) {
       ],
       cta: 'Démarrer 14 jours gratuit',
       highlighted: false,
+      target: 'app' as const,
     },
     {
       name: 'Cabinet',
       audience: 'Expert-comptable',
       price: '249 000',
       period: '/mois',
+      euroNote: '≈ 380 € / mois · sans engagement',
       desc: 'Pour les cabinets qui industrialisent l\'audit bancaire de leurs clients.',
       features: [
         'Clients illimités · facturation incluse',
@@ -910,25 +933,26 @@ function Pricing({ onCta }: { onCta: () => void }) {
       ],
       cta: 'Démarrer 14 jours gratuit',
       highlighted: true,
+      target: 'app' as const,
     },
   ];
 
   return (
     <section id="pricing" className="py-24 sm:py-32 px-6 lg:px-10">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <SectionHead
           eyebrow="Tarifs"
-          title="Deux formules. Aucune surprise."
-          subtitle="Sans frais cachés. Sans engagement. 14 jours d'essai gratuit. Annulation à tout moment."
+          title="Trois formules. Aucune surprise."
+          subtitle="Du particulier ponctuel au cabinet. Sans frais cachés, sans engagement."
         />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans.map((p) => (
-            <PricingCard key={p.name} plan={p} onCta={onCta} />
+            <PricingCard key={p.name} plan={p} onCta={p.target === 'express' ? onExpress : onCta} />
           ))}
         </div>
         <p className="mt-8 text-center text-xs text-ink-500">
-          Tarifs en FCFA, hors taxes. Engagement annuel : <span className="font-semibold text-ink-700">−15%</span>.
-          {' '}Volumes au-delà : nous contacter.
+          Tarifs en FCFA, hors taxes. Abonnements : engagement annuel <span className="font-semibold text-ink-700">−15%</span>.
+          {' '}Particulier : paiement à l'audit, sans compte.
         </p>
       </div>
     </section>
@@ -944,10 +968,12 @@ function PricingCard({
     audience: string;
     price: string;
     period: string;
+    euroNote: string;
     desc: string;
     features: string[];
     cta: string;
     highlighted: boolean;
+    target: 'app' | 'express';
   };
   onCta: () => void;
 }) {
@@ -1000,7 +1026,7 @@ function PricingCard({
           </div>
         </div>
         <p className={`mt-2 text-[11px] ${plan.highlighted ? 'text-white/40' : 'text-ink-400'}`}>
-          ≈ {plan.price === '249 000' ? '380' : '135'} € / mois · sans engagement
+          {plan.euroNote}
         </p>
 
         {/* CTA */}
