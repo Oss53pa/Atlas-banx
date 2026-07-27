@@ -18,11 +18,14 @@ import { MfaGate } from './components/auth/MfaGate';
 import { useAuthStore } from './store/authStore';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { useAccountType } from './hooks/useAccountType';
+import { useBankScopeSync } from './hooks/useBankScopeSync';
 import { isSupabaseConfigured } from './lib/supabase';
 import { migrateLocalToSupabase } from './lib/migrateLocalToSupabase';
 import { AlertCircle } from 'lucide-react';
 
 const ExternalAuthPage = lazy(() => import('./pages/auth/ExternalAuthPage'));
+const AtlasStudioAdminPage = lazy(() => import('./components/admin/AtlasStudioAdminPage'));
+const ExpressAuditPage = lazy(() => import('./components/express/ExpressAuditPage'));
 
 // Public landing page (marketing) — no auth required
 const LandingPage = lazy(() => import('./components/landing').then(m => ({ default: m.LandingPage })));
@@ -95,6 +98,13 @@ function SupabaseRequiredScreen() {
       </div>
     </div>
   );
+}
+
+// Aligne le périmètre des conditions (bankStore) sur le client sélectionné en
+// mode cabinet. Rendu uniquement dans l'arbre authentifié.
+function BankScopeSync() {
+  useBankScopeSync();
+  return null;
 }
 
 // Cabinet-only route guard — redirects enterprise accounts away
@@ -381,6 +391,25 @@ function AppRoutes() {
     );
   }
 
+  // Funnel « Audit express » particulier — public, sans compte.
+  if (location.pathname === '/audit-express') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ExpressAuditPage />
+      </Suspense>
+    );
+  }
+
+  // Console admin Atlas Studio (accès dérobé) — gère elle-même sa connexion
+  // et le contrôle du rôle admin, donc traitée avant le garde d'auth global.
+  if (location.pathname === '/atlas-studio') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AtlasStudioAdminPage />
+      </Suspense>
+    );
+  }
+
   // Show login screen if not authenticated
   if (!isAuthenticated && !isDemoMode) {
     return <LoginScreen onSuccess={() => {}} />;
@@ -389,6 +418,7 @@ function AppRoutes() {
   return (
     <ErrorBoundary>
       <SessionTimeoutGuard>
+        <BankScopeSync />
         <MfaGate>
         <Suspense fallback={<PageLoader />}>
           <Routes>

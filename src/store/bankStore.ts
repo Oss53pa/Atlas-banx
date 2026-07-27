@@ -113,7 +113,7 @@ const UEMOA_BANKS: BankWithZone[] = [
 ];
 
 // Combine all banks - CEMAC first (XAF), then UEMOA (XOF)
-const DEFAULT_BANKS: BankWithZone[] = [...CEMAC_BANKS, ...UEMOA_BANKS];
+export const DEFAULT_BANKS: BankWithZone[] = [...CEMAC_BANKS, ...UEMOA_BANKS];
 
 interface BankState {
   banks: Bank[];
@@ -121,13 +121,20 @@ interface BankState {
 
   // Hydration / sync (Supabase-backed)
   isHydrating: boolean;
-  hydratedForUserId: string | null;
+  /** Clé d'hydratation `${userId}:${scope}` — évite de recharger inutilement. */
+  hydratedScopeKey: string | null;
   error: string | null;
 
   hydrateFromSupabase: () => Promise<void>;
   resetState: () => void;
   /** Force-push all current banks to Supabase (used after migrations / first-time defaults) */
   syncAllToSupabase: () => Promise<void>;
+
+  // Périmètre client des conditions particulières
+  /** 'self' (entreprise / défaut) ou id du client (mode cabinet). */
+  activeScope: string;
+  /** Change le périmètre actif et recharge les conditions correspondantes. */
+  setActiveScope: (scope: string) => void;
 
   // Bank CRUD
   addBank: (bank: Omit<Bank, 'id' | 'createdAt' | 'updatedAt'>) => Bank;
@@ -180,12 +187,17 @@ function isDemoMode(): boolean {
  * Push a single bank to Supabase. Fire-and-forget — errors are logged
  * but never thrown; the local state stays optimistic.
  */
+// Périmètre actif (mode cabinet : id du client ; sinon 'self'). Miroir module-
+// level de `activeScope` du store, pour que persistBank/deleteBankRemote — appelés
+// par toutes les actions sans changer leur signature — ciblent le bon périmètre.
+const scopeRef = { value: 'self' };
+
 function persistBank(bank: Bank | undefined): void {
   if (!bank) return;
   if (isDemoMode()) return;
   const userId = currentUserId();
   if (!userId) return;
-  banksRepo.upsert(userId, bank).catch((err) => {
+  banksRepo.upsert(userId, bank, scopeRef.value).catch((err) => {
     console.error('[bankStore] persistBank failed:', err);
   });
 }
@@ -194,7 +206,7 @@ function deleteBankRemote(bankId: string): void {
   if (isDemoMode()) return;
   const userId = currentUserId();
   if (!userId) return;
-  banksRepo.remove(userId, bankId).catch((err) => {
+  banksRepo.remove(userId, bankId, scopeRef.value).catch((err) => {
     console.error('[bankStore] deleteBankRemote failed:', err);
   });
 }
@@ -205,19 +217,23 @@ export const useBankStore = create<BankState>()(
       banks: [],
       selectedBankId: null,
       isHydrating: false,
-      hydratedForUserId: null,
+      hydratedScopeKey: null,
       error: null,
+      activeScope: 'self',
 
       hydrateFromSupabase: async () => {
         const userId = currentUserId();
         if (!userId) return;
-        if (get().hydratedForUserId === userId) return;
+        const scope = get().activeScope;
+        const key = `${userId}:${scope}`;
+        if (get().hydratedScopeKey === key) return;
 
         set({ isHydrating: true, error: null });
         try {
-          const banks = await banksRepo.fetchAll(userId);
+          const banks = await banksRepo.fetchAll(userId, scope);
           if (banks.length === 0) {
-            // First-time user — seed defaults locally and push to Supabase
+            // Périmètre vierge — on l'amorce avec la liste de banques par défaut
+            // (le cabinet peut alors saisir les conditions propres à ce client).
             const now = new Date();
             const defaultBanks: Bank[] = DEFAULT_BANKS.map((b) => ({
               ...b,
@@ -228,17 +244,17 @@ export const useBankStore = create<BankState>()(
             set({
               banks: defaultBanks,
               isHydrating: false,
-              hydratedForUserId: userId,
+              hydratedScopeKey: key,
             });
-            // Push defaults in background
-            banksRepo.upsertMany(userId, defaultBanks).catch((err) => {
+            // Push defaults in background (dans le bon périmètre)
+            banksRepo.upsertMany(userId, defaultBanks, scope).catch((err) => {
               console.error('[bankStore] seed defaults failed:', err);
             });
           } else {
             set({
               banks,
               isHydrating: false,
-              hydratedForUserId: userId,
+              hydratedScopeKey: key,
             });
           }
         } catch (err) {
@@ -250,23 +266,39 @@ export const useBankStore = create<BankState>()(
         }
       },
 
+      setActiveScope: (scope) => {
+        if (get().activeScope === scope) return;
+        scopeRef.value = scope;
+        const userId = currentUserId();
+        if (!userId) {
+          // Démo / non authentifié : périmètre unique, on garde les banques en place.
+          set({ activeScope: scope });
+          return;
+        }
+        // On vide le temps de recharger le périmètre demandé depuis Supabase.
+        set({ activeScope: scope, banks: [], selectedBankId: null });
+        void get().hydrateFromSupabase();
+      },
+
       resetState: () => {
+        scopeRef.value = 'self';
         set({
           banks: [],
           selectedBankId: null,
           isHydrating: false,
-          hydratedForUserId: null,
+          hydratedScopeKey: null,
           error: null,
+          activeScope: 'self',
         });
       },
 
       syncAllToSupabase: async () => {
         const userId = currentUserId();
         if (!userId || isDemoMode()) return;
-        const { banks } = get();
+        const { banks, activeScope } = get();
         if (banks.length === 0) return;
         try {
-          await banksRepo.upsertMany(userId, banks);
+          await banksRepo.upsertMany(userId, banks, activeScope);
         } catch (err) {
           console.error('[bankStore] syncAllToSupabase failed:', err);
         }
@@ -754,7 +786,12 @@ export const useBankStore = create<BankState>()(
       // Conditions et grilles restent persistées (légères, utiles offline).
       partialize: (state) => ({
         banks: state.banks.map((b) => ({ ...b, documents: [] as ArchivedDocument[] })),
+        activeScope: state.activeScope,
       }),
+      // Resynchronise le miroir module-level du périmètre après réhydratation.
+      onRehydrateStorage: () => (state) => {
+        if (state?.activeScope) scopeRef.value = state.activeScope;
+      },
       // Storage tolérant : si le quota est tout de même dépassé, on log et on
       // n'écrit pas, plutôt que de laisser remonter un QuotaExceededError non
       // catché qui casse l'hydratation (Promise.all dans App.tsx).

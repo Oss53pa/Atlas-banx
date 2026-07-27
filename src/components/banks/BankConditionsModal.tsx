@@ -34,6 +34,7 @@ import {
 import { Button, Badge } from '../ui';
 import type { Bank, BankConditions, ArchivedDocument } from '../../types';
 import { ValidationTabContent } from './ValidationTabContent';
+import { useAuthStore } from '../../store/authStore';
 import { AFRICAN_COUNTRIES, ZONE_CURRENCIES } from '../../types';
 import { getDocumentEngine, type ExtractionReport } from '../../extraction';
 import { extractConditions } from '../../extraction/conditions';
@@ -126,6 +127,18 @@ export function BankConditionsModal({
   focusDocumentId,
 }: BankConditionsModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('documents');
+
+  // L'onglet « Validation IA » alimente le référentiel MUTUALISÉ (L2), partagé
+  // par tous les clients : réservé aux administrateurs Atlas Studio. Les clients
+  // gèrent leurs conditions particulières via les autres onglets. La véritable
+  // barrière est la RLS (écriture L2 = is_admin()) ; ce filtre masque juste
+  // l'entrée côté client.
+  // NB : le type généré de profile.role diverge du schéma réel (admin/client/
+  // super_admin) ; comparaison via string, alignée sur public.is_admin().
+  const role = useAuthStore((s) => s.profile?.role) as string | undefined;
+  const isAdmin = role === 'admin' || role === 'super_admin';
+  const visibleTabs = TABS.filter((t) => t.id !== 'validation' || isAdmin);
+
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionReport, setExtractionReport] = useState<ExtractionReport | null>(null);
@@ -776,7 +789,7 @@ export function BankConditionsModal({
         {/* Tabs */}
         <div className="flex-shrink-0 border-b border-primary-200 bg-primary-50">
           <div className="flex gap-1 px-4 overflow-x-auto">
-            {TABS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -1950,7 +1963,8 @@ export function BankConditionsModal({
           )}
 
           {/* Onglet Validation IA — split-screen PDF↔champ via SplitScreenValidator */}
-          {activeTab === 'validation' && (
+          {/* Mutualisé (L2) → admins Atlas Studio uniquement. */}
+          {activeTab === 'validation' && isAdmin && (
             <ValidationTabContent bank={bank} archivedDocuments={conditions.documents} />
           )}
         </div>

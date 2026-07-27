@@ -51,7 +51,7 @@ export function LandingPage() {
       <Nav scrolled={scrolled} onCta={goToApp} />
 
       <main>
-        <Hero onCta={goToApp} />
+        <Hero onCta={goToApp} onExpress={() => navigate('/audit-express')} />
         <TrustBar />
         <ValueProps />
         <FeatureSplit />
@@ -135,7 +135,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 /* ============================================================================
    HERO
    ============================================================================ */
-function Hero({ onCta }: { onCta: () => void }) {
+function Hero({ onCta, onExpress }: { onCta: () => void; onExpress: () => void }) {
   return (
     <section className="relative pt-12 sm:pt-20 pb-24 sm:pb-32 px-6 lg:px-10">
       <div className="max-w-7xl mx-auto">
@@ -172,7 +172,10 @@ function Hero({ onCta }: { onCta: () => void }) {
           La plateforme d'audit qui détecte automatiquement{' '}
           <span className="font-semibold text-ink-900">les anomalies bancaires</span> et libère{' '}
           <span className="font-semibold text-ink-900">les économies cachées</span> dans vos relevés.
-          Conçu pour les cabinets et entreprises de la zone <span className="font-semibold">CEMAC / UEMOA</span>.
+          Pour les <span className="font-semibold text-ink-900">entreprises</span>, les{' '}
+          <span className="font-semibold text-ink-900">cabinets</span> et les{' '}
+          <span className="font-semibold text-ink-900">particuliers</span> de la zone{' '}
+          <span className="font-semibold">CEMAC / UEMOA</span>.
         </p>
 
         {/* CTAs */}
@@ -182,6 +185,10 @@ function Hero({ onCta }: { onCta: () => void }) {
         >
           <button onClick={onCta} className="btn btn-primary btn-lg group w-full sm:w-auto">
             Lancer un audit gratuit
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+          <button onClick={onExpress} className="btn btn-accent btn-lg group w-full sm:w-auto">
+            Auditer mon relevé — sans compte
             <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </button>
           <a href="#how" className="btn btn-secondary btn-lg w-full sm:w-auto">

@@ -1,6 +1,11 @@
 // ============================================================================
 // ATLASBANX - Database Types
 // Types TypeScript correspondant au schema Supabase
+// ----------------------------------------------------------------------------
+// Sous-ensemble curé (le schéma réel compte des centaines de tables). Aligné
+// sur la base de production : public.profiles.role est une colonne TEXT dont
+// les valeurs réelles sont 'admin' | 'super_admin' | 'client' (il n'existe PAS
+// d'enum user_role en base). account_type reste 'enterprise' | 'cabinet'.
 // ============================================================================
 
 export interface Database {
@@ -37,34 +42,43 @@ export interface Database {
       profiles: {
         Row: {
           id: string;
-          email: string;
+          email: string | null;
           full_name: string | null;
+          first_name: string | null;
+          last_name: string | null;
           avatar_url: string | null;
           organization_id: string | null;
-          role: 'admin' | 'auditor' | 'viewer';
+          role: 'admin' | 'super_admin' | 'client';
           account_type: 'enterprise' | 'cabinet';
-          created_at: string;
-          updated_at: string;
+          is_active: boolean | null;
+          created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
           id: string;
-          email: string;
+          email?: string | null;
           full_name?: string | null;
+          first_name?: string | null;
+          last_name?: string | null;
           avatar_url?: string | null;
           organization_id?: string | null;
-          role?: 'admin' | 'auditor' | 'viewer';
+          role?: 'admin' | 'super_admin' | 'client';
           account_type?: 'enterprise' | 'cabinet';
-          created_at?: string;
-          updated_at?: string;
+          is_active?: boolean | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
-          email?: string;
+          email?: string | null;
           full_name?: string | null;
+          first_name?: string | null;
+          last_name?: string | null;
           avatar_url?: string | null;
           organization_id?: string | null;
-          role?: 'admin' | 'auditor' | 'viewer';
+          role?: 'admin' | 'super_admin' | 'client';
           account_type?: 'enterprise' | 'cabinet';
-          updated_at?: string;
+          is_active?: boolean | null;
+          updated_at?: string | null;
         };
       };
       user_settings: {
@@ -91,7 +105,7 @@ export interface Database {
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
-      user_role: 'admin' | 'auditor' | 'viewer';
+      user_role: 'admin' | 'super_admin' | 'client';
       account_type: 'enterprise' | 'cabinet';
     };
   };
@@ -271,6 +285,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
+          scope: string;
           bank_id: string;
           code: string;
           name: string;
@@ -286,6 +301,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
+          scope?: string;
           bank_id: string;
           code: string;
           name: string;

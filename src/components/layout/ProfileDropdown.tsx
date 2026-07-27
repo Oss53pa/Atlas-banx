@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { useSettingsStore } from '../../store';
 import { useAuthStore } from '../../store/authStore';
-import { useClientStore } from '../../store/clientStore';
 import { useAccountType } from '../../hooks/useAccountType';
 
 export function ProfileDropdown() {
@@ -17,21 +16,10 @@ export function ProfileDropdown() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { organization } = useSettingsStore();
-  const { signOut, profile, setAccountType } = useAuthStore();
-  const ensureSelfClient = useClientStore((s) => s.ensureSelfClient);
+  const { signOut } = useAuthStore();
+  // Le type de compte (entreprise/cabinet) est fixé à la souscription et
+  // affiché en lecture seule ici — plus de changement à la volée.
   const { isEnterprise } = useAccountType();
-  const [isSwitchingAccountType, setIsSwitchingAccountType] = useState(false);
-
-  const handleToggleAccountType = async () => {
-    if (isSwitchingAccountType) return;
-    setIsSwitchingAccountType(true);
-    const next = isEnterprise ? 'cabinet' : 'enterprise';
-    const ok = await setAccountType(next);
-    if (ok && next === 'enterprise') {
-      ensureSelfClient(profile?.full_name ?? undefined);
-    }
-    setIsSwitchingAccountType(false);
-  };
 
   // Fermer le dropdown quand on clique en dehors
   useEffect(() => {
@@ -163,41 +151,17 @@ export function ProfileDropdown() {
             )}
           </div>
 
-          {/* Account type switch (Entreprise / Cabinet) */}
+          {/* Type de compte — défini à la souscription de l'abonnement.
+              Affiché en lecture seule (plus de bascule ici). */}
           <div className="px-4 py-3 border-b border-primary-100/70 bg-canvas-50/50">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-ink-500 uppercase tracking-[0.14em]">
                 Type de compte
               </span>
-              {isSwitchingAccountType && (
-                <div className="w-3 h-3 border-2 border-primary-300 border-t-accent-500 rounded-full animate-spin" />
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-1 p-1 bg-canvas-100 rounded-lg border border-primary-200/60">
-              <button
-                onClick={() => { if (!isEnterprise) handleToggleAccountType(); }}
-                disabled={isSwitchingAccountType || isEnterprise}
-                className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ease-premium ${
-                  isEnterprise
-                    ? 'bg-gradient-to-b from-ink-800 to-ink-950 text-white shadow-card'
-                    : 'text-ink-600 hover:bg-white'
-                }`}
-              >
-                <Building2 className="w-3.5 h-3.5" />
-                Entreprise
-              </button>
-              <button
-                onClick={() => { if (isEnterprise) handleToggleAccountType(); }}
-                disabled={isSwitchingAccountType || !isEnterprise}
-                className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ease-premium ${
-                  !isEnterprise
-                    ? 'bg-gradient-to-b from-ink-800 to-ink-950 text-white shadow-card'
-                    : 'text-ink-600 hover:bg-white'
-                }`}
-              >
-                <Briefcase className="w-3.5 h-3.5" />
-                Cabinet
-              </button>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-canvas-100 border border-primary-200/60 text-xs font-semibold text-ink-700">
+                {isEnterprise ? <Building2 className="w-3.5 h-3.5" /> : <Briefcase className="w-3.5 h-3.5" />}
+                {isEnterprise ? 'Entreprise' : 'Cabinet'}
+              </span>
             </div>
             <p className="text-[10px] text-ink-400 mt-1.5 leading-snug">
               {isEnterprise

@@ -7,11 +7,9 @@
 // ============================================================================
 
 import { useCallback, useState } from 'react';
-import { getAnalysisService } from '../../../services/AnalysisService';
+import { runFullAudit } from '../../../services/audit/runFullAudit';
 import {
-  AnomalyType,
   TransactionType,
-  type AnalysisConfig,
   type Transaction,
   type BankConditions,
   type Anomaly as CoreAnomaly,
@@ -64,21 +62,6 @@ function toAnalysisTransaction(tx: BankTransaction, meta: { clientId: string; ac
   };
 }
 
-const DEFAULT_DETECTORS: AnomalyType[] = [
-  AnomalyType.DUPLICATE_FEE,
-  AnomalyType.GHOST_FEE,
-  AnomalyType.OVERCHARGE,
-  AnomalyType.INTEREST_ERROR,
-  AnomalyType.VALUE_DATE_ERROR,
-  AnomalyType.SUSPICIOUS_TRANSACTION,
-  AnomalyType.COMPLIANCE_VIOLATION,
-  AnomalyType.CASHFLOW_ANOMALY,
-  AnomalyType.RECONCILIATION_GAP,
-  AnomalyType.OHADA_NON_COMPLIANCE,
-  AnomalyType.AML_ALERT,
-  AnomalyType.FEE_ANOMALY,
-];
-
 const DEFAULT_BANK_CONDITIONS = {
   bankName: '',
   accountType: 'current',
@@ -88,7 +71,7 @@ const DEFAULT_BANK_CONDITIONS = {
 } as unknown as BankConditions;
 
 export function useStatementAnalysis(
-  statementId: string,
+  _statementId: string,
   meta?: { clientId: string; accountNumber: string; bankCode: string },
 ): UseStatementAnalysisResult {
   const [running, setRunning] = useState(false);
@@ -115,26 +98,16 @@ export function useStatementAnalysis(
         const txMeta = meta ?? { clientId: '', accountNumber: '', bankCode: '' };
         const transactions = bankTxs.map((tx) => toAnalysisTransaction(tx, txMeta));
 
-        const config = {
-          enabledDetectors: DEFAULT_DETECTORS,
-          dateRange: {},
-          clientId: txMeta.clientId || undefined,
-          bankCodes: txMeta.bankCode ? [txMeta.bankCode] : undefined,
-        } as unknown as AnalysisConfig;
-
-        const service = getAnalysisService();
-        const result = await service.analyzeTransactions(
+        // Point d'entrée UNIQUE partagé par toutes les catégories de client.
+        const result = await runFullAudit({
           transactions,
-          bankConditions ?? { ...DEFAULT_BANK_CONDITIONS, bankName: txMeta.bankCode },
-          config,
-          {
-            useWorkers: true,
-            onProgress: (pct, step) => {
-              setProgress(pct);
-              setProgressStep(step);
-            },
+          bankConditions: bankConditions ?? { ...DEFAULT_BANK_CONDITIONS, bankName: txMeta.bankCode },
+          bankCode: txMeta.bankCode || undefined,
+          onProgress: (pct, step) => {
+            setProgress(pct);
+            setProgressStep(step);
           },
-        );
+        });
 
         setLastRunAt(new Date().toISOString());
 
@@ -165,7 +138,7 @@ export function useStatementAnalysis(
         setProgressStep('Termine');
       }
     },
-    [statementId, meta],
+    [meta],
   );
 
   return { running, progress, progressStep, error, lastRunAt, detectedAnomalies, summary, run };
