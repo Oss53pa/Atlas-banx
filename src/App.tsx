@@ -25,6 +25,7 @@ import { AlertCircle } from 'lucide-react';
 
 const ExternalAuthPage = lazy(() => import('./pages/auth/ExternalAuthPage'));
 const AtlasStudioAdminPage = lazy(() => import('./components/admin/AtlasStudioAdminPage'));
+const ExpressAuditPage = lazy(() => import('./components/express/ExpressAuditPage'));
 
 // Public landing page (marketing) — no auth required
 const LandingPage = lazy(() => import('./components/landing').then(m => ({ default: m.LandingPage })));
@@ -386,6 +387,15 @@ function AppRoutes() {
     return (
       <Suspense fallback={<PageLoader />}>
         <LandingPage />
+      </Suspense>
+    );
+  }
+
+  // Funnel « Audit express » particulier — public, sans compte.
+  if (location.pathname === '/audit-express') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ExpressAuditPage />
       </Suspense>
     );
   }
