@@ -111,12 +111,12 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
           <h1 className="font-serif text-white leading-[1.05]">
             <span className="block text-5xl">L'audit bancaire</span>
-            <span className="block text-5xl italic text-gradient-gold">à hauteur d'expert.</span>
+            <span className="block font-display text-6xl leading-[1.1] text-gradient-gold">à hauteur d'expert.</span>
           </h1>
 
           <p className="mt-6 text-[15px] leading-relaxed text-white/60">
             Analyse intégrale de vos relevés, conformité CEMAC · UEMOA et IA{' '}
-            <span className="font-serif italic text-accent-300">Proph3t</span> intégrée — pour les
+            <span className="font-display text-lg text-accent-300">Proph3t</span> intégrée — pour les
             cabinets et directions financières exigeants.
           </p>
         </div>

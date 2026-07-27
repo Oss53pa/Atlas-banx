@@ -9,10 +9,22 @@
 // validation (workflow 2 yeux : un second admin valide/publie).
 // ============================================================================
 
-import { useState } from 'react';
-import { Plus, Trash2, UploadCloud, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Plus, Trash2, UploadCloud, CheckCircle2, AlertCircle, Loader2, FileText, Sparkles } from 'lucide-react';
 import { submitValidatedReference } from '../../cdc/services/submitValidatedReference';
+import { extractConditions } from '../../extraction/conditions';
+import { extractionResultToFields } from '../banks/extractionToFields';
 import type { ExtractedField } from '../../cdc/components/SplitScreenValidator';
+
+/** Lit un fichier en data-URL (sert de source hashable pour submitValidatedReference). */
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 interface ConditionRow {
   rubricCode: string;
@@ -34,6 +46,55 @@ export function MutualizedImportPanel() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ versionId: string; conditionsCount: number } | null>(null);
+
+  // Extraction PDF (OCR inclus via extractConditions)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState<{ pct: number; message: string } | null>(null);
+  const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
+
+  const handleFile = async (file: File | null) => {
+    if (!file) return;
+    setError(null);
+    setResult(null);
+    setExtractWarnings([]);
+    setFileName(file.name);
+    setIsExtracting(true);
+    setExtractProgress({ pct: 0, message: 'Lecture du PDF…' });
+
+    try {
+      // Source hashable pour la soumission (data-URL du PDF téléversé).
+      const dataUrl = await fileToDataUrl(file);
+      setSourcePdfUrl(dataUrl);
+
+      // Extraction position-aware — bascule automatiquement en OCR si le PDF
+      // est scanné (extractConditions détecte l'absence de couche texte).
+      const extraction = await extractConditions(file, {
+        bankCode: bankCode.trim() || undefined,
+        onProgress: (p) => setExtractProgress({ pct: p.pct, message: p.message }),
+      });
+
+      setExtractWarnings(extraction.warnings ?? []);
+
+      const fields = extractionResultToFields(extraction);
+      if (fields.length > 0) {
+        setRows(
+          fields.map((f) => ({
+            rubricCode: f.rubricCode,
+            label: f.label,
+            value: f.value == null ? '' : String(f.value),
+            unit: f.unit ?? '',
+          })),
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de l'extraction du PDF.");
+    } finally {
+      setIsExtracting(false);
+      setExtractProgress(null);
+    }
+  };
 
   const updateRow = (index: number, patch: Partial<ConditionRow>) => {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
@@ -97,6 +158,68 @@ export function MutualizedImportPanel() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Upload PDF + extraction IA/OCR */}
+        <div className="rounded-xl border border-dashed border-amber-400/25 bg-amber-400/[0.03] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-400/30 bg-amber-400/5 text-amber-300">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-white">Extraction automatique</p>
+                <p className="text-xs text-white/45">
+                  Téléversez le PDF officiel — extraction IA + OCR si scanné. Vérifiez ensuite les valeurs.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isExtracting || isSubmitting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 py-2 text-xs font-medium text-amber-200 hover:bg-amber-400/10 disabled:opacity-40"
+            >
+              {isExtracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+              {isExtracting ? 'Extraction…' : 'Choisir un PDF'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                void handleFile(e.target.files?.[0] ?? null);
+                e.target.value = '';
+              }}
+            />
+          </div>
+
+          {fileName && !isExtracting && (
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-300">
+              <CheckCircle2 className="h-3.5 w-3.5" /> {fileName} — {rows.length} condition(s) pré-remplie(s).
+            </p>
+          )}
+          {extractProgress && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-[11px] text-white/50">
+                <span>{extractProgress.message}</span>
+                <span>{Math.round(extractProgress.pct)}%</span>
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full bg-amber-400 transition-all" style={{ width: `${extractProgress.pct}%` }} />
+              </div>
+            </div>
+          )}
+          {extractWarnings.length > 0 && (
+            <ul className="mt-3 space-y-1">
+              {extractWarnings.map((w, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-[11px] text-amber-200/70">
+                  <AlertCircle className="mt-0.5 h-3 w-3 flex-shrink-0" /> {w}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* En-tête version */}
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="block">
@@ -121,13 +244,27 @@ export function MutualizedImportPanel() {
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase tracking-wide text-white/40">PDF source (URL)</span>
-            <input
-              value={sourcePdfUrl}
-              onChange={(e) => setSourcePdfUrl(e.target.value)}
-              placeholder="https://…/conditions.pdf"
-              className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none"
-              disabled={isSubmitting}
-            />
+            {sourcePdfUrl.startsWith('data:') ? (
+              <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70">
+                <FileText className="h-3.5 w-3.5 text-amber-300" />
+                <span className="truncate">{fileName ?? 'PDF téléversé'}</span>
+                <button
+                  type="button"
+                  onClick={() => { setSourcePdfUrl(''); setFileName(null); }}
+                  className="ml-auto text-xs text-white/40 hover:text-red-300"
+                >
+                  retirer
+                </button>
+              </div>
+            ) : (
+              <input
+                value={sourcePdfUrl}
+                onChange={(e) => setSourcePdfUrl(e.target.value)}
+                placeholder="https://…/conditions.pdf"
+                className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none"
+                disabled={isSubmitting}
+              />
+            )}
           </label>
         </div>
 
