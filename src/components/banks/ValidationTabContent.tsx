@@ -61,9 +61,11 @@ type SubmitState =
 interface ValidationTabContentProps {
   bank: Bank;
   archivedDocuments: ArchivedDocument[];
+  /** Segment L2 pré-sélectionné (onglet d'import admin Particuliers/Entreprises). */
+  defaultSegment?: Segment;
 }
 
-export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabContentProps) {
+export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }: ValidationTabContentProps) {
   // On prend le document le plus récent qui a un PDF
   const document = useMemo(() => {
     const sorted = [...archivedDocuments]
@@ -78,7 +80,7 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
 
   const [fields, setFields] = useState<ExtractedField[]>([]);
   const [activeFieldId, setActiveFieldId] = useState<string | undefined>();
-  const [segment, setSegment] = useState<Segment>('');
+  const [segment, setSegment] = useState<Segment>(defaultSegment ?? '');
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [extractionState, setExtractionState] = useState<ExtractionState>({ status: 'idle' });
 

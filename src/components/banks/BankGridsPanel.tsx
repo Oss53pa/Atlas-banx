@@ -35,6 +35,8 @@ interface BankGridsPanelProps {
   onViewSource: (grid: ConditionGrid) => void;
   onDeleteGrid: (grid: ConditionGrid) => void;
   onChangeSegment: (grid: ConditionGrid, segment: TariffSegment | null) => void;
+  /** Segment pré-sélectionné dans le filtre (contexte d'import admin scopé). */
+  initialSegment?: TariffSegment;
 }
 
 function fmtPeriod(grid: ConditionGrid): string {
@@ -54,6 +56,7 @@ export function BankGridsPanel({
   onViewSource,
   onDeleteGrid,
   onChangeSegment,
+  initialSegment,
 }: BankGridsPanelProps) {
   const currency: 'XAF' | 'XOF' = zone === 'UEMOA' ? 'XOF' : 'XAF';
 
@@ -76,7 +79,7 @@ export function BankGridsPanel({
 
   // Filtre par segment (Particuliers / Entreprises / …) — permet de distinguer
   // clairement à qui s'appliquent les grilles d'une même banque.
-  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('all');
+  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>(initialSegment ?? 'all');
 
   // Segments réellement présents dans les grilles de cette banque, pour ne
   // proposer que des filtres utiles (+ « Tous »).

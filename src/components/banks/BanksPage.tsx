@@ -9,7 +9,7 @@ import { useBankStore } from '../../store/bankStore';
 import { BankConditionsModal } from './BankConditionsModal';
 import { BankFormModal } from './BankFormModal';
 import { BankGridsPanel } from './BankGridsPanel';
-import type { Bank, BankConditions, ConditionGrid, MonetaryZone, ArchivedDocument } from '../../types';
+import type { Bank, BankConditions, ConditionGrid, MonetaryZone, ArchivedDocument, TariffSegment } from '../../types';
 import { CEMAC_COUNTRIES, UEMOA_COUNTRIES, AFRICAN_COUNTRIES } from '../../types';
 import { extractConditions } from '../../extraction/conditions';
 import { setByPath } from '../../extraction/normalize';
@@ -178,7 +178,18 @@ function getZoneFromCountry(country: string): MonetaryZone | null {
   return null;
 }
 
-export function BanksPage() {
+interface BanksPageProps {
+  /**
+   * Segment tarifaire d'import (console admin : onglets « Particuliers » /
+   * « Entreprises »). Quand fourni : filtre d'emblée les grilles sur ce
+   * segment, étiquette les nouvelles grilles importées, et pré-sélectionne le
+   * segment dans l'onglet « Validation IA » (publication L2). Absent = vue
+   * cliente standard, tous segments.
+   */
+  defaultSegment?: TariffSegment;
+}
+
+export function BanksPage({ defaultSegment }: BanksPageProps = {}) {
   const {
     banks,
     addBank,
@@ -428,6 +439,9 @@ export function BanksPage() {
       version: new Date().toISOString().slice(0, 7),
       effectiveDate: new Date(),
       status: 'active',
+      // Étiquette la grille avec le segment de l'onglet d'import admin
+      // (Particuliers / Entreprises) quand on est dans ce contexte.
+      ...(defaultSegment ? { segment: defaultSegment } : {}),
       conditions: baseConditions,
       sourceDocument: {
         id: uuidv4(),
@@ -739,6 +753,7 @@ export function BanksPage() {
                   onChangeSegment={(grid, segment) =>
                     updateConditionGrid(grid.bankId, grid.id, { segment: segment ?? undefined })
                   }
+                  initialSegment={defaultSegment}
                 />
               </>
             ) : (
@@ -857,6 +872,7 @@ export function BanksPage() {
         }}
         bank={selectedBank}
         focusDocumentId={focusDocumentId}
+        defaultSegment={defaultSegment}
         onSaveConditions={(bankId, conditions) => {
           // 1. Persiste la version riche du formulaire dans bank.conditions
           //    (champ legacy utilisé pour l'affichage et la rétrocompatibilité)

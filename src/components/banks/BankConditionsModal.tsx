@@ -32,7 +32,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Button, Badge } from '../ui';
-import type { Bank, BankConditions, ArchivedDocument } from '../../types';
+import type { Bank, BankConditions, ArchivedDocument, TariffSegment } from '../../types';
 import { ValidationTabContent } from './ValidationTabContent';
 import { useAuthStore } from '../../store/authStore';
 import { AFRICAN_COUNTRIES, ZONE_CURRENCIES } from '../../types';
@@ -95,6 +95,11 @@ interface BankConditionsModalProps {
    * vue d'édition de cette grille tarifaire en particulier.
    */
   focusDocumentId?: string | null;
+  /**
+   * Segment tarifaire d'import (console admin). Pré-sélectionne le barème dans
+   * l'onglet « Validation IA » lors de la publication L2.
+   */
+  defaultSegment?: TariffSegment;
 }
 
 // FullBankConditions, REGISTRY_TO_FORM_PATH, getEmptyFullConditions,
@@ -125,6 +130,7 @@ export function BankConditionsModal({
   bank,
   onSaveConditions,
   focusDocumentId,
+  defaultSegment,
 }: BankConditionsModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('documents');
 
@@ -1965,7 +1971,15 @@ export function BankConditionsModal({
           {/* Onglet Validation IA — split-screen PDF↔champ via SplitScreenValidator */}
           {/* Mutualisé (L2) → admins Atlas Studio uniquement. */}
           {activeTab === 'validation' && isAdmin && (
-            <ValidationTabContent bank={bank} archivedDocuments={conditions.documents} />
+            <ValidationTabContent
+              bank={bank}
+              archivedDocuments={conditions.documents}
+              defaultSegment={
+                defaultSegment === 'particuliers' ? 'particulier'
+                  : defaultSegment === 'entreprises' ? 'corporate'
+                  : undefined
+              }
+            />
           )}
         </div>
 
