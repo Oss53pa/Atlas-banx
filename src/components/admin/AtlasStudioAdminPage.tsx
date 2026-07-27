@@ -8,13 +8,20 @@
 //   2. contrôle de rôle : seul un profil `role === 'admin'` accède à l'import.
 // L'obscurité du point d'entrée n'est qu'un confort — la sécurité repose sur
 // l'auth + le rôle + la RLS L2 côté base.
+//
+// La console d'import RÉUTILISE l'interface bancaire complète de l'application
+// (BanksPage → liste des banques, détail, rubriques par catégorie, import PDF
+// IA+OCR, journal des grilles). L'admin y accède à l'onglet « Validation IA »
+// de BankConditionsModal (visible seulement pour role=admin/super_admin) qui
+// soumet une version de référence L2 mutualisée au workflow deux yeux. On ne
+// duplique donc pas l'interface : on factorise celle qui existe déjà.
 // ============================================================================
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { AdminBanksConsole } from './AdminBanksConsole';
+import { BanksPage } from '../banks';
 
 export default function AtlasStudioAdminPage() {
   const navigate = useNavigate();
@@ -41,6 +48,62 @@ export default function AtlasStudioAdminPage() {
     await signInWithEmail(email, password);
   };
 
+  // --- Admin authentifié : console d'import mutualisé ---------------------
+  // Thème clair (comme l'application) car on y monte l'interface BanksPage
+  // telle quelle. On l'encadre d'un bandeau admin discret + un rappel du
+  // périmètre L2 (référentiel partagé, onglet « Validation IA » → workflow
+  // deux yeux).
+  if (authed && isAdmin) {
+    return (
+      <div className="min-h-screen bg-primary-50">
+        {/* Bandeau admin */}
+        <header className="sticky top-0 z-30 border-b border-primary-200 bg-white/90 backdrop-blur">
+          <div className="flex items-center justify-between px-4 py-2.5 sm:px-6">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 text-amber-600">
+                <Lock className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold tracking-tight text-primary-900">
+                  Atlas Studio · Console
+                </p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-primary-400">
+                  Import des conditions mutualisées (référentiel L2)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/')}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-primary-500 hover:bg-primary-100 hover:text-primary-800"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Retour
+              </button>
+              <button
+                onClick={() => signOut()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 px-2.5 py-1.5 text-xs text-primary-600 hover:bg-primary-100"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Se déconnecter
+              </button>
+            </div>
+          </div>
+          {/* Rappel de périmètre */}
+          <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-1.5 text-center text-[11px] text-amber-800 sm:px-6">
+            Référentiel <strong>L2 mutualisé</strong> — partagé par tous les clients. Ouvrez une
+            banque, complétez les rubriques (ou importez le PDF), puis publiez via l'onglet
+            <strong> « Validation IA »</strong> (workflow deux yeux).
+          </div>
+        </header>
+
+        {/* Interface bancaire complète réutilisée telle quelle */}
+        <main className="px-3 py-4 sm:px-6">
+          <BanksPage />
+        </main>
+      </div>
+    );
+  }
+
+  // --- Non authentifié / non admin : écrans sombres discrets --------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-ink-900 via-ink-950 to-black text-white">
       <div className="mx-auto max-w-6xl px-6 py-14">
@@ -122,20 +185,6 @@ export default function AtlasStudioAdminPage() {
             >
               <LogOut className="h-3.5 w-3.5" /> Se déconnecter
             </button>
-          </div>
-        )}
-
-        {/* --- Admin : console d'import mutualisé (liste banques + rubriques) --- */}
-        {authed && isAdmin && (
-          <div>
-            <div className="mb-5">
-              <h2 className="text-lg font-semibold text-white">Import des conditions mutualisées</h2>
-              <p className="mt-1 text-sm text-white/50">
-                Référentiel banque L2 — partagé par tous les clients. Sélectionnez une banque, renseignez
-                les rubriques (ou importez le PDF), puis soumettez au workflow deux yeux.
-              </p>
-            </div>
-            <AdminBanksConsole />
           </div>
         )}
       </div>
