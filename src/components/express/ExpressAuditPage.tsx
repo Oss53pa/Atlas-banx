@@ -80,7 +80,6 @@ export default function ExpressAuditPage() {
     setIsBusy(true);
     try {
       const provider = getPaymentProvider();
-      setPaymentMode(provider.mode);
       const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const init = await provider.initiate({
         amount: plan.priceFcfa,
@@ -90,6 +89,7 @@ export default function ExpressAuditPage() {
         customerEmail: email || undefined,
         customerPhone: phone || undefined,
       });
+      setPaymentMode(init.mode);
       if (init.redirectUrl) {
         window.location.href = init.redirectUrl;
         return;

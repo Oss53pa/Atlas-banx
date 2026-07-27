@@ -1,56 +1,39 @@
 // ============================================================================
 // ATLASBANX — Prestataire de paiement CinetPay (mobile money UEMOA/CEMAC)
 // ============================================================================
-// Deux modes :
-//   - 'live'    : clés marchandes présentes (VITE_CINETPAY_API_KEY + SITE_ID)
-//                 → flux réel CinetPay (à finaliser côté webhook serveur).
-//   - 'sandbox' : aucune clé → paiement SIMULÉ, aucun mouvement d'argent.
-//                 Permet de valider le funnel de bout en bout dès maintenant.
+// SÉCURITÉ : les clés marchandes vivent UNIQUEMENT côté serveur (Edge Functions
+// cinetpay-init / -notify / -status). Le client ne fait qu'appeler ces
+// fonctions ; il ne voit jamais la clé API.
 //
-// Le contrat public (PaymentProvider) est identique dans les deux modes, donc
-// passer en réel reviendra à poser les secrets + implémenter l'appel HTTP.
+// Modes :
+//   - Supabase joignable → le SERVEUR décide 'live' (clés posées) ou 'sandbox'
+//     (clés absentes → paiement simulé, aucun débit).
+//   - Supabase absent (tests/offline) → sandbox local.
 // ============================================================================
 
+import { getSupabaseClient } from '../../lib/supabase';
 import type {
   PaymentProvider,
   PaymentRequest,
   PaymentInitResult,
   PaymentVerifyResult,
   PaymentMode,
+  PaymentStatus,
 } from './types';
-
-interface CinetPayConfig {
-  apiKey?: string;
-  siteId?: string;
-  /** Endpoint API (défaut : production CinetPay). */
-  baseUrl?: string;
-  /** URL de notification serveur (webhook) — requise en live. */
-  notifyUrl?: string;
-}
-
-function envConfig(): CinetPayConfig {
-  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-  return {
-    apiKey: env.VITE_CINETPAY_API_KEY,
-    siteId: env.VITE_CINETPAY_SITE_ID,
-    baseUrl: env.VITE_CINETPAY_BASE_URL || 'https://api-checkout.cinetpay.com/v2',
-    notifyUrl: env.VITE_CINETPAY_NOTIFY_URL,
-  };
-}
 
 export class CinetPayProvider implements PaymentProvider {
   readonly name = 'CinetPay';
   readonly mode: PaymentMode;
-  private config: CinetPayConfig;
 
-  constructor(config?: CinetPayConfig) {
-    this.config = config ?? envConfig();
-    this.mode = this.config.apiKey && this.config.siteId ? 'live' : 'sandbox';
+  constructor(hint?: { apiKey?: string; siteId?: string }) {
+    // Indice informatif seulement ; le mode réel est décidé côté serveur.
+    this.mode = hint?.apiKey && hint?.siteId ? 'live' : 'sandbox';
   }
 
   async initiate(request: PaymentRequest): Promise<PaymentInitResult> {
-    if (this.mode === 'sandbox') {
-      // Paiement simulé : on renvoie une transaction 'pending' sans redirection.
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      // Repli local : paiement simulé.
       return {
         transactionId: `sandbox-${request.reference}`,
         status: 'pending',
@@ -59,57 +42,46 @@ export class CinetPayProvider implements PaymentProvider {
       };
     }
 
-    // Mode live — flux CinetPay réel.
-    const res = await fetch(`${this.config.baseUrl}/payment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apikey: this.config.apiKey,
-        site_id: this.config.siteId,
-        transaction_id: request.reference,
+    const { data, error } = await supabase.functions.invoke('cinetpay-init', {
+      body: {
+        reference: request.reference,
         amount: request.amount,
         currency: request.currency,
         description: request.description,
-        notify_url: this.config.notifyUrl,
-        customer_email: request.customerEmail,
-        customer_phone_number: request.customerPhone,
-        channels: 'ALL',
-      }),
+        customerEmail: request.customerEmail,
+        customerPhone: request.customerPhone,
+      },
     });
-    const data = await res.json();
-    if (data?.code !== '201' || !data?.data?.payment_url) {
-      throw new Error(`CinetPay: ${data?.message ?? 'échec de création du paiement'}`);
-    }
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(String(data.error));
+
     return {
-      transactionId: request.reference,
-      status: 'pending',
-      redirectUrl: data.data.payment_url as string,
-      mode: 'live',
+      transactionId: data?.transactionId ?? request.reference,
+      status: (data?.status as PaymentStatus) ?? 'pending',
+      redirectUrl: data?.redirectUrl ?? null,
+      mode: (data?.mode as PaymentMode) ?? 'sandbox',
     };
   }
 
   async verify(transactionId: string): Promise<PaymentVerifyResult> {
-    if (this.mode === 'sandbox') {
-      // Paiement simulé considéré comme réussi.
+    // Sandbox : paiement simulé considéré comme réussi.
+    if (transactionId.startsWith('sandbox-')) {
       return { transactionId, status: 'succeeded', mode: 'sandbox' };
     }
 
-    const res = await fetch(`${this.config.baseUrl}/payment/check`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apikey: this.config.apiKey,
-        site_id: this.config.siteId,
-        transaction_id: transactionId,
-      }),
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return { transactionId, status: 'succeeded', mode: 'sandbox' };
+    }
+
+    const { data, error } = await supabase.functions.invoke('cinetpay-status', {
+      body: { reference: transactionId },
     });
-    const data = await res.json();
-    const status =
-      data?.data?.status === 'ACCEPTED'
-        ? 'succeeded'
-        : data?.data?.status === 'REFUSED'
-          ? 'failed'
-          : 'pending';
-    return { transactionId, status, mode: 'live' };
+    if (error) throw new Error(error.message);
+    return {
+      transactionId,
+      status: (data?.status as PaymentStatus) ?? 'pending',
+      mode: 'live',
+    };
   }
 }
