@@ -11,13 +11,21 @@ import {
   FileBarChart,
   Settings,
   Users,
-  AlertTriangle,
   CheckCircle,
   Lightbulb,
 } from 'lucide-react';
-import { Button, Badge } from '../ui';
+import { Button } from '../ui';
 import { getClaudeService, ChatMessage } from '../../services/ClaudeService';
 import { useSettingsStore } from '../../store/settingsStore';
+import { groqProxyChat, type GroqProxyMessage } from '../../ai/groqProxy';
+
+// Prompt système de Proph3t quand il répond via le proxy Groq serveur.
+const PROPH3T_SYSTEM_PROMPT =
+  "Tu es Proph3t, l'assistant IA d'AtlasBanx, un outil d'audit bancaire pour la zone "
+  + 'CEMAC/UEMOA. Tu aides à comprendre les relevés bancaires, à détecter les anomalies '
+  + '(frais indus, erreurs d\'agios, dates de valeur, doublons) et à expliquer la conformité '
+  + 'réglementaire (BCEAO, COBAC, OHADA). Réponds en français, de façon concise, précise et '
+  + 'professionnelle. Si une donnée manque, dis-le clairement plutôt que d\'inventer.';
 
 // Proph3t - Avatar IA
 function Proph3tAvatar({ size = 48, className = '' }: { size?: number; className?: string }) {
@@ -254,26 +262,42 @@ export function ChatBot() {
       const claudeService = getClaudeService();
 
       if (!claudeService) {
-        // Si pas de clé API, utiliser une réponse par défaut
+        // Pas de clé personnelle → Proph3t via Groq (proxy serveur, sans config).
         if (!claudeApi.apiKey) {
-          const defaultResponse: ChatMessage = {
-            id: `msg-${Date.now() + 1}`,
-            role: 'assistant',
-            content: `Pour utiliser le chat IA, veuillez configurer votre clé API Claude dans **Paramètres > Intelligence Artificielle**.
+          try {
+            const history: GroqProxyMessage[] = chatHistory
+              .filter((m) => m.role === 'user' || m.role === 'assistant')
+              .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+            const { content, tokensUsed } = await groqProxyChat({
+              system: PROPH3T_SYSTEM_PROMPT,
+              messages: [...history, { role: 'user', content: userMessage.content }],
+            });
+            const assistantMessage: ChatMessage = {
+              id: `msg-${Date.now() + 1}`,
+              role: 'assistant',
+              content: content || "Je n'ai pas pu générer de réponse.",
+              timestamp: new Date(),
+              tokensUsed,
+            };
+            setChatHistory(prev => [...prev, assistantMessage]);
+            return;
+          } catch (proxyErr) {
+            const fallback: ChatMessage = {
+              id: `msg-${Date.now() + 1}`,
+              role: 'assistant',
+              content: `Le service IA est momentanément indisponible (${proxyErr instanceof Error ? proxyErr.message : 'erreur'}).
 
-En attendant, voici quelques informations utiles:
-
-**AtlasBanx** est un outil d'audit bancaire qui vous permet de:
+En attendant, **AtlasBanx** vous permet de :
 - Importer et analyser vos relevés bancaires
-- Détecter automatiquement les anomalies
+- Détecter automatiquement les anomalies (frais, agios, dates de valeur)
 - Générer des rapports d'audit professionnels
-- Récupérer les frais bancaires injustifiés
 
-Consultez l'onglet **Aide** pour plus de détails sur chaque fonctionnalité.`,
-            timestamp: new Date(),
-          };
-          setChatHistory(prev => [...prev, defaultResponse]);
-          return;
+Consultez l'onglet **Aide** pour plus de détails.`,
+              timestamp: new Date(),
+            };
+            setChatHistory(prev => [...prev, fallback]);
+            return;
+          }
         }
         throw new Error('Service IA non initialisé');
       }
@@ -598,9 +622,6 @@ Consultez l'onglet **Aide** pour plus de détails sur chaque fonctionnalité.`,
           >
             <Proph3tAvatar size={18} />
             <span className="font-display">Chat Proph3t</span>
-            {!claudeApi.apiKey && (
-              <Badge variant="warning" className="text-xs px-1.5 py-0.5">!</Badge>
-            )}
           </button>
         </div>
 
@@ -648,13 +669,14 @@ Consultez l'onglet **Aide** pour plus de détails sur chaque fonctionnalité.`,
                       Posez-moi des questions sur l'audit bancaire, l'analyse des anomalies, ou l'utilisation de AtlasBanx.
                     </p>
                     {!claudeApi.apiKey && (
-                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <div className="flex items-center gap-2 text-amber-700">
-                          <AlertTriangle className="w-4 h-4" />
-                          <span className="text-sm font-medium">Clé API non configurée</span>
+                      <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-lg">
+                        <div className="flex items-center gap-2 text-primary-700">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Proph3t est prêt (Groq)</span>
                         </div>
-                        <p className="text-xs text-amber-600 mt-1">
-                          Configurez votre clé Claude dans Paramètres → IA pour des réponses personnalisées.
+                        <p className="text-xs text-primary-500 mt-1">
+                          Aucune configuration requise. Pour utiliser votre propre modèle,
+                          renseignez une clé dans Paramètres → IA.
                         </p>
                       </div>
                     )}
