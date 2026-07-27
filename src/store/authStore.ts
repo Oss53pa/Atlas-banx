@@ -62,10 +62,13 @@ const DEMO_PROFILE: Profile = {
   id: 'demo-user-00000000-0000-0000-0000-000000000000',
   email: 'demo@atlasbanx.com',
   full_name: 'Utilisateur Démo',
+  first_name: 'Utilisateur',
+  last_name: 'Démo',
   avatar_url: null,
   role: 'admin',
   account_type: 'cabinet',
   organization_id: null,
+  is_active: true,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
