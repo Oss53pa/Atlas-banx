@@ -20,6 +20,12 @@ export interface SubmitReferenceInput {
   fields: ExtractedField[];
   /** Date d'entrée en vigueur (défaut : aujourd'hui). */
   effectiveFrom?: Date;
+  /**
+   * Hash SHA-256 (hex) pré-calculé du PDF source. Fourni quand le fichier a
+   * déjà été lu côté client (upload storage) : évite un re-fetch et garantit
+   * que l'empreinte porte sur les octets réels du document.
+   */
+  sourceHashSha256?: string;
 }
 
 export interface SubmitReferenceResult {
@@ -92,7 +98,7 @@ export async function submitValidatedReference(
 
   // 2. Créer la version brouillon
   const effectiveFrom = input.effectiveFrom ?? new Date();
-  const sourceHash = await hashPdf(input.pdfUrl);
+  const sourceHash = input.sourceHashSha256 ?? (await hashPdf(input.pdfUrl));
   const version = await service.createBankReferenceVersion({
     bankId: bank.id,
     versionLabel: `Validation IA — ${effectiveFrom.toISOString().slice(0, 10)}`,
