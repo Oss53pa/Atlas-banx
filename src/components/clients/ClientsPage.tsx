@@ -19,7 +19,7 @@ import { Button, Card, Input, Modal, Badge } from '../ui';
 import { useClientStore } from '../../store/clientStore';
 import { useTransactionStore } from '../../store/transactionStore';
 import { useAnalysisStore } from '../../store/analysisStore';
-import type { Client } from '../../types';
+import { CLIENT_TYPE_LABEL, type Client, type ClientType } from '../../types';
 
 export function ClientsPage() {
   const navigate = useNavigate();
@@ -67,6 +67,7 @@ export function ClientsPage() {
       addClient({
         name: data.name || '',
         code: data.code || '',
+        clientType: data.clientType,
         siret: data.siret,
         address: data.address,
         email: data.email,
@@ -334,6 +335,7 @@ function ClientFormModal({ isOpen, onClose, onSave, client }: ClientFormModalPro
   const [formData, setFormData] = useState({
     name: client?.name || '',
     code: client?.code || '',
+    clientType: (client?.clientType || 'entreprise') as ClientType,
     siret: client?.siret || '',
     address: client?.address || '',
     email: client?.email || '',
@@ -344,7 +346,7 @@ function ClientFormModal({ isOpen, onClose, onSave, client }: ClientFormModalPro
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(formData);
-    setFormData({ name: '', code: '', siret: '', address: '', email: '', phone: '', contactName: '' });
+    setFormData({ name: '', code: '', clientType: 'entreprise', siret: '', address: '', email: '', phone: '', contactName: '' });
   };
 
   return (
@@ -376,6 +378,23 @@ function ClientFormModal({ isOpen, onClose, onSave, client }: ClientFormModalPro
               placeholder="CLI001"
               required
             />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-primary-700 mb-1">
+              Type de client (barème appliqué à l'audit) *
+            </label>
+            <select
+              value={formData.clientType}
+              onChange={(e) => setFormData({ ...formData, clientType: e.target.value as ClientType })}
+              className="w-full rounded-lg border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 focus:border-accent-500 focus:outline-none"
+            >
+              {(Object.keys(CLIENT_TYPE_LABEL) as ClientType[]).map((ct) => (
+                <option key={ct} value={ct}>{CLIENT_TYPE_LABEL[ct]}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-primary-400">
+              Détermine si les relevés sont audités au barème particulier ou entreprise.
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-primary-700 mb-1">

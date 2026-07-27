@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardBody, Button, Badge } from '../../ui';
 import { formatCurrency, formatDate } from '../../../utils';
-import { Client, Bank } from '../../../types';
+import { Client, Bank, CLIENT_TYPE_LABEL } from '../../../types';
 
 interface InfoTabProps {
   client: Client;
@@ -57,6 +57,12 @@ export const InfoTab = memo(function InfoTab({
             <div>
               <p className="text-xs text-primary-500 uppercase mb-1">Forme juridique</p>
               <p className="font-medium text-primary-900">{client.legalForm || 'Non renseigne'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-primary-500 uppercase mb-1">Type (barème audit)</p>
+              <p className="font-medium text-primary-900">
+                {client.clientType ? CLIENT_TYPE_LABEL[client.clientType] : 'Non renseigné'}
+              </p>
             </div>
             <div>
               <p className="text-xs text-primary-500 uppercase mb-1">RCCM</p>
