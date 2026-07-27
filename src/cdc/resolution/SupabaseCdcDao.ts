@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import type { CdcDataAccess } from './ResolutionEngine';
 import type { ResolutionResult } from '../types';
+import { findApplicableAt } from './temporal';
 
 export class SupabaseCdcDao implements CdcDataAccess {
   constructor(private supabase: SupabaseClient) {}
@@ -222,6 +223,11 @@ export class SupabaseCdcDao implements CdcDataAccess {
   ): Promise<BankReferenceVersion | null> {
     const dateStr = referenceDate.toISOString().slice(0, 10);
 
+    // On récupère TOUTES les versions publiées ayant déjà démarré à la date de
+    // référence (pas de `.limit(1)` : la plus récente peut être clôturée alors
+    // qu'une version antérieure encore ouverte s'applique). Le modèle de
+    // succession — fin d'une version = début de la suivante — est ensuite
+    // appliqué en mémoire par `findApplicableAt`.
     const { data, error } = await this.supabase
       .schema('atlasbanx')
       .from('bank_reference_versions')
@@ -230,16 +236,12 @@ export class SupabaseCdcDao implements CdcDataAccess {
       .eq('validation_status', 'published')
       .is('superseded_by', null)
       .lte('effective_from', dateStr)
-      .order('effective_from', { ascending: false })
-      .limit(1);
+      .order('effective_from', { ascending: false });
 
     if (error) throw new Error(`Erreur requête bank_reference_versions: ${error.message}`);
 
-    const row = (data ?? []).find(
-      (r: any) => !r.effective_to || r.effective_to >= dateStr,
-    );
-
-    return row ? this.mapBankRefVersion(row) : null;
+    const versions = (data ?? []).map((r: any) => this.mapBankRefVersion(r));
+    return findApplicableAt(versions, referenceDate);
   }
 
   async findBankReferenceConditions(
