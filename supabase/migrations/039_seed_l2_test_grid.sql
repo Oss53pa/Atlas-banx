@@ -1,12 +1,12 @@
 -- ============================================================================
--- ATLASBANX — Migration 039 — Grille L2 de test (NSIA-CI)
+-- ATLASBANX — Migration 039 — Grille L2 de test (NSIACICI)
 -- ============================================================================
--- Seed d'une version de référence L2 PUBLIÉE pour NSIA-CI, avec des conditions
+-- Seed d'une version de référence L2 PUBLIÉE pour NSIACICI, avec des conditions
 -- différenciées par segment (particulier / corporate) + catch-all. Permet de
 -- valider de bout en bout la comparaison au barème officiel dans le funnel
 -- Particulier (public-bank-reference → l2ToBankConditions → runFullAudit).
 --
--- Idempotente : ne fait rien si une version publiée existe déjà pour NSIA-CI.
+-- Idempotente : ne fait rien si une version publiée existe déjà pour NSIACICI.
 -- ============================================================================
 
 DO $$
@@ -14,9 +14,9 @@ DECLARE
   v_bank uuid;
   v_ver  uuid;
 BEGIN
-  SELECT id INTO v_bank FROM atlasbanx.cdc_banks WHERE code = 'NSIA-CI';
+  SELECT id INTO v_bank FROM atlasbanx.cdc_banks WHERE code = 'NSIACICI';
   IF v_bank IS NULL THEN
-    RAISE NOTICE 'Banque NSIA-CI absente de cdc_banks — seed ignoré.';
+    RAISE NOTICE 'Banque NSIACICI absente de cdc_banks — seed ignoré.';
     RETURN;
   END IF;
 
@@ -24,7 +24,7 @@ BEGIN
     SELECT 1 FROM atlasbanx.bank_reference_versions
     WHERE bank_id = v_bank AND validation_status = 'published' AND superseded_by IS NULL
   ) THEN
-    RAISE NOTICE 'Version publiée déjà présente pour NSIA-CI — seed ignoré.';
+    RAISE NOTICE 'Version publiée déjà présente pour NSIACICI — seed ignoré.';
     RETURN;
   END IF;
 
