@@ -5,13 +5,17 @@
 // nombre de mois détectés) → paiement (CinetPay, simulé en sandbox) → AUDIT
 // COMPLET (le même moteur 19 détecteurs que l'offre Entreprise/Cabinet, via
 // runFullAudit) → rapport détaillé téléchargeable. Aucune donnée conservée.
+//
+// Mise en page : sidebar bleue (notice + progression) à gauche, contenu sur la
+// largeur restante. Titres en Grand Hotel (font-display), reste en Dosis
+// (font-sans).
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Download, ArrowRight,
-  ArrowLeft, ShieldCheck, Sparkles, Lock, Building2, RotateCcw,
+  ArrowLeft, ShieldCheck, Lock, Building2, RotateCcw,
 } from 'lucide-react';
 import { extractStatement } from '../../extraction/bank-statement';
 import { runFullAudit } from '../../services/audit/runFullAudit';
@@ -24,11 +28,11 @@ import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult, type BankCo
 
 type Step = 'import' | 'quote' | 'payment' | 'report';
 
-const STEPS: { id: Step; label: string }[] = [
-  { id: 'import', label: 'Relevé' },
-  { id: 'quote', label: 'Devis' },
-  { id: 'payment', label: 'Paiement' },
-  { id: 'report', label: 'Rapport' },
+const STEPS: { id: Step; label: string; hint: string }[] = [
+  { id: 'import', label: 'Votre relevé', hint: 'Importez votre PDF' },
+  { id: 'quote', label: 'Devis', hint: 'Forfait selon la durée' },
+  { id: 'payment', label: 'Paiement', hint: 'Mobile money sécurisé' },
+  { id: 'report', label: 'Rapport', hint: 'Audit complet détaillé' },
 ];
 
 function fmt(n: number): string {
@@ -63,9 +67,7 @@ export default function ExpressAuditPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetchPublicBankList().then((list) => {
-      if (!cancelled) setBanks(list);
-    });
+    void fetchPublicBankList().then((list) => { if (!cancelled) setBanks(list); });
     return () => { cancelled = true; };
   }, []);
 
@@ -112,23 +114,14 @@ export default function ExpressAuditPage() {
       const provider = getPaymentProvider();
       const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const init = await provider.initiate({
-        amount: plan.priceFcfa,
-        currency: 'XOF',
-        description: `Audit express — ${plan.label}`,
-        reference,
-        customerEmail: email || undefined,
-        customerPhone: phone || undefined,
+        amount: plan.priceFcfa, currency: 'XOF',
+        description: `Audit express — ${plan.label}`, reference,
+        customerEmail: email || undefined, customerPhone: phone || undefined,
       });
       setPaymentMode(init.mode);
-      if (init.redirectUrl) {
-        window.location.href = init.redirectUrl;
-        return;
-      }
+      if (init.redirectUrl) { window.location.href = init.redirectUrl; return; }
       const check = await provider.verify(init.transactionId);
-      if (check.status !== 'succeeded') {
-        setError('Paiement non confirmé. Réessayez.');
-        return;
-      }
+      if (check.status !== 'succeeded') { setError('Paiement non confirmé. Réessayez.'); return; }
       setStep('report');
       setAuditStep('Lancement de l\'audit…');
 
@@ -171,274 +164,279 @@ export default function ExpressAuditPage() {
 
   const reset = () => {
     setStep('import'); setError(null); setAudit(null); setPlan(null);
-    setTransactions([]); setBankCode(''); setEmail(''); setPhone('');
-    setUsedOfficialGrid(false);
+    setTransactions([]); setBankCode(''); setEmail(''); setPhone(''); setUsedOfficialGrid(false);
   };
 
   return (
-    <div className="min-h-screen bg-canvas-100">
-      {/* Top bar */}
-      <header className="border-b border-primary-100/70 bg-white/70 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-5">
-          <button onClick={() => navigate('/landing')} className="font-display text-2xl text-ink-900 leading-none">
+    <div className="min-h-screen flex bg-canvas-100 font-sans text-ink-800">
+      {/* ================= SIDEBAR BLEUE — notice + progression ================= */}
+      <aside className="hidden lg:flex w-80 flex-col justify-between bg-gradient-to-b from-ink-800 via-ink-900 to-ink-950 px-8 py-9 text-white">
+        <div>
+          <button onClick={() => navigate('/landing')} className="font-display text-3xl text-gradient-gold leading-none">
             AtlasBanx
           </button>
-          <button onClick={() => navigate('/landing')}
-            className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-800 transition-colors">
+          <p className="mt-8 font-display text-4xl leading-tight text-white">Audit express</p>
+          <p className="mt-2 text-sm leading-relaxed text-white/60">
+            Auditez votre relevé bancaire en quelques minutes, sans créer de compte.
+          </p>
+
+          {/* Progression verticale */}
+          <ol className="mt-9 space-y-1">
+            {STEPS.map((s, i) => {
+              const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo';
+              return (
+                <li key={s.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                      state === 'done' ? 'border-emerald-400 bg-emerald-400 text-ink-950'
+                      : state === 'current' ? 'border-accent-400 bg-accent-400 text-ink-950'
+                      : 'border-white/20 text-white/40'
+                    }`}>
+                      {state === 'done' ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+                    </span>
+                    {i < STEPS.length - 1 && <span className={`my-1 w-px flex-1 ${i < currentIndex ? 'bg-emerald-400/50' : 'bg-white/10'}`} />}
+                  </div>
+                  <div className="pb-4">
+                    <p className={`text-sm font-medium ${state === 'todo' ? 'text-white/40' : 'text-white'}`}>{s.label}</p>
+                    <p className="text-[11px] text-white/40">{s.hint}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        {/* Notice / réassurance */}
+        <div className="space-y-3">
+          <ul className="space-y-2.5">
+            {[
+              { icon: ShieldCheck, text: 'Audit complet — 19 détecteurs (frais, agios, dates de valeur)' },
+              { icon: Lock, text: 'Aucune donnée conservée — parcours éphémère' },
+              { icon: CheckCircle2, text: 'Sans création de compte · paiement mobile money' },
+            ].map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-start gap-2.5 text-[12px] text-white/55">
+                <Icon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-accent-300" />
+                <span>{text}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-white/10 pt-3 text-[10px] uppercase tracking-[0.18em] text-white/25">
+            © 2026 Atlas Studio · CEMAC &amp; UEMOA
+          </p>
+        </div>
+      </aside>
+
+      {/* ================= CONTENU (largeur restante) ================= */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Barre du haut (mobile + retour) */}
+        <header className="flex h-16 items-center justify-between border-b border-primary-100/70 bg-white/70 px-5 backdrop-blur lg:justify-end">
+          <button onClick={() => navigate('/landing')} className="font-display text-2xl text-ink-900 lg:hidden">AtlasBanx</button>
+          <button onClick={() => navigate('/landing')} className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-800">
             <ArrowLeft className="h-4 w-4" /> Accueil
           </button>
-        </div>
-      </header>
+        </header>
 
-      <main className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
-        {/* Hero */}
-        <div className="text-center animate-fade-in-up">
-          <span className="inline-flex items-center gap-2 rounded-pill border border-accent-200/70 bg-accent-50/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-700">
-            <Sparkles className="h-3.5 w-3.5" /> Audit express · sans compte
-          </span>
-          <h1 className="mt-4 font-serif text-4xl sm:text-5xl text-ink-900 tracking-tight">
-            Auditez votre relevé bancaire
-          </h1>
-          <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-500">
-            Importez votre relevé, réglez, et recevez un <span className="font-medium text-ink-800">rapport d'audit complet</span> —
-            frais indus, agios, dates de valeur. Aucune donnée conservée.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-ink-500">
-            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Sans création de compte</span>
-            <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-emerald-600" /> Données non conservées</span>
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Conforme OHADA</span>
-          </div>
-        </div>
-
-        {/* Stepper */}
-        <div className="mt-9 flex items-center justify-center">
+        {/* Stepper horizontal (mobile uniquement) */}
+        <div className="flex items-center justify-center gap-1 border-b border-primary-100/70 bg-white/40 px-4 py-3 lg:hidden">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex items-center">
-              <div className="flex flex-col items-center">
-                <div className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold transition-colors ${
-                  i < currentIndex ? 'border-emerald-500 bg-emerald-500 text-white'
-                  : i === currentIndex ? 'border-accent-500 bg-accent-500 text-white shadow-card'
-                  : 'border-primary-200 bg-white text-ink-400'
-                }`}>
-                  {i < currentIndex ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
-                </div>
-                <span className={`mt-1.5 text-[11px] font-medium ${i === currentIndex ? 'text-ink-900' : 'text-ink-400'}`}>{s.label}</span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div className={`mx-2 mb-5 h-px w-8 sm:w-14 ${i < currentIndex ? 'bg-emerald-400' : 'bg-primary-200'}`} />
-              )}
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+                i < currentIndex ? 'bg-emerald-500 text-white' : i === currentIndex ? 'bg-accent-500 text-white' : 'bg-primary-100 text-ink-400'
+              }`}>{i < currentIndex ? '✓' : i + 1}</span>
+              {i < STEPS.length - 1 && <span className={`mx-1 h-px w-5 ${i < currentIndex ? 'bg-emerald-400' : 'bg-primary-200'}`} />}
             </div>
           ))}
         </div>
 
-        {error && (
-          <div className="mt-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="flex-1 px-5 py-8 sm:px-10 sm:py-12">
+          <div className="mx-auto w-full max-w-3xl">
+            {/* Titre de section */}
+            <h1 className="font-display text-4xl sm:text-5xl text-ink-900 leading-tight">
+              {step === 'import' && 'Importez votre relevé'}
+              {step === 'quote' && 'Votre devis'}
+              {step === 'payment' && 'Paiement'}
+              {step === 'report' && (audit ? 'Votre rapport' : 'Audit en cours')}
+            </h1>
+            <p className="mt-1.5 text-[15px] text-ink-500">
+              {step === 'import' && 'Déposez votre relevé bancaire (PDF). L\'OCR gère les scans.'}
+              {step === 'quote' && 'Forfait déterminé automatiquement selon la durée détectée.'}
+              {step === 'payment' && 'Réglez pour lancer l\'audit complet de votre relevé.'}
+              {step === 'report' && (audit ? 'Frais indus, agios et dates de valeur analysés.' : 'Le moteur complet analyse vos transactions.')}
+            </p>
 
-        {/* ── Step: import ── */}
-        {step === 'import' && (
-          <div className="mt-7 animate-fade-in-up">
-            <div
-              onClick={() => !isBusy && fileRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault(); setDragOver(false);
-                if (!isBusy) void handleFile(e.dataTransfer.files?.[0] ?? null);
-              }}
-              className={`card cursor-pointer p-10 text-center transition-all ${
-                dragOver ? 'border-accent-400 bg-accent-50/40 shadow-card-hover' : 'hover:border-primary-200 hover:shadow-card-hover'
-              }`}
-            >
-              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-50 text-accent-600">
-                {isBusy ? <Loader2 className="h-7 w-7 animate-spin" /> : <UploadCloud className="h-7 w-7" />}
-              </span>
-              <p className="mt-4 text-lg font-semibold text-ink-900">
-                {isBusy ? 'Analyse de votre relevé…' : 'Déposez votre relevé bancaire'}
-              </p>
-              <p className="mt-1 text-sm text-ink-500">
-                {isBusy ? 'Extraction des transactions (OCR inclus).' : 'Glissez votre PDF ici, ou cliquez pour parcourir.'}
-              </p>
-              {!isBusy && (
-                <span className="btn btn-primary btn-lg mt-6 pointer-events-none">
-                  <FileText className="h-4 w-4" /> Choisir un PDF
-                </span>
-              )}
-              <p className="mt-4 text-[11px] text-ink-400">Format PDF · relevé bancaire · OCR pour les scans</p>
-              <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="hidden"
-                onChange={(e) => { void handleFile(e.target.files?.[0] ?? null); e.target.value = ''; }} />
-            </div>
-          </div>
-        )}
-
-        {/* ── Step: quote ── */}
-        {step === 'quote' && plan && (
-          <div className="mt-7 space-y-4 animate-fade-in-up">
-            {/* Price hero */}
-            <div className="card overflow-hidden">
-              <div className="flex flex-col gap-4 bg-gradient-to-br from-ink-800 to-ink-950 p-6 text-white sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-white/50">Période détectée</p>
-                  <p className="mt-1 text-xl font-semibold">{fmtDate(periodStart)} → {fmtDate(periodEnd)}</p>
-                  <p className="mt-0.5 text-sm text-white/50">{months} mois · {transactions.length} transactions</p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <p className="text-xs uppercase tracking-wide text-white/50">{plan.label}</p>
-                  <p className="font-display text-4xl text-gradient-gold leading-none">{fmt(plan.priceFcfa)}</p>
-                  <p className="text-sm text-white/50">FCFA · paiement unique</p>
-                </div>
+            {error && (
+              <div className="mt-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>{error}</span>
               </div>
-            </div>
+            )}
 
-            <div className="card space-y-5 p-6">
-              <div>
-                <label className="label">Type de relevé</label>
-                <div className="mt-1 grid grid-cols-3 gap-2">
-                  {([
-                    { v: 'particulier', label: 'Particulier' },
-                    { v: 'pme', label: 'PME' },
-                    { v: 'corporate', label: 'Entreprise' },
-                  ] as const).map((opt) => (
-                    <button key={opt.v} type="button" onClick={() => setSegment(opt.v)}
-                      className={`rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-all ${
-                        segment === opt.v ? 'border-ink-900 bg-canvas-100 text-ink-900 shadow-card' : 'border-primary-200 text-ink-500 hover:border-primary-300'
-                      }`}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Votre banque <span className="font-normal text-ink-400">— compare au barème officiel (optionnel)</span></label>
-                <select value={bankCode} onChange={(e) => setBankCode(e.target.value)} className="input mt-1">
-                  <option value="">— Sans barème (audit sur les seules transactions) —</option>
-                  {banks.map((b) => (
-                    <option key={b.code} value={b.code}>{b.legal_name} ({b.country_iso})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="label">Email <span className="font-normal text-ink-400">(réception du rapport)</span></label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vous@email.com" className="input mt-1" />
-                </div>
-                <div>
-                  <label className="label">Téléphone <span className="font-normal text-ink-400">(mobile money)</span></label>
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+225 …" className="input mt-1" />
-                </div>
-              </div>
-
-              <button onClick={() => setStep('payment')} className="btn btn-primary btn-lg w-full">
-                Continuer vers le paiement <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Step: payment ── */}
-        {step === 'payment' && plan && (
-          <div className="mt-7 animate-fade-in-up">
-            <div className="card space-y-5 p-6 text-center">
-              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-50 text-accent-600">
-                <Building2 className="h-6 w-6" />
-              </span>
-              <div>
-                <p className="text-sm text-ink-500">Montant à régler</p>
-                <p className="font-display text-4xl text-ink-900">{fmt(plan.priceFcfa)} <span className="text-2xl text-ink-400">FCFA</span></p>
-                <p className="mt-1 text-sm text-ink-500">{plan.label} · paiement mobile money (CinetPay)</p>
-              </div>
-              <button onClick={pay} disabled={isBusy} className="btn btn-accent btn-lg w-full">
-                {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Traitement…</> : <><CheckCircle2 className="h-4 w-4" /> Payer et lancer l'audit</>}
-              </button>
-              <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
-                <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Paiement sécurisé</span>
-                <button onClick={() => setStep('quote')} className="hover:text-ink-700">← Modifier</button>
-              </div>
-              <p className="text-[11px] text-ink-400">
-                Sans clés marchandes configurées, le paiement est simulé (aucun débit).
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Step: report ── */}
-        {step === 'report' && (
-          <div className="mt-7 animate-fade-in-up">
-            {!audit ? (
-              <div className="card flex flex-col items-center gap-3 p-12 text-center">
-                <Loader2 className="h-8 w-8 animate-spin text-accent-600" />
-                <p className="font-medium text-ink-800">{auditStep || 'Audit en cours…'}</p>
-                <p className="text-sm text-ink-500">Analyse par le moteur complet (19 détecteurs).</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="card flex items-center gap-3 border-emerald-200 bg-emerald-50/60 p-4">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <CheckCircle2 className="h-5 w-5" />
+            {/* ── Step: import ── */}
+            {step === 'import' && (
+              <div className="mt-7 animate-fade-in-up">
+                <div
+                  onClick={() => !isBusy && fileRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!isBusy) void handleFile(e.dataTransfer.files?.[0] ?? null); }}
+                  className={`card cursor-pointer p-12 text-center transition-all ${
+                    dragOver ? 'border-accent-400 bg-accent-50/40 shadow-card-hover' : 'hover:border-primary-200 hover:shadow-card-hover'
+                  }`}
+                >
+                  <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-50 text-accent-600">
+                    {isBusy ? <Loader2 className="h-7 w-7 animate-spin" /> : <UploadCloud className="h-7 w-7" />}
                   </span>
-                  <div>
-                    <p className="font-semibold text-ink-900">Audit terminé{paymentMode === 'sandbox' ? ' (paiement simulé)' : ''}</p>
-                    <p className="text-sm text-ink-500">{fmtDate(periodStart)} → {fmtDate(periodEnd)} · {months} mois</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <StatTile label="Transactions" value={String(audit.statistics.totalTransactions)} />
-                  <StatTile label="Anomalies" value={String(audit.statistics.totalAnomalies)} tone={audit.statistics.totalAnomalies > 0 ? 'warn' : 'ok'} />
-                  <StatTile label="Récupérable" value={`${fmt(audit.statistics.totalAnomalyAmount)}`} sub="FCFA" tone="gold" />
-                </div>
-
-                {audit.summary && (
-                  <div className="card p-5">
-                    <div className="flex items-center gap-2">
-                      <span className={`badge ${audit.summary.status === 'CRITICAL' ? 'bg-red-100 text-red-700' : audit.summary.status === 'WARNING' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                        {audit.summary.status}
-                      </span>
-                      <p className="text-sm text-ink-700">{audit.summary.message}</p>
-                    </div>
-                    <p className="mt-3 text-[11px] text-ink-400">
-                      {usedOfficialGrid
-                        ? '✓ Comparé au barème officiel de votre banque (référentiel L2).'
-                        : 'Audit sur les seules transactions (aucun barème officiel sélectionné ou disponible).'}
-                    </p>
-                  </div>
-                )}
-
-                {audit.anomalies.length > 0 && (
-                  <div className="card p-5">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-400">Anomalies détectées</p>
-                    <ul className="divide-y divide-primary-100">
-                      {audit.anomalies.slice(0, 10).map((a) => (
-                        <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                          <span className="text-ink-700">{ANOMALY_TYPE_LABELS[a.type] ?? a.type}</span>
-                          <span className="font-semibold text-accent-700">{fmt(a.amount)} FCFA</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {audit.anomalies.length > 10 && (
-                      <p className="mt-2 text-xs text-ink-400">+ {audit.anomalies.length - 10} autres dans le rapport complet.</p>
-                    )}
-                  </div>
-                )}
-
-                <button onClick={downloadReport} className="btn btn-primary btn-lg w-full">
-                  <Download className="h-4 w-4" /> Télécharger le rapport complet
-                </button>
-                <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
-                  <button onClick={reset} className="inline-flex items-center gap-1 hover:text-ink-700">
-                    <RotateCcw className="h-3 w-3" /> Nouvel audit
-                  </button>
-                  <span>· Vos données ne sont pas conservées</span>
+                  <p className="mt-4 text-lg font-semibold text-ink-900">
+                    {isBusy ? 'Analyse de votre relevé…' : 'Glissez votre relevé PDF ici'}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-500">{isBusy ? 'Extraction des transactions (OCR inclus).' : 'ou cliquez pour parcourir vos fichiers.'}</p>
+                  {!isBusy && <span className="btn btn-primary btn-lg mt-6 pointer-events-none"><FileText className="h-4 w-4" /> Choisir un PDF</span>}
+                  <p className="mt-4 text-[11px] text-ink-400">Format PDF · relevé bancaire · OCR pour les scans</p>
+                  <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="hidden"
+                    onChange={(e) => { void handleFile(e.target.files?.[0] ?? null); e.target.value = ''; }} />
                 </div>
               </div>
             )}
+
+            {/* ── Step: quote ── */}
+            {step === 'quote' && plan && (
+              <div className="mt-7 space-y-4 animate-fade-in-up">
+                <div className="card overflow-hidden">
+                  <div className="flex flex-col gap-4 bg-gradient-to-br from-ink-800 to-ink-950 p-6 text-white sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-white/50">Période détectée</p>
+                      <p className="mt-1 text-xl font-semibold">{fmtDate(periodStart)} → {fmtDate(periodEnd)}</p>
+                      <p className="mt-0.5 text-sm text-white/50">{months} mois · {transactions.length} transactions</p>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <p className="text-xs uppercase tracking-wide text-white/50">{plan.label}</p>
+                      <p className="font-display text-4xl text-gradient-gold leading-none">{fmt(plan.priceFcfa)}</p>
+                      <p className="text-sm text-white/50">FCFA · paiement unique</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card space-y-5 p-6">
+                  <div>
+                    <label className="label">Type de relevé</label>
+                    <div className="mt-1 grid grid-cols-3 gap-2">
+                      {([
+                        { v: 'particulier', label: 'Particulier' },
+                        { v: 'pme', label: 'PME' },
+                        { v: 'corporate', label: 'Entreprise' },
+                      ] as const).map((opt) => (
+                        <button key={opt.v} type="button" onClick={() => setSegment(opt.v)}
+                          className={`rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-all ${
+                            segment === opt.v ? 'border-ink-900 bg-canvas-100 text-ink-900 shadow-card' : 'border-primary-200 text-ink-500 hover:border-primary-300'
+                          }`}>{opt.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Votre banque <span className="font-normal text-ink-400">— compare au barème officiel (optionnel)</span></label>
+                    <select value={bankCode} onChange={(e) => setBankCode(e.target.value)} className="input mt-1">
+                      <option value="">— Sans barème (audit sur les seules transactions) —</option>
+                      {banks.map((b) => <option key={b.code} value={b.code}>{b.legal_name} ({b.country_iso})</option>)}
+                    </select>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="label">Email <span className="font-normal text-ink-400">(réception du rapport)</span></label>
+                      <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vous@email.com" className="input mt-1" />
+                    </div>
+                    <div>
+                      <label className="label">Téléphone <span className="font-normal text-ink-400">(mobile money)</span></label>
+                      <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+225 …" className="input mt-1" />
+                    </div>
+                  </div>
+                  <button onClick={() => setStep('payment')} className="btn btn-primary btn-lg w-full">
+                    Continuer vers le paiement <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step: payment ── */}
+            {step === 'payment' && plan && (
+              <div className="mt-7 animate-fade-in-up">
+                <div className="card space-y-5 p-8 text-center">
+                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-50 text-accent-600"><Building2 className="h-6 w-6" /></span>
+                  <div>
+                    <p className="text-sm text-ink-500">Montant à régler</p>
+                    <p className="font-display text-5xl text-ink-900">{fmt(plan.priceFcfa)} <span className="text-2xl text-ink-400">FCFA</span></p>
+                    <p className="mt-1 text-sm text-ink-500">{plan.label} · paiement mobile money (CinetPay)</p>
+                  </div>
+                  <button onClick={pay} disabled={isBusy} className="btn btn-accent btn-lg w-full">
+                    {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Traitement…</> : <><CheckCircle2 className="h-4 w-4" /> Payer et lancer l'audit</>}
+                  </button>
+                  <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
+                    <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Paiement sécurisé</span>
+                    <button onClick={() => setStep('quote')} className="hover:text-ink-700">← Modifier</button>
+                  </div>
+                  <p className="text-[11px] text-ink-400">Sans clés marchandes configurées, le paiement est simulé (aucun débit).</p>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step: report ── */}
+            {step === 'report' && (
+              <div className="mt-7 animate-fade-in-up">
+                {!audit ? (
+                  <div className="card flex flex-col items-center gap-3 p-12 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-accent-600" />
+                    <p className="font-medium text-ink-800">{auditStep || 'Audit en cours…'}</p>
+                    <p className="text-sm text-ink-500">Analyse par le moteur complet (19 détecteurs).</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="card flex items-center gap-3 border-emerald-200 bg-emerald-50/60 p-4">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-5 w-5" /></span>
+                      <div>
+                        <p className="font-semibold text-ink-900">Audit terminé{paymentMode === 'sandbox' ? ' (paiement simulé)' : ''}</p>
+                        <p className="text-sm text-ink-500">{fmtDate(periodStart)} → {fmtDate(periodEnd)} · {months} mois</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <StatTile label="Transactions" value={String(audit.statistics.totalTransactions)} />
+                      <StatTile label="Anomalies" value={String(audit.statistics.totalAnomalies)} tone={audit.statistics.totalAnomalies > 0 ? 'warn' : 'ok'} />
+                      <StatTile label="Récupérable" value={fmt(audit.statistics.totalAnomalyAmount)} sub="FCFA" tone="gold" />
+                    </div>
+                    {audit.summary && (
+                      <div className="card p-5">
+                        <div className="flex items-center gap-2">
+                          <span className={`badge ${audit.summary.status === 'CRITICAL' ? 'bg-red-100 text-red-700' : audit.summary.status === 'WARNING' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{audit.summary.status}</span>
+                          <p className="text-sm text-ink-700">{audit.summary.message}</p>
+                        </div>
+                        <p className="mt-3 text-[11px] text-ink-400">
+                          {usedOfficialGrid ? '✓ Comparé au barème officiel de votre banque (référentiel L2).' : 'Audit sur les seules transactions (aucun barème officiel sélectionné ou disponible).'}
+                        </p>
+                      </div>
+                    )}
+                    {audit.anomalies.length > 0 && (
+                      <div className="card p-5">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-400">Anomalies détectées</p>
+                        <ul className="divide-y divide-primary-100">
+                          {audit.anomalies.slice(0, 10).map((a) => (
+                            <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                              <span className="text-ink-700">{ANOMALY_TYPE_LABELS[a.type] ?? a.type}</span>
+                              <span className="font-semibold text-accent-700">{fmt(a.amount)} FCFA</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {audit.anomalies.length > 10 && <p className="mt-2 text-xs text-ink-400">+ {audit.anomalies.length - 10} autres dans le rapport complet.</p>}
+                      </div>
+                    )}
+                    <button onClick={downloadReport} className="btn btn-primary btn-lg w-full"><Download className="h-4 w-4" /> Télécharger le rapport complet</button>
+                    <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
+                      <button onClick={reset} className="inline-flex items-center gap-1 hover:text-ink-700"><RotateCcw className="h-3 w-3" /> Nouvel audit</button>
+                      <span>· Vos données ne sont pas conservées</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </main>
     </div>
   );
