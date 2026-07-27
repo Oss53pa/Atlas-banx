@@ -23,10 +23,36 @@ import { countAuditedMonths, planForMonths, type AuditPlan } from '../../billing
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
-import { fetchPublicBankReference, fetchPublicBankList, type PublicBankListItem } from '../../services/publicBankReference';
-import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
+import { fetchPublicBankReference, fetchPublicBankList } from '../../services/publicBankReference';
+import { DEFAULT_BANKS } from '../../store/bankStore';
+import { ANOMALY_TYPE_LABELS, AFRICAN_COUNTRIES, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
 type Step = 'import' | 'quote' | 'payment' | 'report';
+
+// Catalogue complet des banques (CEMAC + UEMOA), groupé par zone puis par pays,
+// pour l'affichage en <optgroup>. Le funnel express doit permettre de choisir
+// N'IMPORTE quelle banque des deux régions — pas seulement celles dont le
+// barème officiel L2 est déjà publié.
+const BANKS_BY_ZONE: { zone: 'CEMAC' | 'UEMOA'; countries: { iso: string; name: string; banks: typeof DEFAULT_BANKS }[] }[] = (() => {
+  const zones: ('CEMAC' | 'UEMOA')[] = ['UEMOA', 'CEMAC'];
+  return zones.map((zone) => {
+    const inZone = DEFAULT_BANKS.filter((b) => b.zone === zone);
+    const byCountry = new Map<string, typeof DEFAULT_BANKS>();
+    for (const b of inZone) {
+      const list = byCountry.get(b.country) ?? [];
+      list.push(b);
+      byCountry.set(b.country, list);
+    }
+    const countries = Array.from(byCountry.entries())
+      .map(([iso, banks]) => ({
+        iso,
+        name: AFRICAN_COUNTRIES[iso] ?? iso,
+        banks: banks.slice().sort((a, b) => a.name.localeCompare(b.name, 'fr')),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return { zone, countries };
+  });
+})();
 
 const STEPS: { id: Step; label: string; hint: string }[] = [
   { id: 'import', label: 'Votre relevé', hint: 'Importez votre PDF' },
@@ -59,7 +85,9 @@ export default function ExpressAuditPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [bankCode, setBankCode] = useState('');
-  const [banks, setBanks] = useState<PublicBankListItem[]>([]);
+  // Codes des banques dont le barème officiel L2 est publié — sert à annoter
+  // le catalogue (« barème officiel disponible ») sans restreindre le choix.
+  const [officialGridCodes, setOfficialGridCodes] = useState<Set<string>>(new Set());
   const [segment, setSegment] = useState<'particulier' | 'pme' | 'corporate'>('particulier');
   const [usedOfficialGrid, setUsedOfficialGrid] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
@@ -67,7 +95,9 @@ export default function ExpressAuditPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetchPublicBankList().then((list) => { if (!cancelled) setBanks(list); });
+    void fetchPublicBankList().then((list) => {
+      if (!cancelled) setOfficialGridCodes(new Set(list.map((b) => b.code)));
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -333,11 +363,24 @@ export default function ExpressAuditPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="label">Votre banque <span className="font-normal text-ink-400">— compare au barème officiel (optionnel)</span></label>
+                    <label className="label">Votre banque <span className="font-normal text-ink-400">— CEMAC &amp; UEMOA · compare au barème officiel si disponible (optionnel)</span></label>
                     <select value={bankCode} onChange={(e) => setBankCode(e.target.value)} className="input mt-1">
                       <option value="">— Sans barème (audit sur les seules transactions) —</option>
-                      {banks.map((b) => <option key={b.code} value={b.code}>{b.legal_name} ({b.country_iso})</option>)}
+                      {BANKS_BY_ZONE.map((z) =>
+                        z.countries.map((c) => (
+                          <optgroup key={`${z.zone}-${c.iso}`} label={`${z.zone} · ${c.name}`}>
+                            {c.banks.map((b) => (
+                              <option key={b.code} value={b.code}>
+                                {b.name}{officialGridCodes.has(b.code) ? '  ✓ barème officiel' : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )),
+                      )}
                     </select>
+                    <p className="mt-1.5 text-[11px] text-ink-400">
+                      {DEFAULT_BANKS.length} banques référencées (CEMAC + UEMOA). Les banques marquées «&nbsp;✓ barème officiel&nbsp;» sont comparées au tarif publié ; les autres sont auditées sur les seules transactions.
+                    </p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
