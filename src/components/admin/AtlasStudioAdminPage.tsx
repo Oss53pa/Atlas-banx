@@ -19,9 +19,12 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Landmark, BarChart3 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { BanksPage } from '../banks';
+import { ConditionsIntelligencePage } from '../conditions-intelligence';
+
+type AdminView = 'import' | 'benchmark';
 
 export default function AtlasStudioAdminPage() {
   const navigate = useNavigate();
@@ -38,6 +41,7 @@ export default function AtlasStudioAdminPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [view, setView] = useState<AdminView>('import');
 
   const isAdmin = profile?.role === 'admin';
   const authed = isAuthenticated || isDemoMode;
@@ -73,6 +77,25 @@ export default function AtlasStudioAdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Bascule Import ↔ Benchmark */}
+              <nav className="mr-1 flex rounded-lg bg-primary-100 p-0.5">
+                <button
+                  onClick={() => setView('import')}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    view === 'import' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-800'
+                  }`}
+                >
+                  <Landmark className="h-3.5 w-3.5" /> Import
+                </button>
+                <button
+                  onClick={() => setView('benchmark')}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    view === 'benchmark' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-800'
+                  }`}
+                >
+                  <BarChart3 className="h-3.5 w-3.5" /> Benchmark
+                </button>
+              </nav>
               <button
                 onClick={() => navigate('/')}
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-primary-500 hover:bg-primary-100 hover:text-primary-800"
@@ -87,17 +110,26 @@ export default function AtlasStudioAdminPage() {
               </button>
             </div>
           </div>
-          {/* Rappel de périmètre */}
+          {/* Rappel de périmètre — dépend de la vue */}
           <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-1.5 text-center text-[11px] text-amber-800 sm:px-6">
-            Référentiel <strong>L2 mutualisé</strong> — partagé par tous les clients. Ouvrez une
-            banque, complétez les rubriques (ou importez le PDF), puis publiez via l'onglet
-            <strong> « Validation IA »</strong> (workflow deux yeux).
+            {view === 'import' ? (
+              <>
+                Référentiel <strong>L2 mutualisé</strong> — partagé par tous les clients. Ouvrez une
+                banque, complétez les rubriques (ou importez le PDF), puis publiez via l'onglet
+                <strong> « Validation IA »</strong> (workflow deux yeux).
+              </>
+            ) : (
+              <>
+                <strong>Benchmark inter-banques</strong> — classement par quartile et par rubrique,
+                comparaison zonale CEMAC/UEMOA, évolution et alertes de dérive sur les barèmes importés.
+              </>
+            )}
           </div>
         </header>
 
-        {/* Interface bancaire complète réutilisée telle quelle */}
+        {/* Vue active : import (interface bancaire complète) ou benchmark */}
         <main className="px-3 py-4 sm:px-6">
-          <BanksPage />
+          {view === 'import' ? <BanksPage /> : <ConditionsIntelligencePage />}
         </main>
       </div>
     );
