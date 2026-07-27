@@ -271,6 +271,22 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* Entrée Particulier — audit d'un relevé sans création de compte */}
+              <div className="mt-6 rounded-xl border border-accent-200/70 bg-accent-50/40 p-4">
+                <p className="text-sm font-semibold text-ink-900">Vous êtes un particulier ?</p>
+                <p className="mt-1 text-[13px] text-ink-500">
+                  Auditez votre relevé bancaire <span className="font-medium text-ink-700">sans créer de compte</span> :
+                  importez, payez, obtenez votre rapport.
+                </p>
+                <button
+                  onClick={() => navigate('/audit-express')}
+                  className="btn btn-accent w-full mt-3 py-3 text-sm tracking-tight"
+                >
+                  Auditer mon relevé
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </>
           )}
 

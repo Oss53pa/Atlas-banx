@@ -48,7 +48,7 @@ export function LandingPage() {
         <div className="absolute bottom-0 left-1/3 h-[480px] w-[480px] rounded-full bg-accent-100/40 blur-3xl" />
       </div>
 
-      <Nav scrolled={scrolled} onCta={goToApp} />
+      <Nav scrolled={scrolled} onCta={goToApp} onExpress={() => navigate('/audit-express')} />
 
       <main>
         <Hero onCta={goToApp} onExpress={() => navigate('/audit-express')} />
@@ -71,7 +71,7 @@ export function LandingPage() {
 /* ============================================================================
    NAV
    ============================================================================ */
-function Nav({ scrolled, onCta }: { scrolled: boolean; onCta: () => void }) {
+function Nav({ scrolled, onCta, onExpress }: { scrolled: boolean; onCta: () => void; onExpress: () => void }) {
   return (
     <nav
       className={`sticky top-0 z-40 transition-all duration-300 ease-premium ${
@@ -102,6 +102,12 @@ function Nav({ scrolled, onCta }: { scrolled: boolean; onCta: () => void }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={onExpress}
+            className="hidden sm:inline-flex text-sm font-medium text-ink-700 hover:text-ink-900 px-3 py-2 rounded-lg hover:bg-canvas-200/60 transition-colors"
+          >
+            Particulier
+          </button>
           <button
             onClick={onCta}
             className="hidden sm:inline-flex text-sm font-medium text-ink-700 hover:text-ink-900 px-3 py-2 rounded-lg hover:bg-canvas-200/60 transition-colors"
