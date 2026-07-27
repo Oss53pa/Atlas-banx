@@ -331,37 +331,22 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   },
 
   setAccountType: async (accountType) => {
-    const { profile, user, isDemoMode } = get();
+    // Le type de compte est fixé à la souscription et verrouillé côté base
+    // (trigger prevent_role_self_escalation : un non-admin ne peut plus le
+    // modifier). On conserve la signature pour compat, mais on n'exécute plus
+    // de changement libre : en démo on tolère un ajustement local, sinon no-op.
+    const { profile, isDemoMode } = get();
 
-    // Optimistically update local profile
-    if (profile) {
-      set({ profile: { ...profile, account_type: accountType } });
-    }
-
-    // Demo mode: local-only change
     if (isDemoMode) {
+      if (profile) set({ profile: { ...profile, account_type: accountType } });
       return true;
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase || !user) return true;
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ account_type: accountType } as never)
-        .eq('id', user.id);
-
-      if (error) {
-        // Rollback on failure — merge into single set() call
-        set({ profile: profile ?? get().profile, error: error.message });
-        return false;
-      }
-      return true;
-    } catch (err) {
-      set({ profile: profile ?? get().profile, error: err instanceof Error ? err.message : 'Erreur de mise à jour du type de compte' });
-      return false;
-    }
+    console.warn(
+      '[authStore] setAccountType ignoré : le type de compte suit le plan souscrit '
+      + 'et n\'est pas modifiable librement (verrou base).',
+    );
+    return false;
   },
 
   loadProfile: async () => {
