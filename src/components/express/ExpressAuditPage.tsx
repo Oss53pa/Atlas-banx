@@ -23,10 +23,36 @@ import { countAuditedMonths, planForMonths, type AuditPlan } from '../../billing
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
-import { fetchPublicBankReference, fetchPublicBankList, type PublicBankListItem } from '../../services/publicBankReference';
-import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
+import { fetchPublicBankReference, fetchPublicBankList } from '../../services/publicBankReference';
+import { DEFAULT_BANKS } from '../../store/bankStore';
+import { ANOMALY_TYPE_LABELS, AFRICAN_COUNTRIES, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
 type Step = 'import' | 'quote' | 'payment' | 'report';
+
+// Catalogue complet des banques (CEMAC + UEMOA), groupé par zone puis par pays,
+// pour l'affichage en <optgroup>. Le funnel express doit permettre de choisir
+// N'IMPORTE quelle banque des deux régions — pas seulement celles dont le
+// barème officiel L2 est déjà publié.
+const BANKS_BY_ZONE: { zone: 'CEMAC' | 'UEMOA'; countries: { iso: string; name: string; banks: typeof DEFAULT_BANKS }[] }[] = (() => {
+  const zones: ('CEMAC' | 'UEMOA')[] = ['UEMOA', 'CEMAC'];
+  return zones.map((zone) => {
+    const inZone = DEFAULT_BANKS.filter((b) => b.zone === zone);
+    const byCountry = new Map<string, typeof DEFAULT_BANKS>();
+    for (const b of inZone) {
+      const list = byCountry.get(b.country) ?? [];
+      list.push(b);
+      byCountry.set(b.country, list);
+    }
+    const countries = Array.from(byCountry.entries())
+      .map(([iso, banks]) => ({
+        iso,
+        name: AFRICAN_COUNTRIES[iso] ?? iso,
+        banks: banks.slice().sort((a, b) => a.name.localeCompare(b.name, 'fr')),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return { zone, countries };
+  });
+})();
 
 const STEPS: { id: Step; label: string; hint: string }[] = [
   { id: 'import', label: 'Votre relevé', hint: 'Importez votre PDF' },
@@ -59,7 +85,9 @@ export default function ExpressAuditPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [bankCode, setBankCode] = useState('');
-  const [banks, setBanks] = useState<PublicBankListItem[]>([]);
+  // Codes des banques dont le barème officiel L2 est publié — sert à annoter
+  // le catalogue (« barème officiel disponible ») sans restreindre le choix.
+  const [officialGridCodes, setOfficialGridCodes] = useState<Set<string>>(new Set());
   const [segment, setSegment] = useState<'particulier' | 'pme' | 'corporate'>('particulier');
   const [usedOfficialGrid, setUsedOfficialGrid] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
@@ -67,7 +95,9 @@ export default function ExpressAuditPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetchPublicBankList().then((list) => { if (!cancelled) setBanks(list); });
+    void fetchPublicBankList().then((list) => {
+      if (!cancelled) setOfficialGridCodes(new Set(list.map((b) => b.code)));
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -227,20 +257,29 @@ export default function ExpressAuditPage() {
           </button>
         </header>
 
-        {/* Stepper horizontal (progression des étapes) */}
-        <div className="flex items-center justify-center gap-1 border-b border-primary-100/70 bg-white/40 px-4 py-3">
-          {STEPS.map((s, i) => (
-            <div key={s.id} className="flex items-center">
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                i < currentIndex ? 'bg-emerald-500 text-white' : i === currentIndex ? 'bg-accent-500 text-white' : 'bg-primary-100 text-ink-400'
-              }`}>{i < currentIndex ? '✓' : i + 1}</span>
-              {i < STEPS.length - 1 && <span className={`mx-1 h-px w-5 ${i < currentIndex ? 'bg-emerald-400' : 'bg-primary-200'}`} />}
-            </div>
-          ))}
+        {/* Stepper horizontal (progression des étapes) — étapes nommées */}
+        <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-2 border-b border-primary-100/70 bg-white/40 px-4 py-3">
+          {STEPS.map((s, i) => {
+            const done = i < currentIndex;
+            const active = i === currentIndex;
+            return (
+              <div key={s.id} className="flex items-center">
+                <div className="flex items-center gap-2">
+                  <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                    done ? 'bg-emerald-500 text-white' : active ? 'bg-accent-500 text-white' : 'bg-primary-100 text-ink-400'
+                  }`}>{done ? '✓' : i + 1}</span>
+                  <span className={`text-xs font-medium sm:text-[13px] ${
+                    done ? 'text-emerald-700' : active ? 'text-ink-900' : 'text-ink-400'
+                  }`}>{s.label}</span>
+                </div>
+                {i < STEPS.length - 1 && <span className={`mx-2 hidden h-px w-6 sm:block lg:w-10 ${done ? 'bg-emerald-400' : 'bg-primary-200'}`} />}
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex-1 px-5 py-8 sm:px-10 sm:py-12">
-          <div className="mx-auto w-full max-w-4xl">
+          <div className="w-full">
             {/* Titre de section */}
             <h1 className="font-display text-4xl sm:text-5xl text-ink-900 leading-tight">
               {step === 'import' && 'Importez votre relevé'}
@@ -324,11 +363,24 @@ export default function ExpressAuditPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="label">Votre banque <span className="font-normal text-ink-400">— compare au barème officiel (optionnel)</span></label>
+                    <label className="label">Votre banque <span className="font-normal text-ink-400">— CEMAC &amp; UEMOA · compare au barème officiel si disponible (optionnel)</span></label>
                     <select value={bankCode} onChange={(e) => setBankCode(e.target.value)} className="input mt-1">
                       <option value="">— Sans barème (audit sur les seules transactions) —</option>
-                      {banks.map((b) => <option key={b.code} value={b.code}>{b.legal_name} ({b.country_iso})</option>)}
+                      {BANKS_BY_ZONE.map((z) =>
+                        z.countries.map((c) => (
+                          <optgroup key={`${z.zone}-${c.iso}`} label={`${z.zone} · ${c.name}`}>
+                            {c.banks.map((b) => (
+                              <option key={b.code} value={b.code}>
+                                {b.name}{officialGridCodes.has(b.code) ? '  ✓ barème officiel' : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )),
+                      )}
                     </select>
+                    <p className="mt-1.5 text-[11px] text-ink-400">
+                      {DEFAULT_BANKS.length} banques référencées (CEMAC + UEMOA). Les banques marquées «&nbsp;✓ barème officiel&nbsp;» sont comparées au tarif publié ; les autres sont auditées sur les seules transactions.
+                    </p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>

@@ -34,6 +34,24 @@ async function fetchPdfAsFile(pdfUrl: string, name: string): Promise<File> {
   });
 }
 
+// Zone monétaire déduite du pays — nécessaire pour l'auto-création de la
+// banque dans le référentiel CDC (cdc_banks) si son code n'y existe pas encore.
+function resolveZone(bank: Bank): 'UEMOA' | 'CEMAC' {
+  if (bank.zone === 'UEMOA' || bank.zone === 'CEMAC') return bank.zone;
+  const uemoa = ['BJ', 'BF', 'CI', 'GW', 'ML', 'NE', 'SN', 'TG'];
+  return uemoa.includes(bank.country) ? 'UEMOA' : 'CEMAC';
+}
+
+// Segment tarifaire du référentiel L2 mutualisé (taxonomie CDC). Distingue
+// l'import des conditions particuliers / PME / entreprises demandé côté admin.
+type Segment = '' | 'particulier' | 'pme' | 'corporate';
+const SEGMENTS: { value: Segment; label: string }[] = [
+  { value: '', label: 'Tous' },
+  { value: 'particulier', label: 'Particuliers' },
+  { value: 'pme', label: 'PME' },
+  { value: 'corporate', label: 'Entreprises' },
+];
+
 type SubmitState =
   | { status: 'idle' }
   | { status: 'submitting' }
@@ -60,6 +78,7 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
 
   const [fields, setFields] = useState<ExtractedField[]>([]);
   const [activeFieldId, setActiveFieldId] = useState<string | undefined>();
+  const [segment, setSegment] = useState<Segment>('');
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [extractionState, setExtractionState] = useState<ExtractionState>({ status: 'idle' });
 
@@ -129,6 +148,12 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
         bankCode: bank.code,
         pdfUrl,
         fields,
+        segment: segment || undefined,
+        bankMeta: {
+          legalName: bank.name,
+          countryIso: bank.country,
+          zone: resolveZone(bank),
+        },
       });
       setSubmitState({ status: 'success', conditionsCount: result.conditionsCount });
     } catch (err) {
@@ -141,9 +166,31 @@ export function ValidationTabContent({ bank, archivedDocuments }: ValidationTabC
 
   return (
     <div className="h-[600px] -mx-6 -my-4">
-      <div className="px-4 py-2 border-b border-canvas-200 bg-canvas-50 text-xs text-ink-500">
-        Document : <span className="font-mono text-ink-700">{document.name}</span>
-        {' · '}Banque : <span className="font-semibold text-ink-700">{bank.name}</span>
+      <div className="px-4 py-2 border-b border-canvas-200 bg-canvas-50 text-xs text-ink-500 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span>
+          Document : <span className="font-mono text-ink-700">{document.name}</span>
+          {' · '}Banque : <span className="font-semibold text-ink-700">{bank.name}</span>
+        </span>
+        {/* Segment tarifaire du barème mutualisé publié */}
+        <span className="ml-auto flex items-center gap-1.5">
+          <span className="uppercase tracking-wide text-[10px] text-ink-400">Barème pour</span>
+          <span className="inline-flex overflow-hidden rounded-lg border border-canvas-300">
+            {SEGMENTS.map((s) => (
+              <button
+                key={s.value || 'all'}
+                type="button"
+                onClick={() => setSegment(s.value)}
+                className={`px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  segment === s.value
+                    ? 'bg-ink-900 text-white'
+                    : 'bg-white text-ink-500 hover:bg-canvas-100'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </span>
+        </span>
       </div>
 
       {/* Statut d'extraction (temps réel) */}
