@@ -13,8 +13,11 @@ import { extractStatement } from '../../extraction/bank-statement';
 import { runFullAudit } from '../../services/audit/runFullAudit';
 import { countAuditedMonths, planForMonths, type AuditPlan } from '../../billing/auditPlans';
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
+import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
-import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult } from '../../types';
+import { fetchPublicBankReference } from '../../services/publicBankReference';
+import { DEFAULT_BANKS } from '../../store/bankStore';
+import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
 type Step = 'import' | 'quote' | 'payment' | 'report';
 
@@ -38,6 +41,8 @@ export default function ExpressAuditPage() {
   const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [bankCode, setBankCode] = useState('');
+  const [usedOfficialGrid, setUsedOfficialGrid] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -102,8 +107,27 @@ export default function ExpressAuditPage() {
       // Paiement OK → audit complet (même moteur que l'offre Entreprise).
       setStep('report');
       setAuditStep('Lancement de l\'audit…');
+
+      // Comparaison au barème officiel (L2) si la banque est connue et publiée.
+      let bankConditions: BankConditions | undefined;
+      if (bankCode) {
+        setAuditStep('Récupération du barème officiel…');
+        const ref = await fetchPublicBankReference(bankCode);
+        if (ref?.found && ref.conditions.length > 0) {
+          bankConditions = l2ToBankConditions({
+            bankCode,
+            bankName: ref.legalName,
+            effectiveFrom: ref.effectiveFrom,
+            conditions: ref.conditions,
+          });
+          setUsedOfficialGrid(true);
+        }
+      }
+
       const result = await runFullAudit({
         transactions,
+        bankConditions,
+        bankCode: bankCode || undefined,
         onProgress: (_pct, s) => setAuditStep(s),
       });
       setAudit(result);
@@ -207,6 +231,16 @@ export default function ExpressAuditPage() {
                 <p className="text-2xl font-bold text-amber-300">{fmt(plan.priceFcfa)} FCFA</p>
               </div>
             </div>
+            <div>
+              <label className="text-xs text-white/50">Votre banque (compare au barème officiel — optionnel)</label>
+              <select value={bankCode} onChange={(e) => setBankCode(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white focus:border-amber-400/50 focus:outline-none">
+                <option value="">— Sans barème (audit sur les seules transactions) —</option>
+                {DEFAULT_BANKS.map((b) => (
+                  <option key={b.code} value={b.code} className="bg-ink-900">{b.name} ({b.country})</option>
+                ))}
+              </select>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (réception du rapport)"
                 className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none" />
@@ -262,6 +296,11 @@ export default function ExpressAuditPage() {
                     Synthèse : <span className="font-semibold">{audit.summary.status}</span> — {audit.summary.message}
                   </p>
                 )}
+                <p className="text-[11px] text-white/40">
+                  {usedOfficialGrid
+                    ? '✓ Comparé au barème officiel de votre banque (référentiel L2).'
+                    : 'Audit sur les seules transactions (aucun barème officiel sélectionné ou disponible).'}
+                </p>
                 {audit.anomalies.length > 0 && (
                   <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm">
                     <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Anomalies détectées</p>

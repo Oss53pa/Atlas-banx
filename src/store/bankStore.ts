@@ -113,7 +113,7 @@ const UEMOA_BANKS: BankWithZone[] = [
 ];
 
 // Combine all banks - CEMAC first (XAF), then UEMOA (XOF)
-const DEFAULT_BANKS: BankWithZone[] = [...CEMAC_BANKS, ...UEMOA_BANKS];
+export const DEFAULT_BANKS: BankWithZone[] = [...CEMAC_BANKS, ...UEMOA_BANKS];
 
 interface BankState {
   banks: Bank[];
