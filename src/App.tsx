@@ -23,6 +23,7 @@ import { migrateLocalToSupabase } from './lib/migrateLocalToSupabase';
 import { AlertCircle } from 'lucide-react';
 
 const ExternalAuthPage = lazy(() => import('./pages/auth/ExternalAuthPage'));
+const AtlasStudioAdminPage = lazy(() => import('./components/admin/AtlasStudioAdminPage'));
 
 // Public landing page (marketing) — no auth required
 const LandingPage = lazy(() => import('./components/landing').then(m => ({ default: m.LandingPage })));
@@ -377,6 +378,16 @@ function AppRoutes() {
     return (
       <Suspense fallback={<PageLoader />}>
         <LandingPage />
+      </Suspense>
+    );
+  }
+
+  // Console admin Atlas Studio (accès dérobé) — gère elle-même sa connexion
+  // et le contrôle du rôle admin, donc traitée avant le garde d'auth global.
+  if (location.pathname === '/atlas-studio') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AtlasStudioAdminPage />
       </Suspense>
     );
   }

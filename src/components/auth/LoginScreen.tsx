@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle, ArrowRight, ShieldCheck, Sparkles, Lock, Building2, Briefcase } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import type { AccountType } from '../../lib/database.types';
@@ -24,6 +25,20 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [view, setView] = useState<'login' | 'register' | 'reset'>('login');
   const [message, setMessage] = useState('');
+
+  // Point d'entrée discret vers la console admin Atlas Studio : triple-clic sur
+  // le « · » du pied de page. La sécurité réelle reste l'auth + le rôle admin
+  // vérifiés sur la page /atlas-studio ; ceci n'est qu'un accès peu visible.
+  const navigate = useNavigate();
+  const secretClicks = useRef<number[]>([]);
+  const handleSecretEntry = () => {
+    const now = Date.now();
+    secretClicks.current = [...secretClicks.current, now].filter((t) => now - t < 800);
+    if (secretClicks.current.length >= 3) {
+      secretClicks.current = [];
+      navigate('/atlas-studio');
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,7 +140,15 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
           <div className="pt-5 border-t border-white/10">
             <p className="text-[11px] uppercase tracking-[0.18em] text-white/30">
-              © 2026 Atlas Studio · CEMAC &amp; UEMOA
+              © 2026 Atlas Studio{' '}
+              <span
+                onClick={handleSecretEntry}
+                className="cursor-default select-none"
+                aria-hidden="true"
+              >
+                ·
+              </span>{' '}
+              CEMAC &amp; UEMOA
             </p>
           </div>
         </div>
