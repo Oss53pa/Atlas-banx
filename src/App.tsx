@@ -18,6 +18,7 @@ import { MfaGate } from './components/auth/MfaGate';
 import { useAuthStore } from './store/authStore';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { useAccountType } from './hooks/useAccountType';
+import { useBankScopeSync } from './hooks/useBankScopeSync';
 import { isSupabaseConfigured } from './lib/supabase';
 import { migrateLocalToSupabase } from './lib/migrateLocalToSupabase';
 import { AlertCircle } from 'lucide-react';
@@ -96,6 +97,13 @@ function SupabaseRequiredScreen() {
       </div>
     </div>
   );
+}
+
+// Aligne le périmètre des conditions (bankStore) sur le client sélectionné en
+// mode cabinet. Rendu uniquement dans l'arbre authentifié.
+function BankScopeSync() {
+  useBankScopeSync();
+  return null;
 }
 
 // Cabinet-only route guard — redirects enterprise accounts away
@@ -400,6 +408,7 @@ function AppRoutes() {
   return (
     <ErrorBoundary>
       <SessionTimeoutGuard>
+        <BankScopeSync />
         <MfaGate>
         <Suspense fallback={<PageLoader />}>
           <Routes>

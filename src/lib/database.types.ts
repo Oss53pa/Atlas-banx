@@ -285,6 +285,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
+          scope: string;
           bank_id: string;
           code: string;
           name: string;
@@ -300,6 +301,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
+          scope?: string;
           bank_id: string;
           code: string;
           name: string;

@@ -67,7 +67,7 @@ function dbToBank(row: DbUserBank): Bank {
   } as unknown as Bank);
 }
 
-function bankToDb(userId: string, bank: Bank): DbUserBankInsert {
+function bankToDb(userId: string, bank: Bank, scope: string = 'self'): DbUserBankInsert {
   // Helper: stringify Date values inside nested objects.
   const serialize = (v: unknown): unknown => {
     if (v instanceof Date) return v.toISOString();
@@ -89,6 +89,7 @@ function bankToDb(userId: string, bank: Bank): DbUserBankInsert {
 
   return {
     user_id: userId,
+    scope,
     bank_id: bank.id,
     code: bank.code,
     name: bank.name,
@@ -110,13 +111,14 @@ function bankToDb(userId: string, bank: Bank): DbUserBankInsert {
 // ----------------------------------------------------------------------------
 
 export const banksRepo = {
-  async fetchAll(userId: string): Promise<Bank[]> {
+  async fetchAll(userId: string, scope: string = 'self'): Promise<Bank[]> {
     const supabase = requireClient();
     const { data, error } = await supabase
       .schema(SCHEMA)
       .from('user_banks')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('scope', scope);
     if (error) throw error;
     return (data ?? []).map(dbToBank);
   },
@@ -125,46 +127,47 @@ export const banksRepo = {
    * Replace the whole user-bank set in a single transactional upsert.
    * Used when a complex change (add fee, archive grid, etc.) touches
    * multiple nested fields — much simpler than per-field SQL.
+   * `scope` isole les conditions par client (mode cabinet) ; 'self' = défaut.
    */
-  async upsert(userId: string, bank: Bank): Promise<void> {
+  async upsert(userId: string, bank: Bank, scope: string = 'self'): Promise<void> {
     const supabase = requireClient();
-    const payload = bankToDb(userId, bank);
+    const payload = bankToDb(userId, bank, scope);
     const { error } = await supabase
       .schema(SCHEMA)
       .from('user_banks')
-      .upsert(payload, { onConflict: 'user_id,bank_id' });
+      .upsert(payload, { onConflict: 'user_id,scope,bank_id' });
     if (error) throw error;
   },
 
-  async upsertMany(userId: string, banks: Bank[]): Promise<void> {
+  async upsertMany(userId: string, banks: Bank[], scope: string = 'self'): Promise<void> {
     if (banks.length === 0) return;
     const supabase = requireClient();
-    const payload = banks.map((b) => bankToDb(userId, b));
+    const payload = banks.map((b) => bankToDb(userId, b, scope));
     const { error } = await supabase
       .schema(SCHEMA)
       .from('user_banks')
-      .upsert(payload, { onConflict: 'user_id,bank_id' });
+      .upsert(payload, { onConflict: 'user_id,scope,bank_id' });
     if (error) throw error;
   },
 
-  async remove(userId: string, bankId: string): Promise<void> {
+  async remove(userId: string, bankId: string, scope: string = 'self'): Promise<void> {
     const supabase = requireClient();
     const { error } = await supabase
       .schema(SCHEMA)
       .from('user_banks')
       .delete()
       .eq('user_id', userId)
+      .eq('scope', scope)
       .eq('bank_id', bankId);
     if (error) throw error;
   },
 
-  async clear(userId: string): Promise<void> {
+  /** Efface le périmètre indiqué (ou tous les périmètres si scope omis). */
+  async clear(userId: string, scope?: string): Promise<void> {
     const supabase = requireClient();
-    const { error } = await supabase
-      .schema(SCHEMA)
-      .from('user_banks')
-      .delete()
-      .eq('user_id', userId);
+    let q = supabase.schema(SCHEMA).from('user_banks').delete().eq('user_id', userId);
+    if (scope !== undefined) q = q.eq('scope', scope);
+    const { error } = await q;
     if (error) throw error;
   },
 };
