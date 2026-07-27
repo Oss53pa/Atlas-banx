@@ -96,7 +96,7 @@ CREATE POLICY "rubrics_taxonomy_service"
 -- CDC banks table (enhanced, separate from existing atlasbanx.user_banks)
 CREATE TABLE atlasbanx.cdc_banks (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code              TEXT UNIQUE NOT NULL,       -- 'NSIA-CI','SGCI'
+  code              TEXT UNIQUE NOT NULL,       -- code catalogue app, ex. 'NSIACICI','SGBCCICI'
   legal_name        TEXT NOT NULL,
   country_iso       CHAR(2) NOT NULL,
   zone              TEXT NOT NULL,              -- 'UEMOA','CEMAC'
