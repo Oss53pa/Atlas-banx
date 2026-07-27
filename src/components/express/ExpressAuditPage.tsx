@@ -2,15 +2,19 @@
 // ATLASBANX — Funnel « Audit express » (Particulier, sans compte)
 // ============================================================================
 // Parcours public, éphémère : import d'un relevé → devis (forfait selon le
-// nombre de mois détectés) → paiement (CinetPay, simulé en sandbox) → rapport
-// détaillé téléchargeable. Aucune donnée n'est conservée durablement.
+// nombre de mois détectés) → paiement (CinetPay, simulé en sandbox) → AUDIT
+// COMPLET (le même moteur 19 détecteurs que l'offre Entreprise/Cabinet, via
+// runFullAudit) → rapport détaillé téléchargeable. Aucune donnée conservée.
 // ============================================================================
 
 import { useMemo, useRef, useState } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Download, ArrowRight } from 'lucide-react';
 import { extractStatement } from '../../extraction/bank-statement';
-import { buildExpressReport, reportToHtml, type ExpressReport, type ExpressTxn } from '../../billing/express/expressReport';
+import { runFullAudit } from '../../services/audit/runFullAudit';
+import { countAuditedMonths, planForMonths, type AuditPlan } from '../../billing/auditPlans';
+import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { getPaymentProvider } from '../../billing/payments';
+import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult } from '../../types';
 
 type Step = 'import' | 'quote' | 'payment' | 'report';
 
@@ -25,7 +29,13 @@ export default function ExpressAuditPage() {
   const [step, setStep] = useState<Step>('import');
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [report, setReport] = useState<ExpressReport | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [periodStart, setPeriodStart] = useState<Date | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<Date | null>(null);
+  const [months, setMonths] = useState(0);
+  const [plan, setPlan] = useState<AuditPlan | null>(null);
+  const [audit, setAudit] = useState<AnalysisResult | null>(null);
+  const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
@@ -37,22 +47,25 @@ export default function ExpressAuditPage() {
     setIsBusy(true);
     try {
       const result = await extractStatement(file);
-      const txns: ExpressTxn[] = result.candidates.map((c) => ({
-        date: c.date,
-        description: c.description,
-        amount: c.amount,
-      }));
-      const built = buildExpressReport(txns);
-      if (built.txCount === 0 || !built.plan) {
-        setError(
-          built.txCount === 0
-            ? "Aucune transaction détectée dans ce relevé. Essayez un PDF de meilleure qualité."
-            : "La durée détectée dépasse nos forfaits standards (>12 mois). Contactez-nous pour une offre sur mesure.",
-        );
-        setReport(built.txCount === 0 ? null : built);
+      const txs = result.transactions.filter((t) => t.date instanceof Date);
+      if (txs.length === 0) {
+        setError('Aucune transaction détectée dans ce relevé. Essayez un PDF de meilleure qualité.');
         return;
       }
-      setReport(built);
+      const times = txs.map((t) => new Date(t.date).getTime());
+      const start = new Date(Math.min(...times));
+      const end = new Date(Math.max(...times));
+      const m = countAuditedMonths([{ start, end }]);
+      const p = planForMonths(m);
+      if (!p) {
+        setError('La durée détectée dépasse nos forfaits standards (>12 mois). Contactez-nous pour une offre sur mesure.');
+        return;
+      }
+      setTransactions(txs);
+      setPeriodStart(start);
+      setPeriodEnd(end);
+      setMonths(m);
+      setPlan(p);
       setStep('quote');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse du relevé.");
@@ -62,7 +75,7 @@ export default function ExpressAuditPage() {
   };
 
   const pay = async () => {
-    if (!report?.plan) return;
+    if (!plan) return;
     setError(null);
     setIsBusy(true);
     try {
@@ -70,14 +83,13 @@ export default function ExpressAuditPage() {
       setPaymentMode(provider.mode);
       const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const init = await provider.initiate({
-        amount: report.plan.priceFcfa,
+        amount: plan.priceFcfa,
         currency: 'XOF',
-        description: `Audit express — ${report.plan.label}`,
+        description: `Audit express — ${plan.label}`,
         reference,
         customerEmail: email || undefined,
         customerPhone: phone || undefined,
       });
-      // En live, on redirigerait vers init.redirectUrl ; en sandbox on vérifie directement.
       if (init.redirectUrl) {
         window.location.href = init.redirectUrl;
         return;
@@ -87,21 +99,31 @@ export default function ExpressAuditPage() {
         setError('Paiement non confirmé. Réessayez.');
         return;
       }
+      // Paiement OK → audit complet (même moteur que l'offre Entreprise).
       setStep('report');
+      setAuditStep('Lancement de l\'audit…');
+      const result = await runFullAudit({
+        transactions,
+        onProgress: (_pct, s) => setAuditStep(s),
+      });
+      setAudit(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Échec du paiement.');
+      setError(err instanceof Error ? err.message : 'Échec du paiement / audit.');
     } finally {
       setIsBusy(false);
     }
   };
 
   const downloadReport = () => {
-    if (!report) return;
-    const blob = new Blob([reportToHtml(report)], { type: 'text/html' });
+    if (!audit) return;
+    const html = auditReportToHtml(audit, {
+      periodStart, periodEnd, months, planLabel: plan?.label ?? '',
+    });
+    const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'rapport-audit-express.html';
+    a.download = 'rapport-audit-atlasbanx.html';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -121,11 +143,10 @@ export default function ExpressAuditPage() {
       <div className="mx-auto max-w-2xl px-6 py-14">
         <h1 className="font-serif text-3xl">Audit express de votre relevé</h1>
         <p className="mt-2 text-sm text-white/50">
-          Sans création de compte. Importez, payez, obtenez votre rapport détaillé. Vos données ne
-          sont pas conservées.
+          Sans création de compte. Importez, payez, obtenez votre rapport d'audit complet. Vos
+          données ne sont pas conservées.
         </p>
 
-        {/* Progress */}
         <ol className="mt-8 flex gap-2 text-xs">
           {steps.map((s) => (
             <li
@@ -148,7 +169,6 @@ export default function ExpressAuditPage() {
           </div>
         )}
 
-        {/* Step: import */}
         {step === 'import' && (
           <div className="mt-8 rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
             <UploadCloud className="mx-auto h-10 w-10 text-amber-300" />
@@ -174,103 +194,96 @@ export default function ExpressAuditPage() {
           </div>
         )}
 
-        {/* Step: quote */}
-        {step === 'quote' && report?.plan && (
+        {step === 'quote' && plan && (
           <div className="mt-8 space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-7">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-white/50">Période détectée</p>
-                <p className="text-lg font-semibold">
-                  {fmtDate(report.periodStart)} → {fmtDate(report.periodEnd)}
-                </p>
-                <p className="text-xs text-white/40">{report.monthsAudited} mois · {report.txCount} transactions</p>
+                <p className="text-lg font-semibold">{fmtDate(periodStart)} → {fmtDate(periodEnd)}</p>
+                <p className="text-xs text-white/40">{months} mois · {transactions.length} transactions</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-white/50">{report.plan.label}</p>
-                <p className="text-2xl font-bold text-amber-300">{fmt(report.plan.priceFcfa)} FCFA</p>
+                <p className="text-sm text-white/50">{plan.label}</p>
+                <p className="text-2xl font-bold text-amber-300">{fmt(plan.priceFcfa)} FCFA</p>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email (réception du rapport)"
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none"
-              />
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Téléphone (mobile money)"
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none"
-              />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (réception du rapport)"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none" />
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Téléphone (mobile money)"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-white/25 focus:border-amber-400/50 focus:outline-none" />
             </div>
-            <button
-              onClick={() => setStep('payment')}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-ink-950 hover:bg-amber-400"
-            >
+            <button onClick={() => setStep('payment')}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-ink-950 hover:bg-amber-400">
               Continuer vers le paiement <ArrowRight className="h-4 w-4" />
             </button>
           </div>
         )}
 
-        {/* Step: payment */}
-        {step === 'payment' && report?.plan && (
+        {step === 'payment' && plan && (
           <div className="mt-8 space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-7">
             <p className="text-sm text-white/70">
-              Paiement CinetPay (mobile money) — <span className="font-semibold">{fmt(report.plan.priceFcfa)} FCFA</span> pour {report.plan.label}.
+              Paiement CinetPay (mobile money) — <span className="font-semibold">{fmt(plan.priceFcfa)} FCFA</span> pour {plan.label}.
             </p>
-            <button
-              onClick={pay}
-              disabled={isBusy}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-ink-950 hover:bg-amber-400 disabled:opacity-40"
-            >
+            <button onClick={pay} disabled={isBusy}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-ink-950 hover:bg-amber-400 disabled:opacity-40">
               {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {isBusy ? 'Traitement…' : 'Payer et générer le rapport'}
+              {isBusy ? 'Traitement…' : 'Payer et lancer l\'audit complet'}
             </button>
             <p className="text-[11px] text-white/35">
-              Le prestataire de paiement réel se branche via les clés marchandes CinetPay ; tant
-              qu'elles ne sont pas configurées, le paiement est simulé (aucun débit).
+              Le prestataire réel se branche via les clés marchandes CinetPay ; sans elles le
+              paiement est simulé (aucun débit).
             </p>
           </div>
         )}
 
-        {/* Step: report */}
-        {step === 'report' && report && (
+        {step === 'report' && (
           <div className="mt-8 space-y-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-7">
-            <div className="flex items-center gap-2 text-emerald-300">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-semibold">
-                Paiement {paymentMode === 'sandbox' ? 'simulé ' : ''}confirmé — rapport prêt
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-              <Kpi label="Transactions" value={String(report.txCount)} />
-              <Kpi label="Débits (FCFA)" value={fmt(report.totalDebit)} />
-              <Kpi label="Crédits (FCFA)" value={fmt(report.totalCredit)} />
-              <Kpi label="Frais repérés" value={`${fmt(report.feesTotal)} FCFA`} />
-            </div>
-            {report.feeLines.length > 0 && (
-              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm">
-                <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Frais et commissions</p>
-                <ul className="space-y-1">
-                  {report.feeLines.slice(0, 8).map((f, i) => (
-                    <li key={i} className="flex justify-between gap-2 text-white/70">
-                      <span className="truncate">{fmtDate(f.date ?? null)} · {f.description}</span>
-                      <span className="text-red-300">{fmt(-f.amount)}</span>
-                    </li>
-                  ))}
-                </ul>
+            {!audit ? (
+              <div className="flex items-center gap-2 text-white/70">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>{auditStep || 'Audit en cours…'}</span>
               </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span className="font-semibold">
+                    Paiement {paymentMode === 'sandbox' ? 'simulé ' : ''}confirmé — audit complet terminé
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                  <Kpi label="Transactions" value={String(audit.statistics.totalTransactions)} />
+                  <Kpi label="Anomalies" value={String(audit.statistics.totalAnomalies)} />
+                  <Kpi label="Récupérable (FCFA)" value={fmt(audit.statistics.totalAnomalyAmount)} />
+                </div>
+                {audit.summary && (
+                  <p className="text-sm text-white/70">
+                    Synthèse : <span className="font-semibold">{audit.summary.status}</span> — {audit.summary.message}
+                  </p>
+                )}
+                {audit.anomalies.length > 0 && (
+                  <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm">
+                    <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Anomalies détectées</p>
+                    <ul className="space-y-1">
+                      {audit.anomalies.slice(0, 10).map((a) => (
+                        <li key={a.id} className="flex justify-between gap-2 text-white/70">
+                          <span className="truncate">{ANOMALY_TYPE_LABELS[a.type] ?? a.type}</span>
+                          <span className="text-amber-300">{fmt(a.amount)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <button onClick={downloadReport}
+                  className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-ink-950 hover:bg-amber-400">
+                  <Download className="h-4 w-4" /> Télécharger le rapport complet
+                </button>
+                <p className="text-[11px] text-white/35">
+                  Vos données ne sont pas conservées : rechargez la page pour tout effacer.
+                </p>
+              </>
             )}
-            <button
-              onClick={downloadReport}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-ink-950 hover:bg-amber-400"
-            >
-              <Download className="h-4 w-4" /> Télécharger le rapport détaillé
-            </button>
-            <p className="text-[11px] text-white/35">
-              Vos données ne sont pas conservées : rechargez la page pour tout effacer.
-            </p>
           </div>
         )}
       </div>
