@@ -26,6 +26,12 @@ export interface SubmitReferenceInput {
    * que l'empreinte porte sur les octets réels du document.
    */
   sourceHashSha256?: string;
+  /**
+   * Segment client auquel s'appliquent ces conditions (barème différencié),
+   * selon la taxonomie CDC : 'particulier' | 'pme' | 'corporate'. Posé dans
+   * `dimensions.profil`. Absent = condition « catch-all » (tous segments).
+   */
+  segment?: 'particulier' | 'pme' | 'corporate';
 }
 
 export interface SubmitReferenceResult {
@@ -113,11 +119,12 @@ export async function submitValidatedReference(
   });
 
   // 3. Ajouter les conditions issues des champs validés
+  const segmentDimensions = input.segment ? { profil: input.segment } : null;
   const conditions = input.fields
     .filter((f) => f.rubricCode)
     .map((f) => ({
       rubricCode: f.rubricCode,
-      dimensions: null,
+      dimensions: segmentDimensions,
       valueNumeric: parseNumeric(f.value),
       valueFormula: null,
       pdfBbox: f.bbox

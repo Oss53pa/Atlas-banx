@@ -44,6 +44,7 @@ const EMPTY_ROW: ConditionRow = { rubricCode: '', label: '', value: '', unit: ''
 
 export function MutualizedImportPanel() {
   const [bankCode, setBankCode] = useState('');
+  const [segment, setSegment] = useState<'' | 'particulier' | 'pme' | 'corporate'>('');
   const [effectiveFrom, setEffectiveFrom] = useState(
     () => new Date().toISOString().slice(0, 10),
   );
@@ -169,6 +170,7 @@ export function MutualizedImportPanel() {
         fields,
         effectiveFrom: new Date(effectiveFrom),
         sourceHashSha256,
+        segment: segment || undefined,
       });
 
       setResult(res);
@@ -254,6 +256,36 @@ export function MutualizedImportPanel() {
               ))}
             </ul>
           )}
+        </div>
+
+        {/* Segment : distingue explicitement le barème Particulier / Entreprise */}
+        <div>
+          <span className="text-xs font-medium uppercase tracking-wide text-white/40">Barème pour</span>
+          <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {([
+              { v: '', label: 'Tous segments' },
+              { v: 'particulier', label: 'Particuliers' },
+              { v: 'pme', label: 'PME' },
+              { v: 'corporate', label: 'Entreprises' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.v}
+                type="button"
+                onClick={() => setSegment(opt.v)}
+                className={`rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                  segment === opt.v
+                    ? 'border-amber-400/60 bg-amber-400/10 text-amber-200'
+                    : 'border-white/10 text-white/50 hover:bg-white/5'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] text-white/35">
+            Le barème d'une banque diffère selon le profil client : importez séparément les grilles
+            Particuliers et Entreprises (posé dans les dimensions des conditions).
+          </p>
         </div>
 
         {/* En-tête version */}

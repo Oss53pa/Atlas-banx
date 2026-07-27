@@ -23,6 +23,27 @@ export interface PublicBankReference {
   conditions: PublicRefCondition[];
 }
 
+export interface PublicBankListItem {
+  code: string;
+  legal_name: string;
+  country_iso: string;
+}
+
+/** Liste des banques du référentiel CDC (codes alignés sur L2). */
+export async function fetchPublicBankList(): Promise<PublicBankListItem[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.functions.invoke('public-bank-reference', {
+      body: { list: true },
+    });
+    if (error || !data?.banks) return [];
+    return data.banks as PublicBankListItem[];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Récupère le référentiel L2 publié d'une banque à une date donnée.
  * Renvoie null si indisponible (Supabase non configuré, erreur réseau).

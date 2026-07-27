@@ -40,14 +40,21 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   let bankCode = url.searchParams.get('bankCode') ?? '';
   let referenceDate = url.searchParams.get('referenceDate') ?? '';
+  let list = url.searchParams.get('list') === 'true';
   if (req.method === 'POST') {
     try {
       const body = await req.json();
       bankCode = body.bankCode ?? bankCode;
       referenceDate = body.referenceDate ?? referenceDate;
+      list = body.list === true || list;
     } catch { /* ignore */ }
   }
-  if (!bankCode) return json({ error: 'bankCode requis' }, 400);
+
+  // Mode liste : renvoie les banques du référentiel (codes alignés sur L2).
+  if (list || !bankCode) {
+    const banks = await rest('cdc_banks?is_active=eq.true&select=code,legal_name,country_iso&order=legal_name');
+    return json({ banks });
+  }
   const day = (referenceDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
 
   const banks = await rest(`cdc_banks?code=eq.${encodeURIComponent(bankCode)}&select=id,legal_name&limit=1`);

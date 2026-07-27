@@ -7,7 +7,7 @@
 // runFullAudit) → rapport détaillé téléchargeable. Aucune donnée conservée.
 // ============================================================================
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Download, ArrowRight } from 'lucide-react';
 import { extractStatement } from '../../extraction/bank-statement';
 import { runFullAudit } from '../../services/audit/runFullAudit';
@@ -15,8 +15,7 @@ import { countAuditedMonths, planForMonths, type AuditPlan } from '../../billing
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
-import { fetchPublicBankReference } from '../../services/publicBankReference';
-import { DEFAULT_BANKS } from '../../store/bankStore';
+import { fetchPublicBankReference, fetchPublicBankList, type PublicBankListItem } from '../../services/publicBankReference';
 import { ANOMALY_TYPE_LABELS, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
 type Step = 'import' | 'quote' | 'payment' | 'report';
@@ -42,6 +41,18 @@ export default function ExpressAuditPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [bankCode, setBankCode] = useState('');
+  const [banks, setBanks] = useState<PublicBankListItem[]>([]);
+  const [segment, setSegment] = useState<'particulier' | 'pme' | 'corporate'>('particulier');
+
+  // Liste des banques du référentiel (codes alignés sur L2), pour comparer au
+  // barème officiel. Chargée à l'ouverture ; vide si le référentiel est indispo.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchPublicBankList().then((list) => {
+      if (!cancelled) setBanks(list);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [usedOfficialGrid, setUsedOfficialGrid] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -119,6 +130,7 @@ export default function ExpressAuditPage() {
             bankName: ref.legalName,
             effectiveFrom: ref.effectiveFrom,
             conditions: ref.conditions,
+            segment,
           });
           setUsedOfficialGrid(true);
         }
@@ -232,12 +244,29 @@ export default function ExpressAuditPage() {
               </div>
             </div>
             <div>
+              <label className="text-xs text-white/50">Type de relevé</label>
+              <div className="mt-1.5 grid grid-cols-3 gap-2">
+                {([
+                  { v: 'particulier', label: 'Particulier' },
+                  { v: 'pme', label: 'PME' },
+                  { v: 'corporate', label: 'Entreprise' },
+                ] as const).map((opt) => (
+                  <button key={opt.v} type="button" onClick={() => setSegment(opt.v)}
+                    className={`rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                      segment === opt.v ? 'border-amber-400/60 bg-amber-400/10 text-amber-200' : 'border-white/10 text-white/50 hover:bg-white/5'
+                    }`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
               <label className="text-xs text-white/50">Votre banque (compare au barème officiel — optionnel)</label>
               <select value={bankCode} onChange={(e) => setBankCode(e.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white focus:border-amber-400/50 focus:outline-none">
                 <option value="">— Sans barème (audit sur les seules transactions) —</option>
-                {DEFAULT_BANKS.map((b) => (
-                  <option key={b.code} value={b.code} className="bg-ink-900">{b.name} ({b.country})</option>
+                {banks.map((b) => (
+                  <option key={b.code} value={b.code} className="bg-ink-900">{b.legal_name} ({b.country_iso})</option>
                 ))}
               </select>
             </div>
