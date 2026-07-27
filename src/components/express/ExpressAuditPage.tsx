@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Download, ArrowRight,
-  ArrowLeft, ShieldCheck, Lock, Building2, RotateCcw,
+  ArrowLeft, Lock, Building2, RotateCcw,
 } from 'lucide-react';
 import { extractStatement } from '../../extraction/bank-statement';
 import { runFullAudit } from '../../services/audit/runFullAudit';
@@ -169,61 +169,52 @@ export default function ExpressAuditPage() {
 
   return (
     <div className="min-h-screen flex bg-canvas-100 font-sans text-ink-800">
-      {/* ================= SIDEBAR BLEUE — notice + progression ================= */}
+      {/* ================= SIDEBAR BLEUE — note explicative ================= */}
       <aside className="hidden lg:flex w-80 flex-col justify-between bg-gradient-to-b from-ink-800 via-ink-900 to-ink-950 px-8 py-9 text-white">
         <div>
           <button onClick={() => navigate('/landing')} className="font-display text-3xl text-gradient-gold leading-none">
             AtlasBanx
           </button>
           <p className="mt-8 font-display text-4xl leading-tight text-white">Audit express</p>
-          <p className="mt-2 text-sm leading-relaxed text-white/60">
-            Auditez votre relevé bancaire en quelques minutes, sans créer de compte.
-          </p>
 
-          {/* Progression verticale */}
-          <ol className="mt-9 space-y-1">
-            {STEPS.map((s, i) => {
-              const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo';
-              return (
-                <li key={s.id} className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                      state === 'done' ? 'border-emerald-400 bg-emerald-400 text-ink-950'
-                      : state === 'current' ? 'border-accent-400 bg-accent-400 text-ink-950'
-                      : 'border-white/20 text-white/40'
-                    }`}>
-                      {state === 'done' ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
-                    </span>
-                    {i < STEPS.length - 1 && <span className={`my-1 w-px flex-1 ${i < currentIndex ? 'bg-emerald-400/50' : 'bg-white/10'}`} />}
-                  </div>
-                  <div className="pb-4">
-                    <p className={`text-sm font-medium ${state === 'todo' ? 'text-white/40' : 'text-white'}`}>{s.label}</p>
-                    <p className="text-[11px] text-white/40">{s.hint}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+          {/* Note explicative */}
+          <div className="mt-6 space-y-6 text-sm leading-relaxed text-white/60">
+            <p>
+              Vérifiez en quelques minutes que votre banque ne vous facture pas de{' '}
+              <span className="text-white/85">frais indus</span> — sans créer de compte.
+            </p>
+
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">Comment ça marche</p>
+              <ol className="space-y-1.5 text-[13px]">
+                <li>1. Importez votre relevé bancaire (PDF).</li>
+                <li>2. Réglez le forfait selon la durée (3, 6 ou 12 mois).</li>
+                <li>3. Recevez votre rapport d'audit détaillé.</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">Ce que nous détectons</p>
+              <p className="text-[13px]">
+                Frais en double, frais fantômes, surfacturation, erreurs d'agios, dates de valeur
+                abusives et non-conformités OHADA — via le même moteur (19 détecteurs) que l'offre
+                Entreprise.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">Confidentialité</p>
+              <p className="text-[13px]">
+                Aucun compte, aucune donnée conservée : votre relevé et votre rapport sont supprimés
+                à la fin du parcours.
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Notice / réassurance */}
-        <div className="space-y-3">
-          <ul className="space-y-2.5">
-            {[
-              { icon: ShieldCheck, text: 'Audit complet — 19 détecteurs (frais, agios, dates de valeur)' },
-              { icon: Lock, text: 'Aucune donnée conservée — parcours éphémère' },
-              { icon: CheckCircle2, text: 'Sans création de compte · paiement mobile money' },
-            ].map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-start gap-2.5 text-[12px] text-white/55">
-                <Icon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-accent-300" />
-                <span>{text}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="border-t border-white/10 pt-3 text-[10px] uppercase tracking-[0.18em] text-white/25">
-            © 2026 Atlas Studio · CEMAC &amp; UEMOA
-          </p>
-        </div>
+        <p className="border-t border-white/10 pt-4 text-[10px] uppercase tracking-[0.18em] text-white/25">
+          © 2026 Atlas Studio · CEMAC &amp; UEMOA
+        </p>
       </aside>
 
       {/* ================= CONTENU (largeur restante) ================= */}
@@ -236,8 +227,8 @@ export default function ExpressAuditPage() {
           </button>
         </header>
 
-        {/* Stepper horizontal (mobile uniquement) */}
-        <div className="flex items-center justify-center gap-1 border-b border-primary-100/70 bg-white/40 px-4 py-3 lg:hidden">
+        {/* Stepper horizontal (progression des étapes) */}
+        <div className="flex items-center justify-center gap-1 border-b border-primary-100/70 bg-white/40 px-4 py-3">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex items-center">
               <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
