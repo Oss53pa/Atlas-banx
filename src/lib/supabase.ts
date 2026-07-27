@@ -3,7 +3,8 @@
 // Client singleton pour l'integration Supabase
 // ============================================================================
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAtlasSupabaseClient } from './createAtlasSupabaseClient';
 import type { Database } from './database.types';
 
 let supabaseInstance: SupabaseClient<Database> | null = null;
@@ -49,17 +50,14 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
   }
 
   if (!supabaseInstance) {
-    const url = resolveSupabaseUrl();
-    const key = resolveSupabaseAnonKey();
-
-    supabaseInstance = createClient<Database>(url, key, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-      },
-      // Default schema stays `public`; use `supabase.schema('atlasbanx')`
-      // when querying app-specific tables.
+    // Config d'auth normalisée via la factory Atlas Studio (lock no-op, fetch
+    // résilient, persistance localStorage + storageKey explicite par app).
+    // Default schema stays `public`; use `supabase.schema('atlasbanx')`
+    // when querying app-specific tables.
+    supabaseInstance = createAtlasSupabaseClient<Database>({
+      url: resolveSupabaseUrl(),
+      anonKey: resolveSupabaseAnonKey(),
+      storageKey: 'atlasbanx-auth',
     });
   }
 
