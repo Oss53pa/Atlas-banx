@@ -1,6 +1,6 @@
 /**
  * Edge Function: atlas-sso
- * SSO token exchange for Scrutix from Atlas Studio portal.
+ * SSO token exchange for AtlasBanx (ex-Scrutix) from Atlas Studio portal.
  * Validates JWT, creates/finds user + profile + organization, returns magic link.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -9,7 +9,11 @@ import { getCorsHeaders, jsonResponse, errorResponse } from "../_shared/cors.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const jwtSecret = Deno.env.get("JWT_SECRET")!;
+
+// Audiences acceptées pour cette app : id canonique (catalogue/registry) +
+// ancien codename. L'émetteur (app-token) mappe déjà `scrutix` → sous-domaine
+// atlasbanx ; on accepte donc les deux pour ne casser aucun token hérité.
+const ACCEPTED_AUDIENCES = ["atlasbanx", "scrutix"];
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin") || "";
@@ -22,7 +26,7 @@ Deno.serve(async (req) => {
     const { token } = await req.json();
     if (!token) return errorResponse("Token manquant", 400, origin);
 
-    const claims = await verifyAtlasJWT(token, jwtSecret);
+    const claims = await verifyAtlasJWT(token, { audience: ACCEPTED_AUDIENCES });
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -52,7 +56,7 @@ Deno.serve(async (req) => {
       userId = newUser.user.id;
     }
 
-    // Ensure profile exists (Scrutix profiles: id, email, full_name, organization_id, role)
+    // Ensure profile exists (AtlasBanx profiles: id, email, full_name, organization_id, role)
     const { data: existingProfile } = await supabase.from("profiles").select("id, organization_id").eq("id", userId).single();
 
     if (!existingProfile) {
