@@ -63,10 +63,10 @@ SELECT
   ARRAY(SELECT id FROM atlasbanx.regulatory_jurisdictions WHERE code IN ('BCEAO', 'OHADA')),
   b.swift_bic, b.parent_group
 FROM (VALUES
-  ('SGCI', 'Société Générale Côte d''Ivoire', 'SGBFCIAB', 'Société Générale'),
-  ('BICICI', 'Banque Internationale pour le Commerce et l''Industrie de la Côte d''Ivoire', 'BICICIAS', 'BNP Paribas'),
+  ('SGBCCICI', 'Société Générale Côte d''Ivoire', 'SGBFCIAB', 'Société Générale'),
+  ('BICICICX', 'Banque Internationale pour le Commerce et l''Industrie de la Côte d''Ivoire', 'BICICIAS', 'BNP Paribas'),
   ('NSIACICI', 'NSIA Banque Côte d''Ivoire', 'NSIACIAS', 'Groupe NSIA'),
-  ('BOA-CI', 'Bank of Africa Côte d''Ivoire', 'AFRICIAS', 'BOA Group'),
-  ('ECOBANK-CI', 'Ecobank Côte d''Ivoire', 'EABORGAS', 'Ecobank Transnational')
+  ('BOACICIX', 'Bank of Africa Côte d''Ivoire', 'AFRICIAS', 'BOA Group'),
+  ('ECABCICI', 'Ecobank Côte d''Ivoire', 'EABORGAS', 'Ecobank Transnational')
 ) AS b(code, legal_name, swift_bic, parent_group)
 ON CONFLICT (code) DO NOTHING;
