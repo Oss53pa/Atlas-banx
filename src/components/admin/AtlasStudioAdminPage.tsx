@@ -19,12 +19,18 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Landmark, BarChart3 } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Users, Building2, BarChart3, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { BanksPage } from '../banks';
 import { ConditionsIntelligencePage } from '../conditions-intelligence';
 
-type AdminView = 'import' | 'benchmark';
+type AdminView = 'particuliers' | 'entreprises' | 'benchmark';
+
+const ADMIN_TABS: { id: AdminView; label: string; Icon: typeof Users }[] = [
+  { id: 'particuliers', label: 'Conditions Particuliers', Icon: Users },
+  { id: 'entreprises', label: 'Conditions Entreprises', Icon: Building2 },
+  { id: 'benchmark', label: 'Benchmark', Icon: BarChart3 },
+];
 
 export default function AtlasStudioAdminPage() {
   const navigate = useNavigate();
@@ -41,7 +47,7 @@ export default function AtlasStudioAdminPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [view, setView] = useState<AdminView>('import');
+  const [view, setView] = useState<AdminView>('particuliers');
 
   const isAdmin = profile?.role === 'admin';
   const authed = isAuthenticated || isDemoMode;
@@ -77,24 +83,19 @@ export default function AtlasStudioAdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Bascule Import ↔ Benchmark */}
+              {/* Onglets : Particuliers · Entreprises · Benchmark */}
               <nav className="mr-1 flex rounded-lg bg-primary-100 p-0.5">
-                <button
-                  onClick={() => setView('import')}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    view === 'import' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-800'
-                  }`}
-                >
-                  <Landmark className="h-3.5 w-3.5" /> Import
-                </button>
-                <button
-                  onClick={() => setView('benchmark')}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    view === 'benchmark' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-800'
-                  }`}
-                >
-                  <BarChart3 className="h-3.5 w-3.5" /> Benchmark
-                </button>
+                {ADMIN_TABS.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => setView(id)}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      view === id ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-800'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {label}
+                  </button>
+                ))}
               </nav>
               <button
                 onClick={() => navigate('/')}
@@ -111,25 +112,35 @@ export default function AtlasStudioAdminPage() {
             </div>
           </div>
           {/* Rappel de périmètre — dépend de la vue */}
-          <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-1.5 text-center text-[11px] text-amber-800 sm:px-6">
-            {view === 'import' ? (
-              <>
-                Référentiel <strong>L2 mutualisé</strong> — partagé par tous les clients. Ouvrez une
-                banque, complétez les rubriques (ou importez le PDF), puis publiez via l'onglet
-                <strong> « Validation IA »</strong> (workflow deux yeux).
-              </>
-            ) : (
-              <>
+          <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-2 text-[11px] text-amber-900 sm:px-6">
+            {view === 'benchmark' ? (
+              <p className="text-center">
                 <strong>Benchmark inter-banques</strong> — classement par quartile et par rubrique,
-                comparaison zonale CEMAC/UEMOA, évolution et alertes de dérive sur les barèmes importés.
-              </>
+                comparaison zonale CEMAC/UEMOA, évolution et alertes de dérive sur les barèmes publiés.
+              </p>
+            ) : (
+              <p className="mx-auto max-w-4xl text-center leading-relaxed">
+                Import des conditions <strong>{view === 'particuliers' ? 'Particuliers' : 'Entreprises'}</strong> (référentiel
+                <strong> L2 mutualisé</strong>, partagé par tous les clients). Ouvrez une banque → importez le PDF
+                ou saisissez les rubriques. <Sparkles className="inline h-3 w-3 -mt-0.5" /> <strong>Important :</strong> pour
+                que le barème soit réellement utilisé par les audits, publiez-le via l'onglet
+                <strong> « Validation IA »</strong> de la banque (workflow deux yeux). Tant qu'il n'est pas publié,
+                il reste un brouillon local et n'alimente pas l'audit.
+              </p>
             )}
           </div>
         </header>
 
-        {/* Vue active : import (interface bancaire complète) ou benchmark */}
+        {/* Vue active : import scopé par segment, ou benchmark */}
         <main className="px-3 py-4 sm:px-6">
-          {view === 'import' ? <BanksPage /> : <ConditionsIntelligencePage />}
+          {view === 'benchmark' ? (
+            <ConditionsIntelligencePage />
+          ) : (
+            <BanksPage
+              key={view}
+              defaultSegment={view === 'particuliers' ? 'particuliers' : 'entreprises'}
+            />
+          )}
         </main>
       </div>
     );
