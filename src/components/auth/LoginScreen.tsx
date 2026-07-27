@@ -159,9 +159,15 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           ============================================================ */}
       <main className="flex items-center justify-center px-6 py-12 sm:px-10">
         <div className="w-full max-w-md animate-fade-in-up">
-          {/* Mobile wordmark */}
+          {/* Mobile wordmark — triple-clic = accès discret console admin
+              (le « · » du pied de page gauche n'apparaît que sur grand écran). */}
           <div className="mb-8 lg:hidden">
-            <span className="font-display text-3xl text-ink-900">Atlas Studio</span>
+            <span
+              onClick={handleSecretEntry}
+              className="font-display text-3xl text-ink-900 cursor-default select-none"
+            >
+              Atlas Studio
+            </span>
           </div>
 
           {/* -------------------- LOGIN -------------------- */}
