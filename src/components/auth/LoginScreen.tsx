@@ -178,13 +178,12 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label htmlFor="login-password" className="label !mb-0">Mot de passe</label>
-                    <button
-                      type="button"
-                      onClick={() => goTo('reset')}
+                    <a
+                      href="https://atlas-studio.org/portal/forgot-password"
                       className="text-xs text-ink-400 hover:text-accent-700 transition-colors"
                     >
                       Oublié ?
-                    </button>
+                    </a>
                   </div>
                   <div className="relative">
                     <input
