@@ -15,14 +15,18 @@ import {
   Banknote,
 } from 'lucide-react';
 import { Card, CardBody, Button, Badge } from '../ui';
-import type { ConditionGrid, BankConditions } from '../../types';
+import type { ConditionGrid, BankConditions, TariffSegment } from '../../types';
+import { TARIFF_SEGMENT_LABEL } from '../../types';
 import { formatCurrency } from '../../utils';
+import { SegmentBadge } from './SegmentBadge';
 
 interface GridSummaryCardProps {
   grid: ConditionGrid;
   currency: 'XAF' | 'XOF';
   onEdit?: () => void;
   onViewSource?: () => void;
+  /** Réaffecte le segment tarifaire (Particuliers / Entreprises / …) de la grille. */
+  onChangeSegment?: (segment: TariffSegment | null) => void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -269,7 +273,7 @@ function extractCardCotisations(
 // Composant principal
 // ────────────────────────────────────────────────────────────────────────────
 
-export function GridSummaryCard({ grid, currency, onEdit, onViewSource }: GridSummaryCardProps) {
+export function GridSummaryCard({ grid, currency, onEdit, onViewSource, onChangeSegment }: GridSummaryCardProps) {
   const sectionRows = SECTIONS
     .map((s) => ({ section: s, rows: extractSectionRows(grid.conditions, s, currency) }))
     .filter((sr) => sr.rows.length > 0);
@@ -292,6 +296,7 @@ export function GridSummaryCard({ grid, currency, onEdit, onViewSource }: GridSu
               >
                 {grid.status === 'active' ? 'Active' : grid.status === 'archived' ? 'Archivée' : 'Brouillon'}
               </Badge>
+              <SegmentBadge segment={grid.segment} className="shrink-0" />
               <span className="text-[10px] text-primary-400 shrink-0">v{grid.version}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-primary-500">
@@ -316,12 +321,32 @@ export function GridSummaryCard({ grid, currency, onEdit, onViewSource }: GridSu
               )}
             </div>
           </div>
-          {onEdit && (
-            <Button size="sm" variant="secondary" className="h-7 text-xs shrink-0" onClick={onEdit}>
-              <Pencil className="w-3 h-3 mr-1" />
-              Éditer
-            </Button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onChangeSegment && (
+              <label className="inline-flex items-center gap-1 text-[10px] text-primary-500">
+                <span className="hidden sm:inline">Barème</span>
+                <select
+                  value={grid.segment ?? ''}
+                  onChange={(e) =>
+                    onChangeSegment((e.target.value || null) as TariffSegment | null)
+                  }
+                  className="h-7 rounded-md border border-primary-200 bg-white px-1.5 text-[11px] text-primary-700 focus:border-primary-400 focus:outline-none"
+                  title="À qui s'appliquent ces conditions"
+                >
+                  <option value="">Tous segments</option>
+                  <option value="particuliers">{TARIFF_SEGMENT_LABEL.particuliers}</option>
+                  <option value="entreprises">{TARIFF_SEGMENT_LABEL.entreprises}</option>
+                  <option value="associations">{TARIFF_SEGMENT_LABEL.associations}</option>
+                </select>
+              </label>
+            )}
+            {onEdit && (
+              <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={onEdit}>
+                <Pencil className="w-3 h-3 mr-1" />
+                Éditer
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Body — sections non vides */}
