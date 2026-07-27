@@ -17,9 +17,14 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Calendar, AlertCircle, FileText, Upload, History } from 'lucide-react';
 import { Button } from '../ui';
-import type { Bank, ConditionGrid, MonetaryZone } from '../../types';
+import type { Bank, ConditionGrid, MonetaryZone, TariffSegment } from '../../types';
+import { TARIFF_SEGMENT_LABEL } from '../../types';
 import { GridSummaryCard } from './GridSummaryCard';
 import { GridDuplicatesBanner } from './GridDuplicatesBanner';
+import { SegmentBadge } from './SegmentBadge';
+
+// Filtre par segment : « all » = tous, « none » = grilles sans segment (catch-all).
+type SegmentFilter = 'all' | TariffSegment | 'none';
 
 interface BankGridsPanelProps {
   bank: Bank;
@@ -29,6 +34,7 @@ interface BankGridsPanelProps {
   onEditGrid: (grid: ConditionGrid | null) => void;
   onViewSource: (grid: ConditionGrid) => void;
   onDeleteGrid: (grid: ConditionGrid) => void;
+  onChangeSegment: (grid: ConditionGrid, segment: TariffSegment | null) => void;
 }
 
 function fmtPeriod(grid: ConditionGrid): string {
@@ -47,6 +53,7 @@ export function BankGridsPanel({
   onEditGrid,
   onViewSource,
   onDeleteGrid,
+  onChangeSegment,
 }: BankGridsPanelProps) {
   const currency: 'XAF' | 'XOF' = zone === 'UEMOA' ? 'XOF' : 'XAF';
 
@@ -58,7 +65,7 @@ export function BankGridsPanel({
   );
 
   // Tri : actives d'abord, puis archivées ; à statut égal, dernière effectiveDate en premier
-  const sortedGrids = useMemo(() => {
+  const allSortedGrids = useMemo(() => {
     const statusOrder = { active: 0, archived: 1, draft: 2 } as const;
     return [...visibleGrids].sort((a, b) => {
       const so = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
@@ -66,6 +73,31 @@ export function BankGridsPanel({
       return new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime();
     });
   }, [visibleGrids]);
+
+  // Filtre par segment (Particuliers / Entreprises / …) — permet de distinguer
+  // clairement à qui s'appliquent les grilles d'une même banque.
+  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('all');
+
+  // Segments réellement présents dans les grilles de cette banque, pour ne
+  // proposer que des filtres utiles (+ « Tous »).
+  const presentSegments = useMemo(() => {
+    const set = new Set<SegmentFilter>();
+    let hasNone = false;
+    for (const g of allSortedGrids) {
+      if (g.segment) set.add(g.segment);
+      else hasNone = true;
+    }
+    const ordered: SegmentFilter[] = (['particuliers', 'entreprises', 'associations'] as TariffSegment[])
+      .filter((s) => set.has(s));
+    if (hasNone) ordered.push('none');
+    return ordered;
+  }, [allSortedGrids]);
+
+  const sortedGrids = useMemo(() => {
+    if (segmentFilter === 'all') return allSortedGrids;
+    if (segmentFilter === 'none') return allSortedGrids.filter((g) => !g.segment);
+    return allSortedGrids.filter((g) => g.segment === segmentFilter);
+  }, [allSortedGrids, segmentFilter]);
 
   const [selectedGridId, setSelectedGridId] = useState<string | null>(
     () => sortedGrids[0]?.id ?? null,
@@ -81,7 +113,7 @@ export function BankGridsPanel({
   const selectedGrid = sortedGrids.find((g) => g.id === selectedGridId) ?? null;
   const activeCount = sortedGrids.filter((g) => g.status === 'active').length;
 
-  if (sortedGrids.length === 0) {
+  if (allSortedGrids.length === 0) {
     return (
       <div className="rounded-lg border border-primary-200 bg-white p-6 text-center">
         <FileText className="w-10 h-10 text-primary-300 mx-auto mb-2" />
@@ -147,6 +179,44 @@ export function BankGridsPanel({
             </Button>
           </div>
         </div>
+        {/* Filtre par segment — distinguer Particuliers / Entreprises / … */}
+        {presentSegments.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-primary-400">Barème :</span>
+            <button
+              type="button"
+              onClick={() => setSegmentFilter('all')}
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                segmentFilter === 'all'
+                  ? 'border-primary-900 bg-primary-900 text-white'
+                  : 'border-primary-200 bg-white text-primary-500 hover:bg-primary-50'
+              }`}
+            >
+              Tous ({allSortedGrids.length})
+            </button>
+            {presentSegments.map((seg) => {
+              const count = seg === 'none'
+                ? allSortedGrids.filter((g) => !g.segment).length
+                : allSortedGrids.filter((g) => g.segment === seg).length;
+              const label = seg === 'none' ? 'Tous segments' : TARIFF_SEGMENT_LABEL[seg];
+              return (
+                <button
+                  key={seg}
+                  type="button"
+                  onClick={() => setSegmentFilter(seg)}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                    segmentFilter === seg
+                      ? 'border-primary-900 bg-primary-900 text-white'
+                      : 'border-primary-200 bg-white text-primary-600 hover:bg-primary-50'
+                  }`}
+                >
+                  {label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-1.5">
           {sortedGrids.map((grid) => {
             const isSelected = grid.id === selectedGridId;
@@ -168,12 +238,22 @@ export function BankGridsPanel({
               >
                 <Calendar className="w-3 h-3" />
                 <span>{fmtPeriod(grid)}</span>
+                <SegmentBadge
+                  segment={grid.segment}
+                  short
+                  className={isSelected ? 'border-white/30 bg-white/15 text-white' : ''}
+                />
                 {isActive ? null : (
                   <History className="w-3 h-3 opacity-60" />
                 )}
               </button>
             );
           })}
+          {sortedGrids.length === 0 && (
+            <p className="px-1 py-1 text-[11px] text-primary-400">
+              Aucune grille pour ce segment.
+            </p>
+          )}
         </div>
       </div>
 
@@ -184,6 +264,7 @@ export function BankGridsPanel({
           currency={currency}
           onEdit={() => onEditGrid(selectedGrid)}
           onViewSource={() => onViewSource(selectedGrid)}
+          onChangeSegment={(segment) => onChangeSegment(selectedGrid, segment)}
         />
       )}
 

@@ -736,6 +736,9 @@ export function BanksPage() {
                     setShowConditions(true);
                   }}
                   onDeleteGrid={(grid) => deleteConditionGrid(grid.bankId, grid.id)}
+                  onChangeSegment={(grid, segment) =>
+                    updateConditionGrid(grid.bankId, grid.id, { segment: segment ?? undefined })
+                  }
                 />
               </>
             ) : (
