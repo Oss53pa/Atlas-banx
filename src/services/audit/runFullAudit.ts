@@ -59,7 +59,13 @@ export async function runFullAudit(params: RunFullAuditParams): Promise<Analysis
   const config = {
     enabledDetectors: FULL_AUDIT_DETECTORS,
     dateRange: {},
-    bankCodes: params.bankCode ? [params.bankCode] : undefined,
+    // IMPORTANT : ne PAS filtrer les transactions par code banque.
+    // Dans un audit mono-relevé (funnel particulier, détail d'un relevé), les
+    // transactions extraites du PDF ne portent pas le code de la banque
+    // sélectionnée — poser `bankCodes: [bankCode]` viderait TOUT l'audit
+    // (filterTransactions rejette les transactions dont t.bankCode ≠ sélection).
+    // Le bankCode ne sert qu'à résoudre le barème (bankConditions), pas à filtrer.
+    bankCodes: undefined,
   } as unknown as AnalysisConfig;
 
   const service = getAnalysisService(params.thresholds);
