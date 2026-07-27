@@ -14,7 +14,8 @@ import { banksRepo } from './lib/repositories';
 import type { Bank } from './types';
 import { LoginScreen } from './components/auth';
 import { SessionTimeoutModal } from './components/auth/SessionTimeoutModal';
-import { MfaGate } from './components/auth/MfaGate';
+// MFA désactivée temporairement — import commenté pour éviter un import inutilisé.
+// import { MfaGate } from './components/auth/MfaGate';
 import { useAuthStore } from './store/authStore';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { useAccountType } from './hooks/useAccountType';
@@ -419,7 +420,7 @@ function AppRoutes() {
     <ErrorBoundary>
       <SessionTimeoutGuard>
         <BankScopeSync />
-        <MfaGate>
+        {/* MFA (authentification à double facteur) désactivée temporairement — <MfaGate> */}
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<HomePage />} />
@@ -451,7 +452,7 @@ function AppRoutes() {
             } />
           </Routes>
         </Suspense>
-        </MfaGate>
+        {/* </MfaGate> */}
       </SessionTimeoutGuard>
     </ErrorBoundary>
   );
