@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getSupabaseClient } from '../../lib/supabase';
+import { syncAppBranding } from '../../lib/brandingSync';
 import { useAuthStore } from '../../store/authStore';
 
 type Status = 'loading' | 'error';
@@ -48,6 +49,9 @@ export default function ExternalAuthPage() {
         type: 'magiclink',
       });
       if (otpError) throw new Error(otpError.message);
+
+      // Resync du branding d'app dans raw_user_meta_data (non bloquant).
+      await syncAppBranding('atlasbanx');
 
       await initialize();
       navigate('/dashboard', { replace: true });
