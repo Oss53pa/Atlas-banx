@@ -540,9 +540,9 @@ export function ReportsPage() {
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => handleViewReport(statement)}
+                                onClick={() => navigate(`/statements/${statement.id}?tab=transactions`)}
                                 className="p-1.5 hover:bg-primary-100 rounded text-primary-500 hover:text-primary-700"
-                                title="Voir le rapport"
+                                title="Voir le relevé (transactions importées)"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
@@ -653,7 +653,8 @@ export function ReportsPage() {
                         variant="secondary"
                         size="sm"
                         className="flex-1"
-                        onClick={() => handleViewReport(statement)}
+                        onClick={() => navigate(`/statements/${statement.id}?tab=transactions`)}
+                        title="Voir le relevé (transactions importées)"
                       >
                         <Eye className="w-3 h-3 mr-1" />
                         Voir
