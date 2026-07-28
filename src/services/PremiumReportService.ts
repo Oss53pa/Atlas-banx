@@ -23,7 +23,7 @@ import {
   SEVERITY_LABELS,
   Severity,
 } from '../types';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate, formatDateUTC } from '../utils';
 import { partitionByCertainty, CERTAINTY_THRESHOLD } from './audit/anomalyCertainty';
 import {
   auditLog,
@@ -342,7 +342,7 @@ function drawCover(ctx: DrawCtx): void {
 
   setFont(doc, 'Inter', 11, 'normal');
   setColor(doc, INK_100);
-  doc.text(`Du ${formatDate(data.period.start)} au ${formatDate(data.period.end)}`, 24, cardY + 40);
+  doc.text(`Du ${formatDateUTC(data.period.start)} au ${formatDateUTC(data.period.end)}`, 24, cardY + 40);
 
   // Right column — banks, mode, audit id
   const rightX = pageWidth / 2 + 8;
@@ -955,7 +955,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
       margin: { left: ctx.margin, right: ctx.margin },
       head: [['Date', 'Libellé', 'Montant', 'Solde']],
       body: a.transactions.slice(0, 12).map((t) => [
-        formatDate(t.date as unknown as Date),
+        formatDateUTC(t.date as unknown as Date),
         t.description ?? '—',
         formatCurrency(t.amount, 'XAF'),
         formatCurrency(t.balance ?? 0, 'XAF'),

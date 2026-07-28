@@ -93,6 +93,27 @@ export function formatDateTime(date: Date | string): string {
   return formatDate(date, 'dd/MM/yyyy HH:mm');
 }
 
+/**
+ * Formate une date en se basant sur ses composantes UTC (et non le fuseau
+ * local). À utiliser pour les valeurs DATE (sans heure) — bornes de période,
+ * dates d'effet — stockées à minuit UTC : `formatDate` (local) les décalait
+ * d'un jour dans les fuseaux à décalage négatif (ex. Abidjan est en UTC, mais
+ * un client/navigateur en UTC-x afficherait la veille).
+ */
+export function formatDateUTC(
+  date: Date | string,
+  formatStr: string = 'dd/MM/yyyy'
+): string {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  if (!isValid(dateObj)) {
+    return 'Date invalide';
+  }
+  // Décale de l'offset local pour que les composantes LOCALES de `shifted`
+  // égalent les composantes UTC de `dateObj`, puis formate.
+  const shifted = new Date(dateObj.getTime() + dateObj.getTimezoneOffset() * 60000);
+  return format(shifted, formatStr, { locale: fr });
+}
+
 export function formatDateRelative(date: Date | string): string {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
 
