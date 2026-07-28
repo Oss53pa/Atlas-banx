@@ -60,15 +60,17 @@ describe('hasOpenGapToday', () => {
 });
 
 describe('détail des conditions — libellés & formatage', () => {
-  it('rubricLabel : mappe les codes connus, prettifie les autres', () => {
-    expect(rubricLabel('compte.tenue_mensuelle')).toBe('Tenue de compte (mensuelle)');
+  it('rubricLabel : libellé de la taxonomie pour les codes connus, prettifie les autres', () => {
+    // Source de vérité = taxonomie (displayLabelFr).
+    expect(rubricLabel('compte.tenue_mensuelle')).toBe('Tenue de compte mensuelle');
     expect(rubricLabel('divers.frais_speciaux')).toBe('Frais speciaux');
   });
 
-  it('isRateRubric : distingue taux/commission des montants', () => {
+  it('isRateRubric : unité de la taxonomie (percent) et pas une regex', () => {
     expect(isRateRubric('decouverts.taux_autorise')).toBe(true);
-    expect(isRateRubric('decouverts.commission_mouvement')).toBe(true);
     expect(isRateRubric('compte.tenue_mensuelle')).toBe(false);
+    // Piège classique : une commission FIXE en FCFA ne doit PAS être un taux.
+    expect(isRateRubric('decouverts.commission_intervention')).toBe(false);
   });
 
   it('formatConditionValue : % pour les taux, FCFA pour les montants', () => {

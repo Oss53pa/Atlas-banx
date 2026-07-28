@@ -129,8 +129,9 @@ export class PremiumReportService {
     data: PremiumReportData,
     filename?: string,
     reportId?: string,
+    security?: { ownerPassword?: string; userPermissions?: Array<'print' | 'modify' | 'copy' | 'annot-forms'> },
   ): Promise<void> {
-    const doc = await this.build(data, reportId);
+    const doc = await this.build(data, reportId, security);
     const safeName = data.clientName.replace(/\s+/g, '-').toLowerCase();
     const stamp = new Date().toISOString().slice(0, 10);
     const name = filename || `audit-atlasbanx-${safeName}-${stamp}.pdf`;
@@ -147,7 +148,8 @@ export class PremiumReportService {
           payload: {
             filename: name,
             anomalyCount: data.anomalies.length,
-            totalAmount: data.statistics.totalAnomalyAmount,
+            // Récupérable CERTAIN (≥ 90 %), cohérent avec le PDF — pas le total brut.
+            recoverableAmount: partitionByCertainty(data.anomalies).certainAmount,
             premium: true,
           },
         });
@@ -402,7 +404,7 @@ function drawExecutiveSummary(ctx: DrawCtx): void {
   doc.addPage();
   drawPageHeader(ctx, 'Synthèse exécutive');
 
-  const stats = data.statistics;
+  const stats = data.statistics ?? ({} as PremiumReportData['statistics']);
   const total = data.anomalies.length;
   const certainty = partitionByCertainty(data.anomalies);
   const status = data.summary?.status ?? (total === 0 ? 'OK' : 'WARNING');
@@ -556,7 +558,7 @@ function drawFindingsOverview(ctx: DrawCtx): void {
 
   // ─── Donut by severity ──
   const severities: Severity[] = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW];
-  const sevCounts = severities.map((s) => data.statistics.anomaliesBySeverity?.[s] ?? 0);
+  const sevCounts = severities.map((s) => data.statistics?.anomaliesBySeverity?.[s] ?? 0);
   const sevTotal = sevCounts.reduce((a, b) => a + b, 0);
 
   setFont(doc, 'Inter', 11, 'bold');
@@ -604,7 +606,7 @@ function drawFindingsOverview(ctx: DrawCtx): void {
   doc.text('Top des types d’anomalies', ctx.margin, y);
   y += 8;
 
-  const byType = data.statistics.anomaliesByType ?? {};
+  const byType = data.statistics?.anomaliesByType ?? {};
   const typeEntries = Object.entries(byType)
     .filter(([, c]) => c > 0)
     .sort(([, a], [, b]) => b - a)
@@ -808,11 +810,13 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
   // Severity + status + confidence row
   setFont(doc, 'Inter', 9, 'normal');
   setColor(doc, INK_700);
-  const isCertain = (a.confidence ?? 0) >= CERTAINTY_THRESHOLD;
+  // Confiance robuste : NaN/undefined → 0 (prudent), aligné sur partitionByCertainty.
+  const confPct = Number.isFinite(a.confidence) ? (a.confidence as number) : 0;
+  const isCertain = confPct >= CERTAINTY_THRESHOLD;
   const metaItems = [
     { l: 'Sévérité', v: SEVERITY_LABELS[a.severity], color: severityColor(a.severity) },
     { l: 'Fiabilité', v: isCertain ? 'Certaine' : 'À confirmer', color: isCertain ? SEV_LOW : SEV_HIGH },
-    { l: 'Confiance', v: `${Math.round((a.confidence ?? 0) * 100)}%` },
+    { l: 'Confiance', v: `${Math.round(confPct * 100)}%` },
     { l: 'Statut', v: statusLabel(a.status) },
     { l: 'Détecté le', v: formatDate(a.detectedAt) },
   ];
@@ -888,7 +892,14 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
       },
     });
     // @ts-expect-error jspdf-autotable adds lastAutoTable
-    y = (doc.lastAutoTable?.finalY ?? y) + 8;
+    y = (doc.lastAutoTable?.finalY ?? y) + 4;
+    if (a.evidence.length > 8) {
+      setFont(doc, 'Inter', 8, 'italic');
+      setColor(doc, INK_500);
+      doc.text(`+ ${a.evidence.length - 8} autre(s) preuve(s) non affichée(s)`, ctx.margin, y);
+      y += 6;
+    }
+    y += 4;
   }
 
   // Renvoi explicite aux conditions bancaires (article / section) + réglementation
@@ -971,6 +982,13 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
         3: { cellWidth: 32, halign: 'right' },
       },
     });
+    if (a.transactions.length > 12) {
+      // @ts-expect-error jspdf-autotable adds lastAutoTable
+      const ty = (doc.lastAutoTable?.finalY ?? y) + 5;
+      setFont(doc, 'Inter', 8, 'italic');
+      setColor(doc, INK_500);
+      doc.text(`+ ${a.transactions.length - 12} autre(s) transaction(s) concernée(s)`, ctx.margin, ty);
+    }
   }
 }
 

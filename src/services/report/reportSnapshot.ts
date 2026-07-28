@@ -16,8 +16,24 @@
 
 import type { PremiumReportData } from '../PremiumReportService';
 import type { Anomaly, Transaction } from '../../types';
+import { useAuthStore } from '../../store/authStore';
 
-const STORAGE_KEY = 'atlasbanx_report_snapshots_v1';
+const STORAGE_PREFIX = 'atlasbanx_report_snapshots_v1';
+
+/**
+ * Clé de stockage CLOISONNÉE par utilisateur : sur un poste partagé, un auditeur
+ * ne doit pas relire les instantanés (transactions client complètes) d'un autre
+ * compte connecté sur le même navigateur.
+ */
+function storageKey(): string {
+  const uid = useAuthStore.getState().user?.id ?? 'anon';
+  return `${STORAGE_PREFIX}:${uid}`;
+}
+
+// Cache mémoire de session : garantit l'immuabilité MÊME si localStorage échoue
+// (mode privé, quota dépassé) — sinon un re-téléchargement retomberait sur
+// l'analyse vivante et les données « bougeraient ».
+const memCache = new Map<string, ReportSnapshot>();
 
 export interface ReportSnapshot {
   /** Identifiant du rapport (ClientReport.id). */
@@ -78,8 +94,21 @@ export function reviveReportData(snap: ReportSnapshot): PremiumReportData {
 // Empreinte
 // ----------------------------------------------------------------------------
 
+/** Sérialisation canonique (clés triées) → empreinte stable et reproductible. */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    return Object.keys(o).sort().reduce<Record<string, unknown>>((acc, k) => {
+      acc[k] = canonicalize(o[k]);
+      return acc;
+    }, {});
+  }
+  return value;
+}
+
 export async function hashReportData(data: PremiumReportData): Promise<string> {
-  const canonical = JSON.stringify(toSerializable(data));
+  const canonical = JSON.stringify(canonicalize(toSerializable(data)));
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
   const b = new Uint8Array(buf);
   let h = '';
@@ -93,33 +122,35 @@ export async function hashReportData(data: PremiumReportData): Promise<string> {
 
 function readAll(): Record<string, ReportSnapshot> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey());
     return raw ? (JSON.parse(raw) as Record<string, ReportSnapshot>) : {};
   } catch {
     return {};
   }
 }
 
-function writeAll(map: Record<string, ReportSnapshot>): void {
+/** Persiste sur localStorage. Renvoie false si l'écriture a échoué (quota/privé). */
+function writeAll(map: Record<string, ReportSnapshot>): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    localStorage.setItem(storageKey(), JSON.stringify(map));
+    return true;
   } catch {
-    /* quota / mode privé — best-effort */
+    return false; // quota / mode privé — le cache mémoire prend le relais
   }
 }
 
 /**
  * Gèle un rapport : stocke une copie immuable + empreinte. Idempotent par id —
  * un rapport déjà gelé n'est PAS réécrit (ses données ne doivent pas bouger).
- * Renvoie le snapshot en vigueur (existant ou nouvellement créé).
+ * Écrit toujours en cache mémoire (immuabilité garantie en session) et tente la
+ * persistance localStorage (best-effort). Renvoie le snapshot en vigueur.
  */
 export async function freezeReportSnapshot(
   id: string,
   data: PremiumReportData,
   frozenAtIso: string,
 ): Promise<ReportSnapshot> {
-  const all = readAll();
-  const existing = all[id];
+  const existing = memCache.get(id) ?? readAll()[id];
   if (existing) return existing;
   const snap: ReportSnapshot = {
     id,
@@ -127,16 +158,19 @@ export async function freezeReportSnapshot(
     contentHash: await hashReportData(data),
     data: toSerializable(data),
   };
+  memCache.set(id, snap);
+  const all = readAll();
   all[id] = snap;
   writeAll(all);
   return snap;
 }
 
 export function getReportSnapshot(id: string): ReportSnapshot | null {
-  return readAll()[id] ?? null;
+  return memCache.get(id) ?? readAll()[id] ?? null;
 }
 
 export function deleteReportSnapshot(id: string): void {
+  memCache.delete(id);
   const all = readAll();
   if (all[id]) {
     delete all[id];

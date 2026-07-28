@@ -31,4 +31,14 @@ describe('partitionByCertainty', () => {
     expect(p.certain).toHaveLength(0);
     expect(p.uncertainAmount).toBe(3000);
   });
+
+  it('les types NON récupérables (AML, trésorerie) ne comptent pas dans le montant', () => {
+    const aml = { ...a(0.95, 10_000_000), type: AnomalyType.AML_ALERT } as Anomaly;
+    const cashflow = { ...a(0.95, 2_000_000), type: AnomalyType.CASHFLOW_ANOMALY } as Anomaly;
+    const overcharge = a(0.95, 12000); // récupérable
+    const p = partitionByCertainty([aml, cashflow, overcharge]);
+    // Les 3 sont "certaines" (confiance ≥ 90%), mais seul l'overcharge est chiffré.
+    expect(p.certain).toHaveLength(3);
+    expect(p.certainAmount).toBe(12000);
+  });
 });

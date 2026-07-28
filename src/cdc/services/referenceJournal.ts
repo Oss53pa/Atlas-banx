@@ -8,6 +8,8 @@
 // ============================================================================
 
 import { getSupabaseClient } from '../../lib/supabase';
+import { getRubricSeed, rubricUnitOf } from '../taxonomy/rubrics';
+import type { ConditionUnit } from '../types';
 
 export type JournalSegment = 'particulier' | 'pme' | 'corporate' | 'tous';
 
@@ -120,37 +122,40 @@ export async function fetchReferenceVersionDetail(
   };
 }
 
-/** Libellé lisible d'un code de rubrique (fallback : prettification du code). */
+/** Unité d'une rubrique d'après la taxonomie ('fcfa' par défaut si inconnue). */
+export function rubricUnit(code: string): ConditionUnit {
+  return rubricUnitOf(code);
+}
+
+/** Libellé lisible d'un code de rubrique (taxonomie, fallback : prettification). */
 export function rubricLabel(code: string): string {
-  const MAP: Record<string, string> = {
-    'compte.tenue_mensuelle': 'Tenue de compte (mensuelle)',
-    'compte.releve_mensuel': 'Relevé mensuel',
-    'compte.inactivite': 'Frais d’inactivité',
-    'cartes.cotisation_debit': 'Cotisation carte de débit',
-    'decouverts.taux_autorise': 'Taux découvert autorisé',
-    'decouverts.taux_non_autorise': 'Taux découvert non autorisé',
-    'decouverts.commission_mouvement': 'Commission de mouvement',
-    'virement.national': 'Virement national',
-    'virement.international': 'Virement international',
-  };
-  if (MAP[code]) return MAP[code];
+  const seed = getRubricSeed(code);
+  if (seed) return seed.displayLabelFr;
   const tail = code.includes('.') ? code.slice(code.indexOf('.') + 1) : code;
   return tail.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
-/** true si la rubrique s'exprime en pourcentage (taux, commission). */
+/** true si la rubrique s'exprime en pourcentage (d'après la taxonomie). */
 export function isRateRubric(code: string): boolean {
-  return /taux|commission|agios?|interet|intérêt/i.test(code);
+  return rubricUnitOf(code) === 'percent';
 }
 
-/** Formate une valeur de condition selon sa nature (taux % ou montant FCFA). */
+/** Formate une valeur de condition selon son UNITÉ déclarée dans la taxonomie. */
 export function formatConditionValue(code: string, value: number | null): string {
   if (value === null) return '—';
-  if (isRateRubric(code)) {
-    const s = Number.isInteger(value) ? String(value) : value.toString().replace('.', ',');
-    return `${s} %`;
+  switch (rubricUnit(code)) {
+    case 'percent': {
+      const s = Number.isInteger(value) ? String(value) : value.toString().replace('.', ',');
+      return `${s} %`;
+    }
+    case 'days':
+      return `${value} jour${Math.abs(value) > 1 ? 's' : ''}`;
+    case 'count':
+      return String(value);
+    case 'fcfa':
+    default:
+      return `${Math.round(value).toLocaleString('fr-FR')} FCFA`;
   }
-  return `${Math.round(value).toLocaleString('fr-FR')} FCFA`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

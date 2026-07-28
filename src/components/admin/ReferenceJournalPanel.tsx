@@ -24,6 +24,30 @@ interface ReferenceJournalPanelProps {
   onImport?: (bankCode: string, segment: JournalSegment) => void;
 }
 
+/**
+ * Rend lisible une valeur tarifaire exprimée par une FORMULE (barème par
+ * tranches, % avec min/max…) stockée en JSONB. On affiche les champs usuels
+ * quand ils existent, sinon un JSON compact — pour que l'admin puisse VÉRIFIER
+ * la condition contre le PDF source (au lieu d'un simple libellé « Formule »).
+ */
+function formatFormula(f: unknown): string {
+  if (f === null || f === undefined) return '—';
+  if (typeof f === 'string' || typeof f === 'number') return String(f);
+  if (typeof f === 'object') {
+    const o = f as Record<string, unknown>;
+    const parts: string[] = [];
+    const pct = o.percent ?? o.percentage ?? o.taux;
+    if (pct !== undefined) parts.push(`${pct} %`);
+    if (o.min !== undefined) parts.push(`min ${o.min}`);
+    if (o.max !== undefined) parts.push(`max ${o.max}`);
+    if (o.fixed !== undefined) parts.push(`fixe ${o.fixed}`);
+    if (Array.isArray(o.tiers)) parts.push(`${o.tiers.length} tranche(s)`);
+    if (parts.length > 0) return parts.join(' · ');
+    try { return JSON.stringify(f); } catch { return 'Formule'; }
+  }
+  return 'Formule';
+}
+
 function fmtDate(iso: string | null, open = '∞'): string {
   if (!iso) return open;
   const d = new Date(iso);
@@ -427,7 +451,7 @@ export function ReferenceJournalPanel({ onImport }: ReferenceJournalPanelProps =
                             </td>
                             <td className="px-3 py-2 text-right font-semibold text-primary-900">
                               {c.valueNumeric === null && c.valueFormula
-                                ? 'Formule'
+                                ? <span className="font-mono text-[10px] font-normal text-primary-600">{formatFormula(c.valueFormula)}</span>
                                 : formatConditionValue(c.rubricCode, c.valueNumeric)}
                             </td>
                             <td className="px-3 py-2 text-right text-primary-500">{c.pdfPage ?? '—'}</td>
