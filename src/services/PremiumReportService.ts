@@ -223,13 +223,35 @@ interface DrawCtx {
   pageHeight: number;
   margin: number;
   contentWidth: number;
+  /** Famille d'accent (marque cabinet ou doré Atlas par défaut). */
+  accent: [number, number, number];
+  accentPale: [number, number, number];
+  accentDark: [number, number, number];
+  accentWash: [number, number, number];
+}
+
+function lighten([r, g, b]: [number, number, number], t: number): [number, number, number] {
+  return [r + (255 - r) * t, g + (255 - g) * t, b + (255 - b) * t];
+}
+function darken([r, g, b]: [number, number, number], t: number): [number, number, number] {
+  return [r * (1 - t), g * (1 - t), b * (1 - t)];
 }
 
 function createCtx(doc: jsPDF, data: PremiumReportData): DrawCtx {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 18; // mm
-  return { doc, data, pageWidth, pageHeight, margin, contentWidth: pageWidth - 2 * margin };
+  // Accent = couleur cabinet si fournie, sinon doré de marque ; les nuances
+  // (pale/dark/wash) sont dérivées pour un habillage cohérent de tout le rapport.
+  const hasCabinetColor = !!data.cabinet?.accentColor;
+  const accent = hexToRgb(data.cabinet?.accentColor);
+  const accentPale: [number, number, number] = hasCabinetColor ? lighten(accent, 0.55) : GOLD_300;
+  const accentDark: [number, number, number] = hasCabinetColor ? darken(accent, 0.3) : GOLD_700;
+  const accentWash: [number, number, number] = hasCabinetColor ? lighten(accent, 0.86) : GOLD_100;
+  return {
+    doc, data, pageWidth, pageHeight, margin, contentWidth: pageWidth - 2 * margin,
+    accent, accentPale, accentDark, accentWash,
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -239,15 +261,15 @@ function createCtx(doc: jsPDF, data: PremiumReportData): DrawCtx {
 function drawCover(ctx: DrawCtx): void {
   const { doc, data, pageWidth, pageHeight } = ctx;
   const cabinet = data.cabinet;
-  // Couleur d'accent : celle du cabinet si fournie, sinon le doré de marque.
-  const accent = hexToRgb(cabinet?.accentColor);
+  // Couleur d'accent (dérivée dans createCtx) : cabinet si fournie, sinon doré.
+  const accent = ctx.accent;
 
   // Full-page ink background
   setFill(doc, INK_950);
   doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
   // Accent stripe (couleur cabinet)
-  setFill(doc, GOLD_700);
+  setFill(doc, ctx.accentDark);
   doc.rect(0, 0, 8, pageHeight, 'F');
   setFill(doc, accent);
   doc.rect(8, 0, 2, pageHeight, 'F');
@@ -267,14 +289,14 @@ function drawCover(ctx: DrawCtx): void {
     const nameLines = doc.splitTextToSize(cabinet.name, pageWidth - 90);
     doc.text(nameLines, 24, 48);
     setFont(doc, 'Inter', 9, 'normal');
-    setColor(doc, GOLD_300);
+    setColor(doc, ctx.accentPale);
     doc.text((cabinet.tagline || 'AUDIT BANCAIRE — INTELLIGENCE TARIFAIRE').toUpperCase(), 24, 48 + nameLines.length * 9, { charSpace: 1.2 });
   } else {
     setFont(doc, 'GrandHotel', 56);
     setColor(doc, accent);
     doc.text('AtlasBanx', 24, 50);
     setFont(doc, 'Inter', 9, 'normal');
-    setColor(doc, GOLD_300);
+    setColor(doc, ctx.accentPale);
     doc.text('AUDIT BANCAIRE — INTELLIGENCE TARIFAIRE', 24, 58, { charSpace: 1.2 });
   }
 
@@ -287,7 +309,7 @@ function drawCover(ctx: DrawCtx): void {
   const titleY = pageHeight / 2 - 30;
 
   setFont(doc, 'Inter', 11, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('RAPPORT D’AUDIT', 24, titleY, { charSpace: 2.5 });
 
   setFont(doc, 'Inter', 28, 'bold');
@@ -303,7 +325,7 @@ function drawCover(ctx: DrawCtx): void {
   doc.rect(0, cardY, 4, 60, 'F');
 
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('CLIENT AUDITÉ', 24, cardY + 10, { charSpace: 1.5 });
 
   setFont(doc, 'Inter', 18, 'bold');
@@ -312,7 +334,7 @@ function drawCover(ctx: DrawCtx): void {
 
   // Period
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('PÉRIODE', 24, cardY + 32, { charSpace: 1.5 });
 
   setFont(doc, 'Inter', 11, 'normal');
@@ -323,7 +345,7 @@ function drawCover(ctx: DrawCtx): void {
   const rightX = pageWidth / 2 + 8;
 
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('PÉRIMÈTRE', rightX, cardY + 10, { charSpace: 1.5 });
 
   setFont(doc, 'Inter', 11, 'normal');
@@ -335,7 +357,7 @@ function drawCover(ctx: DrawCtx): void {
   doc.text(doc.splitTextToSize(banksLine, pageWidth / 2 - 32), rightX, cardY + 20);
 
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('MOTEUR D’ANALYSE', rightX, cardY + 32, { charSpace: 1.5 });
 
   setFont(doc, 'Inter', 11, 'normal');
@@ -366,7 +388,7 @@ function drawCover(ctx: DrawCtx): void {
   }
   doc.text(`Émis le ${new Date().toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}`, 24, footY + 22);
 
-  setColor(doc, GOLD_500);
+  setColor(doc, ctx.accent);
   doc.text('CONFIDENTIEL', pageWidth - 24, footY + 22, { align: 'right', charSpace: 1.5 });
 }
 
@@ -410,7 +432,7 @@ function drawExecutiveSummary(ctx: DrawCtx): void {
     {
       label: 'Économies potentielles',
       value: formatCurrency(stats.totalAnomalyAmount ?? stats.potentialSavings ?? 0, 'XAF'),
-      tone: GOLD_700,
+      tone: ctx.accentDark,
     },
     {
       label: 'Taux d’anomalie',
@@ -593,7 +615,7 @@ function drawFindingsOverview(ctx: DrawCtx): void {
 
       setFill(doc, INK_100);
       doc.roundedRect(chartX, y + 1, chartW, 5, 0.8, 0.8, 'F');
-      setFill(doc, GOLD_500);
+      setFill(doc, ctx.accent);
       doc.roundedRect(chartX, y + 1, Math.max(1, chartW * ratio), 5, 0.8, 0.8, 'F');
 
       setFont(doc, 'Inter', 8, 'bold');
@@ -662,7 +684,7 @@ function drawRecommendations(ctx: DrawCtx): void {
     setFill(doc, INK_900);
     doc.roundedRect(cardX + padding, y + padding, 9, 9, 1, 1, 'F');
     setFont(doc, 'Inter', 9, 'bold');
-    setColor(doc, GOLD_300);
+    setColor(doc, ctx.accentPale);
     doc.text(String(idx + 1).padStart(2, '0'), cardX + padding + 4.5, y + padding + 6, { align: 'center' });
 
     // Title row
@@ -744,7 +766,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
   doc.rect(ctx.margin, y, 3, bannerH, 'F');
 
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('TYPE D’ANOMALIE', ctx.margin + 8, y + 7, { charSpace: 1.5 });
 
   setFont(doc, 'Inter', 14, 'bold');
@@ -753,7 +775,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
 
   // Right: amount
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text(
     'IMPACT FINANCIER',
     ctx.pageWidth - ctx.margin - 8,
@@ -792,8 +814,8 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
   y += 18;
 
   // Recommendation block
-  setFill(doc, GOLD_100);
-  setDraw(doc, GOLD_300);
+  setFill(doc, ctx.accentWash);
+  setDraw(doc, ctx.accentPale);
   doc.setLineWidth(0.2);
   setFont(doc, 'Inter', 10, 'normal');
   const recoLines = doc.splitTextToSize(a.recommendation || '—', ctx.contentWidth - 14);
@@ -801,7 +823,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
   doc.roundedRect(ctx.margin, y, ctx.contentWidth, recoH, 1.5, 1.5, 'FD');
 
   setFont(doc, 'Inter', 8, 'bold');
-  setColor(doc, GOLD_700);
+  setColor(doc, ctx.accentDark);
   doc.text('RECOMMANDATION', ctx.margin + 6, y + 8, { charSpace: 1.5 });
 
   setFont(doc, 'Inter', 10, 'normal');
@@ -838,7 +860,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
       },
       headStyles: {
         fillColor: INK_900,
-        textColor: GOLD_300,
+        textColor: ctx.accentPale,
         fontSize: 8,
         fontStyle: 'bold',
       },
@@ -886,7 +908,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
       },
       headStyles: {
         fillColor: INK_700,
-        textColor: GOLD_300,
+        textColor: ctx.accentPale,
         fontSize: 8,
         fontStyle: 'bold',
       },
@@ -1027,11 +1049,11 @@ function drawIntegrityCertificate(ctx: DrawCtx, certText: string): void {
   // Certificate box
   setFill(doc, INK_950);
   doc.roundedRect(ctx.margin, y, ctx.contentWidth, 80, 2, 2, 'F');
-  setFill(doc, GOLD_500);
+  setFill(doc, ctx.accent);
   doc.rect(ctx.margin, y, 2, 80, 'F');
 
   setFont(doc, 'courier', 9, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   const certLines = certText.split('\n').slice(0, 18);
   doc.text(certLines, ctx.margin + 6, y + 8);
 }
@@ -1046,15 +1068,15 @@ function drawPageHeader(ctx: DrawCtx, title: string): void {
   // Top brand bar
   setFill(doc, INK_900);
   doc.rect(0, 0, pageWidth, 22, 'F');
-  setFill(doc, GOLD_500);
+  setFill(doc, ctx.accent);
   doc.rect(0, 22, pageWidth, 1.2, 'F');
 
   setFont(doc, 'GrandHotel', 18);
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text('AtlasBanx', ctx.margin, 14);
 
   setFont(doc, 'Inter', 8, 'normal');
-  setColor(doc, GOLD_300);
+  setColor(doc, ctx.accentPale);
   doc.text(title.toUpperCase(), pageWidth - ctx.margin, 14, { align: 'right', charSpace: 2 });
 
   setFont(doc, 'Inter', 14, 'bold');
