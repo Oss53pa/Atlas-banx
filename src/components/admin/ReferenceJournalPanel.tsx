@@ -9,13 +9,18 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Landmark, CheckCircle2, AlertTriangle, Loader2, CalendarClock, FileText, Download,
+  Search, Landmark, CheckCircle2, AlertTriangle, Loader2, CalendarClock, FileText, Download, Upload,
 } from 'lucide-react';
 import {
   fetchReferenceJournal, coverageForSegment, hasOpenGapToday, bankHasMissingPeriods, journalToCsv,
   CONCRETE_SEGMENTS, SEGMENT_LABELS,
   type ReferenceJournalRow, type JournalSegment,
 } from '../../cdc/services/referenceJournal';
+
+interface ReferenceJournalPanelProps {
+  /** Ouvre l'onglet d'import scopé sur la banque + le segment donnés. */
+  onImport?: (bankCode: string, segment: JournalSegment) => void;
+}
 
 function fmtDate(iso: string | null, open = '∞'): string {
   if (!iso) return open;
@@ -42,7 +47,7 @@ const STATUS_LABEL: Record<string, string> = {
   published: 'Publié', validated: 'Validé', submitted: 'Soumis', draft: 'Brouillon', rejected: 'Rejeté',
 };
 
-export function ReferenceJournalPanel() {
+export function ReferenceJournalPanel({ onImport }: ReferenceJournalPanelProps = {}) {
   const [rows, setRows] = useState<ReferenceJournalRow[] | null>(null);
   const [search, setSearch] = useState('');
   const [missingOnly, setMissingOnly] = useState(false);
@@ -68,6 +73,20 @@ export function ReferenceJournalPanel() {
     if (missingOnly) list = list.filter((b) => bankHasMissingPeriods(b.rows, today));
     return list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }, [rows, search, missingOnly, today]);
+
+  // Synthèse globale (sur TOUT le référentiel, indépendamment des filtres).
+  const summary = useMemo(() => {
+    if (!rows) return { totalBanks: 0, withMissing: 0, versions: 0 };
+    const map = new Map<string, ReferenceJournalRow[]>();
+    for (const r of rows) {
+      const l = map.get(r.bankCode) ?? [];
+      l.push(r);
+      map.set(r.bankCode, l);
+    }
+    let withMissing = 0;
+    for (const [, list] of map) if (bankHasMissingPeriods(list, today)) withMissing++;
+    return { totalBanks: map.size, withMissing, versions: rows.length };
+  }, [rows, today]);
 
   const exportCsv = () => {
     const flat = banks.flatMap((b) => b.rows);
@@ -125,6 +144,30 @@ export function ReferenceJournalPanel() {
         </div>
       </div>
 
+      {/* Synthèse */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-white px-3 py-1.5 text-primary-700">
+          <Landmark className="h-3.5 w-3.5 text-primary-400" />
+          <strong className="text-primary-900">{summary.totalBanks}</strong> banque{summary.totalBanks > 1 ? 's' : ''} référencée{summary.totalBanks > 1 ? 's' : ''}
+        </span>
+        <button
+          onClick={() => setMissingOnly((v) => !v)}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-colors ${
+            summary.withMissing > 0
+              ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          }`}
+          title={summary.withMissing > 0 ? 'Filtrer sur les banques à compléter' : undefined}
+        >
+          {summary.withMissing > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+          <strong>{summary.withMissing}</strong> avec périodes manquantes
+        </button>
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-white px-3 py-1.5 text-primary-700">
+          <FileText className="h-3.5 w-3.5 text-primary-400" />
+          <strong className="text-primary-900">{summary.versions}</strong> version{summary.versions > 1 ? 's' : ''} de barème
+        </span>
+      </div>
+
       {banks.length === 0 && (
         <div className="rounded-xl border border-primary-200 bg-white p-8 text-center text-sm text-primary-500">
           {missingOnly && rows.length > 0 ? (
@@ -163,6 +206,7 @@ export function ReferenceJournalPanel() {
                 const spans = coverageForSegment(bank.rows, seg);
                 const openGap = hasOpenGapToday(spans, today);
                 const none = spans.length === 0;
+                const hasGap = none || spans.some((s) => !s.covered) || openGap;
                 return (
                   <div key={seg} className="flex flex-wrap items-center gap-1.5">
                     <span className={`inline-flex w-28 shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${SEGMENT_CHIP[seg]}`}>
@@ -191,6 +235,15 @@ export function ReferenceJournalPanel() {
                           </span>
                         )}
                       </>
+                    )}
+                    {hasGap && onImport && (
+                      <button
+                        onClick={() => onImport(bank.code, seg)}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary-900 bg-primary-900 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-primary-800"
+                        title={`Importer un barème ${SEGMENT_LABELS[seg]} pour ${bank.name}`}
+                      >
+                        <Upload className="h-3 w-3" /> Importer ce barème
+                      </button>
                     )}
                   </div>
                 );

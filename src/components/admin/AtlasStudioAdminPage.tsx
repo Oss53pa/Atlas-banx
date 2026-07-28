@@ -21,6 +21,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Users, Building2, BarChart3, Sparkles, CalendarClock } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useBankStore } from '../../store/bankStore';
 import { BanksPage } from '../banks';
 import { ConditionsIntelligencePage } from '../conditions-intelligence';
 import { ReferenceJournalPanel } from './ReferenceJournalPanel';
@@ -47,9 +48,17 @@ export default function AtlasStudioAdminPage() {
     clearError,
   } = useAuthStore();
 
+  const { banks: storeBanks, setSelectedBank } = useBankStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [view, setView] = useState<AdminView>('particuliers');
+
+  // Depuis le journal : ouvrir l'onglet d'import scopé sur la banque + segment.
+  const handleImportFromJournal = (bankCode: string, segment: 'particulier' | 'pme' | 'corporate' | 'tous') => {
+    const bank = storeBanks.find((b) => b.code === bankCode);
+    if (bank) setSelectedBank(bank.id);
+    setView(segment === 'particulier' ? 'particuliers' : 'entreprises');
+  };
 
   const isAdmin = profile?.role === 'admin';
   const authed = isAuthenticated || isDemoMode;
@@ -144,7 +153,7 @@ export default function AtlasStudioAdminPage() {
           {view === 'benchmark' ? (
             <ConditionsIntelligencePage />
           ) : view === 'journal' ? (
-            <ReferenceJournalPanel />
+            <ReferenceJournalPanel onImport={handleImportFromJournal} />
           ) : (
             <BanksPage
               key={view}
