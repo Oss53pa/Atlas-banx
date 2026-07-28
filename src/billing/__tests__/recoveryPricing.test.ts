@@ -25,20 +25,15 @@ describe('pricingForRecovery', () => {
       expect(p.priceFcfa).toBeLessThan(p.recoverableFcfa);
       expect(p.netGainFcfa).toBeGreaterThan(0);
       expect(p.priceFcfa).toBeGreaterThanOrEqual(RECOVERY_PRICING.MIN_PRICE);
-      expect(p.priceFcfa).toBeLessThanOrEqual(RECOVERY_PRICING.MAX_PRICE);
     }
   });
 
-  it('plafonne le prix au maximum pour les gros récupérables', () => {
-    const p = pricingForRecovery(10_000_000);
-    expect(p.priceFcfa).toBe(RECOVERY_PRICING.MAX_PRICE);
-    expect(p.netGainFcfa).toBe(10_000_000 - RECOVERY_PRICING.MAX_PRICE);
-  });
-
-  it('applique ~20% dans la zone intermédiaire', () => {
-    const p = pricingForRecovery(50_000);
-    // 20% de 50 000 = 10 000, sous le plafond
-    expect(p.priceFcfa).toBe(10_000);
-    expect(p.effectiveRate).toBeCloseTo(0.2, 2);
+  it('applique 20% SANS plafond, même sur les très gros montants', () => {
+    expect(pricingForRecovery(50_000).priceFcfa).toBe(10_000);
+    expect(pricingForRecovery(300_000).priceFcfa).toBe(60_000);
+    expect(pricingForRecovery(1_000_000).priceFcfa).toBe(200_000);
+    const big = pricingForRecovery(10_000_000);
+    expect(big.priceFcfa).toBe(2_000_000);
+    expect(big.effectiveRate).toBeCloseTo(0.2, 5);
   });
 });
