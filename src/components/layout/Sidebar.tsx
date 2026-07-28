@@ -13,6 +13,8 @@ import {
   ChevronDown,
   BrainCircuit,
   ArrowLeftRight,
+  Upload,
+  FileText,
 } from 'lucide-react';
 import { Button } from '../ui';
 import { useAccountType } from '../../hooks/useAccountType';
@@ -37,9 +39,12 @@ type NavSection = {
 
 // ─── Top-level (no group header) — daily flow ─────────────────────────────
 const QUICK_ITEMS: NavItem[] = [
-  { name: 'Accueil',         href: '/',          icon: Home },
-  { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Rapports',        href: '/reports',   icon: FileBarChart },
+  { name: 'Accueil',         href: '/',           icon: Home },
+  { name: 'Tableau de bord', href: '/dashboard',  icon: LayoutDashboard },
+  // Flux quotidien : importer un relevé → consulter les relevés → générer les rapports.
+  { name: 'Importer',        href: '/import',     icon: Upload },
+  { name: 'Relevés',         href: '/statements', icon: FileText },
+  { name: 'Rapports',        href: '/reports',    icon: FileBarChart },
 ];
 
 // ─── Collapsible groups — by domain ───────────────────────────────────────
