@@ -24,6 +24,7 @@ import {
   Severity,
 } from '../types';
 import { formatCurrency, formatDate } from '../utils';
+import { partitionByCertainty, CERTAINTY_THRESHOLD } from './audit/anomalyCertainty';
 import {
   auditLog,
   auditLogCritical,
@@ -403,6 +404,7 @@ function drawExecutiveSummary(ctx: DrawCtx): void {
 
   const stats = data.statistics;
   const total = data.anomalies.length;
+  const certainty = partitionByCertainty(data.anomalies);
   const status = data.summary?.status ?? (total === 0 ? 'OK' : 'WARNING');
   const statusColor =
     status === 'CRITICAL' ? SEV_CRITICAL
@@ -430,14 +432,14 @@ function drawExecutiveSummary(ctx: DrawCtx): void {
   const kpis: Array<{ label: string; value: string; tone: [number, number, number] }> = [
     { label: 'Anomalies détectées', value: total.toLocaleString('fr-FR'), tone: INK_900 },
     {
-      label: 'Économies potentielles',
-      value: formatCurrency(stats.totalAnomalyAmount ?? stats.potentialSavings ?? 0, 'XAF'),
+      label: 'À recouvrer (certain ≥90%)',
+      value: formatCurrency(certainty.certainAmount, 'XAF'),
       tone: ctx.accentDark,
     },
     {
-      label: 'Taux d’anomalie',
-      value: `${(stats.anomalyRate ?? 0).toFixed(1)}%`,
-      tone: INK_700,
+      label: 'À confirmer (<90%)',
+      value: formatCurrency(certainty.uncertainAmount, 'XAF'),
+      tone: SEV_HIGH,
     },
     {
       label: 'Transactions analysées',
@@ -462,11 +464,22 @@ function drawExecutiveSummary(ctx: DrawCtx): void {
     setColor(doc, INK_500);
     doc.text(kpi.label.toUpperCase(), x + 5, y + 8, { charSpace: 0.7 });
 
-    setFont(doc, 'Inter', 14, 'bold');
+    setFont(doc, 'Inter', 13, 'bold');
     setColor(doc, INK_900);
     doc.text(kpi.value, x + 5, y + 20);
   });
-  y += tileHeight + 10;
+  y += tileHeight + 6;
+
+  // Note de méthode : seules les anomalies CERTAINES (≥ 90 %) sont chiffrées
+  // dans le montant à recouvrer ; les anomalies à confirmer sont listées à part.
+  setFont(doc, 'Inter', 8, 'normal');
+  setColor(doc, INK_500);
+  const certaintyNote =
+    `Montant à recouvrer = ${certainty.certain.length} anomalie(s) certaine(s) (confiance ≥ 90 %). `
+    + `${certainty.uncertain.length} anomalie(s) à confirmer (< 90 %) sont signalées pour investigation `
+    + `mais NON comptées dans le montant réclamable.`;
+  doc.text(doc.splitTextToSize(certaintyNote, ctx.contentWidth), ctx.margin, y);
+  y += doc.splitTextToSize(certaintyNote, ctx.contentWidth).length * 3.6 + 6;
 
   // Severity distribution mini-bars
   setFont(doc, 'Inter', 11, 'bold');
@@ -795,10 +808,12 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
   // Severity + status + confidence row
   setFont(doc, 'Inter', 9, 'normal');
   setColor(doc, INK_700);
+  const isCertain = (a.confidence ?? 0) >= CERTAINTY_THRESHOLD;
   const metaItems = [
     { l: 'Sévérité', v: SEVERITY_LABELS[a.severity], color: severityColor(a.severity) },
+    { l: 'Fiabilité', v: isCertain ? 'Certaine' : 'À confirmer', color: isCertain ? SEV_LOW : SEV_HIGH },
+    { l: 'Confiance', v: `${Math.round((a.confidence ?? 0) * 100)}%` },
     { l: 'Statut', v: statusLabel(a.status) },
-    { l: 'Confiance', v: `${Math.round(a.confidence * 100)}%` },
     { l: 'Détecté le', v: formatDate(a.detectedAt) },
   ];
   const metaCol = ctx.contentWidth / metaItems.length;

@@ -23,6 +23,7 @@ import { extractStatement } from '../../extraction/bank-statement';
 import { runFullAudit } from '../../services/audit/runFullAudit';
 import { countAuditedMonths } from '../../billing/auditPlans';
 import { pricingForRecovery, type RecoveryPricing } from '../../billing/recoveryPricing';
+import { partitionByCertainty } from '../../services/audit/anomalyCertainty';
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { buildParticulierComplaintLetter, complaintLetterToHtml } from '../../billing/express/complaintLetter';
 import { CGV_PARTICULIER_VERSION, CGV_PARTICULIER_SECTIONS } from '../../billing/express/cgvParticulier';
@@ -178,7 +179,9 @@ export default function ExpressAuditPage() {
         onProgress: (_pct, s) => setAuditStep(s),
       });
       setAudit(result);
-      setPricing(pricingForRecovery(result.statistics.totalAnomalyAmount));
+      // Le montant récupérable ne compte QUE les anomalies certaines (≥90%).
+      const { certainAmount } = partitionByCertainty(result.anomalies);
+      setPricing(pricingForRecovery(certainAmount));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse.");
       setStep('setup');
@@ -610,14 +613,27 @@ export default function ExpressAuditPage() {
                 ) : pricing.recoverableFcfa <= 0 ? (
                   /* Relevé conforme : rien à récupérer */
                   <div className="space-y-4">
-                    <div className="card border-emerald-200 bg-emerald-50/60 p-6 text-center">
-                      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-6 w-6" /></span>
-                      <p className="mt-3 font-display text-3xl text-ink-900">Relevé conforme</p>
-                      <p className="mt-1 text-sm text-ink-500">
-                        Aucun frais indu détecté sur {transactions.length} transactions
-                        {usedOfficialGrid ? ', y compris face au barème officiel de votre banque.' : '.'}
-                      </p>
-                    </div>
+                    {(() => {
+                      const p = partitionByCertainty(audit.anomalies);
+                      const onlyUncertain = p.uncertain.length > 0;
+                      return (
+                        <div className={`card p-6 text-center ${onlyUncertain ? 'border-amber-200 bg-amber-50/60' : 'border-emerald-200 bg-emerald-50/60'}`}>
+                          <span className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full text-white ${onlyUncertain ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                            {onlyUncertain ? <AlertCircle className="h-6 w-6" /> : <CheckCircle2 className="h-6 w-6" />}
+                          </span>
+                          <p className="mt-3 font-display text-3xl text-ink-900">
+                            {onlyUncertain ? 'Aucun frais indu certain' : 'Relevé conforme'}
+                          </p>
+                          <p className="mt-1 text-sm text-ink-500">
+                            {onlyUncertain ? (
+                              <>Aucune anomalie <strong>prouvée à 90%+</strong> sur {transactions.length} transactions, mais {p.uncertain.length} point{p.uncertain.length > 1 ? 's' : ''} à vérifier. Le rapport détaillé (offert) les liste.</>
+                            ) : (
+                              <>Aucun frais indu détecté sur {transactions.length} transactions{usedOfficialGrid ? ', y compris face au barème officiel de votre banque.' : '.'}</>
+                            )}
+                          </p>
+                        </div>
+                      );
+                    })()}
                     <button onClick={() => { setStep("report"); }} className="btn btn-primary btn-lg w-full">
                       Voir le rapport (offert) <ArrowRight className="h-4 w-4" />
                     </button>
@@ -628,9 +644,18 @@ export default function ExpressAuditPage() {
                     {/* Bandeau récupérable */}
                     <div className="card overflow-hidden">
                       <div className="bg-gradient-to-br from-ink-800 to-ink-950 p-6 text-center text-white">
-                        <p className="text-xs uppercase tracking-[0.16em] text-white/50">Montant potentiellement récupérable</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-white/50">Montant récupérable (anomalies certaines)</p>
                         <p className="mt-1 font-display text-5xl text-gradient-gold leading-none sm:text-6xl">{fmt(pricing.recoverableFcfa)}</p>
-                        <p className="mt-1 text-sm text-white/50">FCFA · {audit.statistics.totalAnomalies} anomalie{audit.statistics.totalAnomalies > 1 ? 's' : ''} détectée{audit.statistics.totalAnomalies > 1 ? 's' : ''} sur {months} mois</p>
+                        {(() => {
+                          const p = partitionByCertainty(audit.anomalies);
+                          return (
+                            <p className="mt-1 text-sm text-white/50">
+                              FCFA · {p.certain.length} anomalie{p.certain.length > 1 ? 's' : ''} certaine{p.certain.length > 1 ? 's' : ''} (≥90%)
+                              {p.uncertain.length > 0 && ` · ${p.uncertain.length} à confirmer, non comptée${p.uncertain.length > 1 ? 's' : ''}`}
+                              {' '}sur {months} mois
+                            </p>
+                          );
+                        })()}
                         <p className="mt-2 text-[11px] text-white/40">
                           {usedOfficialGrid ? '✓ Comparé au barème officiel de votre banque (référentiel L2).' : 'Audit sur vos seules transactions (aucun barème officiel disponible).'}
                         </p>
