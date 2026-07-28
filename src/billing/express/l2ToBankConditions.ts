@@ -14,11 +14,10 @@
 
 import type { BankConditions, FeeSchedule, InterestRate, AccountFees } from '../../types';
 import type { PublicRefCondition } from '../../services/publicBankReference';
+import { rubricUnitOf } from '../../cdc/taxonomy/rubrics';
 
 // Taxonomie CDC des profils (dimensions.profil).
 export type ConditionSegment = 'particulier' | 'pme' | 'corporate';
-
-const PERCENT_RE = /taux|cpfd|\.ira$|commission_mouvement$|paiement_etranger$|_commission$/;
 
 export interface L2ToBankConditionsParams {
   bankCode: string;
@@ -68,7 +67,10 @@ export function l2ToBankConditions(params: L2ToBankConditionsParams): BankCondit
       interestRates.push({ type: 'unauthorized', rate: value / 100, calculationMethod: 'simple', dayCountConvention: 'ACT/360' });
       continue;
     }
-    if (PERCENT_RE.test(code)) {
+    // Unité déclarée dans la taxonomie (source de vérité) plutôt qu'une regex :
+    // évite qu'une commission FIXE (FCFA) soit prise pour un pourcentage et
+    // qu'un taux en % soit pris pour un montant fixe.
+    if (rubricUnitOf(code) === 'percent') {
       fees.push({ code, name: code, amount: 0, type: 'percentage', percentage: value });
     } else {
       fees.push({ code, name: code, amount: value, type: 'fixed' });

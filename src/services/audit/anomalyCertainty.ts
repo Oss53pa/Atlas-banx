@@ -8,10 +8,35 @@
 // chiffrées dans le total réclamable — pour ne jamais surestimer la promesse.
 // ============================================================================
 
-import type { Anomaly } from '../../types';
+import { AnomalyType, type Anomaly } from '../../types';
 
 /** Seuil de certitude : au-delà, l'anomalie est considérée prouvée. */
 export const CERTAINTY_THRESHOLD = 0.9;
+
+/**
+ * Types d'anomalies dont le `amount` représente une somme RÉELLEMENT
+ * RÉCUPÉRABLE (des frais indus que le client peut réclamer). Les autres types
+ * (AML, trésorerie, rapprochement, conformité, opérations suspectes) portent
+ * dans `amount` un VOLUME (dépôts, profondeur de découvert, flux) qui n'est PAS
+ * réclamable : les compter gonflerait le total à recouvrer et ferait payer le
+ * client sur de l'argent qu'il ne peut pas récupérer.
+ */
+export const RECOVERABLE_ANOMALY_TYPES: ReadonlySet<AnomalyType> = new Set([
+  AnomalyType.OVERCHARGE,
+  AnomalyType.DUPLICATE_FEE,
+  AnomalyType.GHOST_FEE,
+  AnomalyType.INTEREST_ERROR,
+  AnomalyType.UNAUTHORIZED,
+  AnomalyType.ROUNDING_ABUSE,
+  AnomalyType.VALUE_DATE_ERROR,
+  AnomalyType.FEE_ANOMALY,
+  AnomalyType.LIMIT_EXCEEDED,
+]);
+
+/** true si le montant de l'anomalie est une somme réclamable (frais indus). */
+export function isRecoverableAnomaly(a: Anomaly): boolean {
+  return RECOVERABLE_ANOMALY_TYPES.has(a.type);
+}
 
 export interface CertaintyPartition {
   certain: Anomaly[];
@@ -39,11 +64,16 @@ export function partitionByCertainty(
   const certain: Anomaly[] = [];
   const uncertain: Anomaly[] = [];
   for (const a of anomalies) (conf(a) >= threshold ? certain : uncertain).push(a);
-  const sum = (xs: Anomaly[]) => xs.reduce((s, a) => s + (a.amount || 0), 0);
+  // Les montants « à recouvrer » / « à confirmer » ne comptent QUE les
+  // anomalies dont le montant est réclamable (frais indus). Une alerte AML ou
+  // un creux de trésorerie reste listée dans certain/uncertain mais n'entre
+  // dans AUCUN total chiffré (son `amount` est un volume, pas une créance).
+  const sumRecoverable = (xs: Anomaly[]) =>
+    xs.reduce((s, a) => s + (isRecoverableAnomaly(a) ? (a.amount || 0) : 0), 0);
   return {
     certain,
     uncertain,
-    certainAmount: sum(certain),
-    uncertainAmount: sum(uncertain),
+    certainAmount: sumRecoverable(certain),
+    uncertainAmount: sumRecoverable(uncertain),
   };
 }

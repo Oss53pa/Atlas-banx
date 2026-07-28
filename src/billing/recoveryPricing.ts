@@ -61,10 +61,13 @@ export function pricingForRecovery(recoverableFcfa: number): RecoveryPricing {
     };
   }
 
-  // Prix = RATE × récupérable, arrondi commercialement, avec un simple plancher.
-  // Aucun plafond : le prix reste proportionnel quel que soit le montant.
+  // Prix = RATE × récupérable, arrondi commercialement VERS LE BAS, avec un
+  // simple plancher. Aucun plafond : le prix reste proportionnel. L'arrondi au
+  // plancher (Math.floor) garantit l'invariant affiché « jamais plus que RATE
+  // du récupérable » — un arrondi au plus proche pouvait le dépasser (ex.
+  // 8 750 → 1 750 arrondi à 2 000 = 22,9 %).
   const raw = rec * RECOVERY_PRICING.RATE;
-  const rounded = Math.round(raw / RECOVERY_PRICING.ROUND_TO) * RECOVERY_PRICING.ROUND_TO;
+  const rounded = Math.floor(raw / RECOVERY_PRICING.ROUND_TO) * RECOVERY_PRICING.ROUND_TO;
   const price = Math.max(RECOVERY_PRICING.MIN_PRICE, rounded);
 
   return {

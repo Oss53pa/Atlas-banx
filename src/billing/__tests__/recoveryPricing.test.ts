@@ -28,6 +28,13 @@ describe('pricingForRecovery', () => {
     }
   });
 
+  it('le taux effectif ne dépasse JAMAIS 20% (invariant affiché)', () => {
+    for (let rec = RECOVERY_PRICING.FREE_BELOW; rec <= 200_000; rec += 137) {
+      const p = pricingForRecovery(rec);
+      expect(p.effectiveRate).toBeLessThanOrEqual(RECOVERY_PRICING.RATE + 1e-9);
+    }
+  });
+
   it('applique 20% SANS plafond, même sur les très gros montants', () => {
     expect(pricingForRecovery(50_000).priceFcfa).toBe(10_000);
     expect(pricingForRecovery(300_000).priceFcfa).toBe(60_000);

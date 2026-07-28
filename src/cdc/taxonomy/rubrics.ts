@@ -246,3 +246,21 @@ export const RUBRIC_CATEGORIES: Record<RubricCategory, string> = {
   operations_speciales: 'Opérations spéciales',
   incidents: 'Incidents & divers',
 };
+
+// ============================================================================
+// Index & helpers — SOURCE DE VÉRITÉ de l'unité d'une rubrique
+// ============================================================================
+// L'unité (percent/fcfa/days/count) NE DOIT PAS être devinée par regex : une
+// commission fixe en FCFA et une commission en % portent toutes deux « commission »
+// dans leur code. On la lit ici, depuis la taxonomie déclarée.
+const RUBRIC_INDEX = new Map(RUBRICS_TAXONOMY.map((r) => [r.code, r]));
+
+/** Rubrique (seed) par code, ou undefined si inconnue. */
+export function getRubricSeed(code: string): RubricSeed | undefined {
+  return RUBRIC_INDEX.get(code);
+}
+
+/** Unité déclarée d'une rubrique ('fcfa' par défaut si code inconnu). */
+export function rubricUnitOf(code: string): ConditionUnit {
+  return RUBRIC_INDEX.get(code)?.unit ?? 'fcfa';
+}
