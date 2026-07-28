@@ -13,12 +13,14 @@
 // ============================================================================
 
 export const RECOVERY_PRICING = {
-  /** Fraction du récupérable facturée (déblocage du rapport actionnable). */
+  /**
+   * Fraction du récupérable facturée (déblocage du rapport actionnable).
+   * Appliquée UNIFORMÉMENT, sans plafond : le client garde toujours (1 − RATE)
+   * du récupérable, et le prix suit proportionnellement le montant.
+   */
   RATE: 0.2,
   /** Prix plancher quand on facture (FCFA). */
   MIN_PRICE: 1500,
-  /** Prix plafond, quel que soit le récupérable (FCFA). */
-  MAX_PRICE: 20000,
   /**
    * Seuil de récupérable en dessous duquel le rapport est GRATUIT : trop faible
    * pour qu'un paiement laisse un gain net intéressant. Protège la marque.
@@ -59,12 +61,11 @@ export function pricingForRecovery(recoverableFcfa: number): RecoveryPricing {
     };
   }
 
+  // Prix = RATE × récupérable, arrondi commercialement, avec un simple plancher.
+  // Aucun plafond : le prix reste proportionnel quel que soit le montant.
   const raw = rec * RECOVERY_PRICING.RATE;
   const rounded = Math.round(raw / RECOVERY_PRICING.ROUND_TO) * RECOVERY_PRICING.ROUND_TO;
-  const price = Math.min(
-    RECOVERY_PRICING.MAX_PRICE,
-    Math.max(RECOVERY_PRICING.MIN_PRICE, rounded),
-  );
+  const price = Math.max(RECOVERY_PRICING.MIN_PRICE, rounded);
 
   return {
     recoverableFcfa: rec,
