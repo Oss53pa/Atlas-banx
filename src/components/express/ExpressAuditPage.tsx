@@ -203,19 +203,49 @@ export default function ExpressAuditPage() {
     }
   };
 
-  const downloadReport = () => {
+  // Rapport détaillé aux STANDARDS INTERNATIONAUX : on réutilise le générateur
+  // premium de l'application (PremiumReportService — PDF vectoriel : page de
+  // garde, synthèse, détail par anomalie avec références tarifaires et
+  // comparaison contractuelle, méthodologie, glossaire, références
+  // réglementaires COBAC/BCEAO, certificat d'intégrité). Import dynamique pour
+  // ne pas alourdir le chargement initial du funnel.
+  const downloadReport = async () => {
     if (!audit) return;
-    const html = auditReportToHtml(audit, {
-      periodStart, periodEnd, months,
-      planLabel: pricing && !pricing.isFree ? `Rapport débloqué (${fmt(pricing.priceFcfa)} FCFA)` : 'Rapport offert',
-    });
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rapport-audit-atlasbanx.html';
-    a.click();
-    URL.revokeObjectURL(url);
+    setIsBusy(true);
+    try {
+      const { PremiumReportService } = await import('../../services/PremiumReportService');
+      const bank = DEFAULT_BANKS.find((b) => b.code === bankCode);
+      // build() (sans le journal d'audit de download(), inutile en parcours
+      // public) puis on déclenche l'enregistrement nous-mêmes.
+      const doc = await PremiumReportService.build({
+        title: "Rapport d'audit bancaire — Particulier",
+        clientName: clientName.trim() || 'Titulaire du compte',
+        period: { start: periodStart ?? new Date(), end: periodEnd ?? new Date() },
+        anomalies: audit.anomalies,
+        statistics: audit.statistics,
+        summary: audit.summary,
+        analysisMode: usedOfficialGrid ? 'Barème officiel (référentiel L2)' : 'Transactions',
+        banks: bank ? [{ name: bank.name, code: bank.code }] : undefined,
+        auditId: `AXB-${Date.now().toString(36).toUpperCase()}`,
+      });
+      doc.save('rapport-audit-atlasbanx.pdf');
+    } catch (err) {
+      // Repli : rapport HTML A4 imprimable si la génération PDF échoue.
+      console.error('[express] génération PDF premium échouée, repli HTML:', err);
+      const html = auditReportToHtml(audit, {
+        periodStart, periodEnd, months,
+        planLabel: pricing && !pricing.isFree ? `Rapport débloqué (${fmt(pricing.priceFcfa)} FCFA)` : 'Rapport offert',
+      });
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rapport-audit-atlasbanx.html';
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   // Lettre de réclamation prête à envoyer — réutilise le résultat du MÊME
@@ -689,7 +719,9 @@ export default function ExpressAuditPage() {
                         </div>
                       </div>
                     )}
-                    <button onClick={downloadReport} className="btn btn-primary btn-lg w-full"><Download className="h-4 w-4" /> Télécharger le rapport complet</button>
+                    <button onClick={downloadReport} disabled={isBusy} className="btn btn-primary btn-lg w-full">
+                      {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Génération du PDF…</> : <><Download className="h-4 w-4" /> Télécharger le rapport détaillé (PDF)</>}
+                    </button>
                     <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
                       <button onClick={reset} className="inline-flex items-center gap-1 hover:text-ink-700"><RotateCcw className="h-3 w-3" /> Nouvel audit</button>
                       <span>· Vos données ne sont pas conservées</span>
