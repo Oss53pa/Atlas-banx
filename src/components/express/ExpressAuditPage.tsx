@@ -214,21 +214,49 @@ export default function ExpressAuditPage() {
     setIsBusy(true);
     try {
       const { PremiumReportService } = await import('../../services/PremiumReportService');
+      const { sha256Hex, archiveExpressReport } = await import('../../billing/express/reportArchive');
       const bank = DEFAULT_BANKS.find((b) => b.code === bankCode);
-      // build() (sans le journal d'audit de download(), inutile en parcours
-      // public) puis on déclenche l'enregistrement nous-mêmes.
-      const doc = await PremiumReportService.build({
-        title: "Rapport d'audit bancaire — Particulier",
-        clientName: clientName.trim() || 'Titulaire du compte',
-        period: { start: periodStart ?? new Date(), end: periodEnd ?? new Date() },
-        anomalies: audit.anomalies,
-        statistics: audit.statistics,
-        summary: audit.summary,
-        analysisMode: usedOfficialGrid ? 'Barème officiel (référentiel L2)' : 'Transactions',
-        banks: bank ? [{ name: bank.name, code: bank.code }] : undefined,
-        auditId: `AXB-${Date.now().toString(36).toUpperCase()}`,
+      const reportRef = `AXB-${Date.now().toString(36).toUpperCase()}`;
+      // Livrable CERTIFIÉ : PDF chiffré, permissions « impression seule » →
+      // NON MODIFIABLE. build() (sans le journal d'audit de download()).
+      const doc = await PremiumReportService.build(
+        {
+          title: "Rapport d'audit bancaire — Particulier",
+          clientName: clientName.trim() || 'Titulaire du compte',
+          period: { start: periodStart ?? new Date(), end: periodEnd ?? new Date() },
+          anomalies: audit.anomalies,
+          statistics: audit.statistics,
+          summary: audit.summary,
+          analysisMode: usedOfficialGrid ? 'Barème officiel (référentiel L2)' : 'Transactions',
+          banks: bank ? [{ name: bank.name, code: bank.code }] : undefined,
+          auditId: reportRef,
+        },
+        undefined,
+        { userPermissions: ['print'] },
+      );
+
+      // Octets EXACTS du PDF → empreinte identique à celle du fichier remis.
+      const buffer = doc.output('arraybuffer') as ArrayBuffer;
+      const pdfSha256 = await sha256Hex(buffer);
+
+      // Archive Atlas (empreinte + métadonnées non nominatives). Best-effort.
+      void archiveExpressReport({
+        reportRef, pdfSha256,
+        bankCode: bankCode || undefined,
+        periodStart, periodEnd,
+        anomalyCount: audit.statistics.totalAnomalies,
+        totalRecoverable: audit.statistics.totalAnomalyAmount,
+        usedOfficialGrid,
       });
-      doc.save('rapport-audit-atlasbanx.pdf');
+
+      // Enregistrement du MÊME buffer (pas de re-sérialisation).
+      const blob = new Blob([buffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rapport-audit-atlasbanx.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
       // Repli : rapport HTML A4 imprimable si la génération PDF échoue.
       console.error('[express] génération PDF premium échouée, repli HTML:', err);
@@ -324,8 +352,9 @@ export default function ExpressAuditPage() {
             <div>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">Confidentialité</p>
               <p className="text-[13px]">
-                Aucun compte, aucune donnée conservée : votre relevé et votre rapport sont supprimés
-                à la fin du parcours.
+                Aucun compte. Votre relevé n'est <span className="text-white/85">pas conservé</span> — supprimé
+                en fin de parcours. Seule une empreinte du rapport certifié est archivée (preuve en cas de
+                contrôle), sans aucune donnée personnelle.
               </p>
             </div>
           </div>
@@ -383,7 +412,8 @@ export default function ExpressAuditPage() {
                 />
                 <span>
                   J'ai lu et j'accepte les <strong>Conditions Générales de Vente</strong> (v{CGV_PARTICULIER_VERSION}).
-                  Je demande l'exécution immédiate du service et reconnais qu'aucune donnée n'est conservée.
+                  Je demande l'exécution immédiate du service. Je reconnais qu'aucune donnée de mon relevé n'est
+                  conservée, et qu'une <strong>empreinte du rapport certifié</strong> est archivée à des fins de preuve.
                 </span>
               </label>
 
@@ -724,7 +754,7 @@ export default function ExpressAuditPage() {
                     </button>
                     <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
                       <button onClick={reset} className="inline-flex items-center gap-1 hover:text-ink-700"><RotateCcw className="h-3 w-3" /> Nouvel audit</button>
-                      <span>· Vos données ne sont pas conservées</span>
+                      <span>· PDF certifié non modifiable · relevé non conservé, empreinte archivée</span>
                     </div>
                   </div>
                 )}
