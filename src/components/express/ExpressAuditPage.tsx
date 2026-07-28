@@ -1,10 +1,12 @@
 // ============================================================================
 // ATLASBANX — Funnel « Audit express » (Particulier, sans compte)
 // ============================================================================
-// Parcours public, éphémère : import d'un relevé → devis (forfait selon le
-// nombre de mois détectés) → paiement (CinetPay, simulé en sandbox) → AUDIT
-// COMPLET (le même moteur 19 détecteurs que l'offre Entreprise/Cabinet, via
-// runFullAudit) → rapport détaillé téléchargeable. Aucune donnée conservée.
+// Parcours public, éphémère, à VALEUR PROUVÉE AVANT PAIEMENT :
+//   import relevé → analyse GRATUITE (audit complet, mêmes 19 détecteurs que
+//   l'offre Entreprise via runFullAudit) → révélation du montant récupérable +
+//   prix indexé sur ce montant (jamais > au récupérable ; offert sous un seuil)
+//   → déblocage payant du rapport détaillé → rapport A4 + détail.
+// Aucune donnée conservée.
 //
 // Mise en page : sidebar bleue (notice + progression) à gauche, contenu sur la
 // largeur restante. Titres en Grand Hotel (font-display), reste en Dosis
@@ -15,11 +17,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Download, ArrowRight,
-  ArrowLeft, Lock, Building2, RotateCcw,
+  ArrowLeft, Lock, RotateCcw, Sparkles,
 } from 'lucide-react';
 import { extractStatement } from '../../extraction/bank-statement';
 import { runFullAudit } from '../../services/audit/runFullAudit';
-import { countAuditedMonths, planForMonths, type AuditPlan } from '../../billing/auditPlans';
+import { countAuditedMonths } from '../../billing/auditPlans';
+import { pricingForRecovery, type RecoveryPricing } from '../../billing/recoveryPricing';
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
@@ -27,7 +30,7 @@ import { fetchPublicBankReference, fetchPublicBankList } from '../../services/pu
 import { DEFAULT_BANKS } from '../../store/bankStore';
 import { ANOMALY_TYPE_LABELS, AFRICAN_COUNTRIES, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
-type Step = 'import' | 'quote' | 'payment' | 'report';
+type Step = 'import' | 'setup' | 'reveal' | 'report';
 
 // Catalogue complet des banques (CEMAC + UEMOA), groupé par zone puis par pays,
 // pour l'affichage en <optgroup>. Le funnel express doit permettre de choisir
@@ -56,9 +59,9 @@ const BANKS_BY_ZONE: { zone: 'CEMAC' | 'UEMOA'; countries: { iso: string; name: 
 
 const STEPS: { id: Step; label: string; hint: string }[] = [
   { id: 'import', label: 'Votre relevé', hint: 'Importez votre PDF' },
-  { id: 'quote', label: 'Devis', hint: 'Forfait selon la durée' },
-  { id: 'payment', label: 'Paiement', hint: 'Mobile money sécurisé' },
-  { id: 'report', label: 'Rapport', hint: 'Audit complet détaillé' },
+  { id: 'setup', label: 'Analyse gratuite', hint: 'Banque & type de relevé' },
+  { id: 'reveal', label: 'Votre potentiel', hint: 'Montant récupérable estimé' },
+  { id: 'report', label: 'Rapport', hint: 'Détail & lettre de réclamation' },
 ];
 
 function fmt(n: number): string {
@@ -79,7 +82,7 @@ export default function ExpressAuditPage() {
   const [periodStart, setPeriodStart] = useState<Date | null>(null);
   const [periodEnd, setPeriodEnd] = useState<Date | null>(null);
   const [months, setMonths] = useState(0);
-  const [plan, setPlan] = useState<AuditPlan | null>(null);
+  const [pricing, setPricing] = useState<RecoveryPricing | null>(null);
   const [audit, setAudit] = useState<AnalysisResult | null>(null);
   const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
@@ -118,17 +121,11 @@ export default function ExpressAuditPage() {
       const start = new Date(Math.min(...times));
       const end = new Date(Math.max(...times));
       const m = countAuditedMonths([{ start, end }]);
-      const p = planForMonths(m);
-      if (!p) {
-        setError('La durée détectée dépasse nos forfaits standards (>12 mois). Contactez-nous pour une offre sur mesure.');
-        return;
-      }
       setTransactions(txs);
       setPeriodStart(start);
       setPeriodEnd(end);
       setMonths(m);
-      setPlan(p);
-      setStep('quote');
+      setStep('setup');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse du relevé.");
     } finally {
@@ -136,25 +133,16 @@ export default function ExpressAuditPage() {
     }
   };
 
-  const pay = async () => {
-    if (!plan) return;
+  // Aperçu GRATUIT : on lance l'audit AVANT paiement pour révéler le montant
+  // récupérable et en déduire un prix indexé (le client ne paie jamais plus
+  // que ce qu'il récupère). Le détail actionnable reste verrouillé jusqu'au
+  // paiement (ou offert si le récupérable est trop faible).
+  const analyze = async () => {
     setError(null);
     setIsBusy(true);
+    setStep('reveal');
+    setAuditStep('Lancement de l\'analyse…');
     try {
-      const provider = getPaymentProvider();
-      const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const init = await provider.initiate({
-        amount: plan.priceFcfa, currency: 'XOF',
-        description: `Audit express — ${plan.label}`, reference,
-        customerEmail: email || undefined, customerPhone: phone || undefined,
-      });
-      setPaymentMode(init.mode);
-      if (init.redirectUrl) { window.location.href = init.redirectUrl; return; }
-      const check = await provider.verify(init.transactionId);
-      if (check.status !== 'succeeded') { setError('Paiement non confirmé. Réessayez.'); return; }
-      setStep('report');
-      setAuditStep('Lancement de l\'audit…');
-
       let bankConditions: BankConditions | undefined;
       if (bankCode) {
         setAuditStep('Récupération du barème officiel…');
@@ -167,14 +155,42 @@ export default function ExpressAuditPage() {
           setUsedOfficialGrid(true);
         }
       }
-
       const result = await runFullAudit({
         transactions, bankConditions, bankCode: bankCode || undefined,
         onProgress: (_pct, s) => setAuditStep(s),
       });
       setAudit(result);
+      setPricing(pricingForRecovery(result.statistics.totalAnomalyAmount));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Échec du paiement / audit.');
+      setError(err instanceof Error ? err.message : "Échec de l'analyse.");
+      setStep('setup');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  // Déblocage payant du rapport détaillé (uniquement si le récupérable dépasse
+  // le seuil de gratuité). L'audit est DÉJÀ calculé — on ne facture que le
+  // détail + le rapport + la lettre de réclamation.
+  const unlock = async () => {
+    if (!pricing || pricing.isFree) { setStep("report"); return; }
+    setError(null);
+    setIsBusy(true);
+    try {
+      const provider = getPaymentProvider();
+      const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const init = await provider.initiate({
+        amount: pricing.priceFcfa, currency: 'XOF',
+        description: `Audit express — déblocage rapport (${fmt(pricing.recoverableFcfa)} FCFA récupérables)`,
+        reference, customerEmail: email || undefined, customerPhone: phone || undefined,
+      });
+      setPaymentMode(init.mode);
+      if (init.redirectUrl) { window.location.href = init.redirectUrl; return; }
+      const check = await provider.verify(init.transactionId);
+      if (check.status !== 'succeeded') { setError('Paiement non confirmé. Réessayez.'); return; }
+      setStep('report');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Échec du paiement.');
     } finally {
       setIsBusy(false);
     }
@@ -182,7 +198,10 @@ export default function ExpressAuditPage() {
 
   const downloadReport = () => {
     if (!audit) return;
-    const html = auditReportToHtml(audit, { periodStart, periodEnd, months, planLabel: plan?.label ?? '' });
+    const html = auditReportToHtml(audit, {
+      periodStart, periodEnd, months,
+      planLabel: pricing && !pricing.isFree ? `Rapport débloqué (${fmt(pricing.priceFcfa)} FCFA)` : 'Rapport offert',
+    });
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -193,7 +212,7 @@ export default function ExpressAuditPage() {
   };
 
   const reset = () => {
-    setStep('import'); setError(null); setAudit(null); setPlan(null);
+    setStep('import'); setError(null); setAudit(null); setPricing(null);
     setTransactions([]); setBankCode(''); setEmail(''); setPhone(''); setUsedOfficialGrid(false);
   };
 
@@ -218,9 +237,18 @@ export default function ExpressAuditPage() {
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">Comment ça marche</p>
               <ol className="space-y-1.5 text-[13px]">
                 <li>1. Importez votre relevé bancaire (PDF).</li>
-                <li>2. Réglez le forfait selon la durée (3, 6 ou 12 mois).</li>
-                <li>3. Recevez votre rapport d'audit détaillé.</li>
+                <li>2. <span className="text-white/85">Analyse gratuite</span> : découvrez le montant récupérable.</li>
+                <li>3. Débloquez le rapport détaillé — le prix ne dépasse jamais votre gain.</li>
               </ol>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">Notre promesse</p>
+              <p className="text-[13px]">
+                Vous voyez ce que vous pouvez récupérer <span className="text-white/85">avant</span> de payer.
+                Le tarif est une fraction du récupérable ; si le montant est trop faible, le rapport est
+                <span className="text-white/85"> offert</span>. Vous gagnez toujours plus que ce que vous payez.
+              </p>
             </div>
 
             <div>
@@ -283,15 +311,15 @@ export default function ExpressAuditPage() {
             {/* Titre de section */}
             <h1 className="font-display text-4xl sm:text-5xl text-ink-900 leading-tight">
               {step === 'import' && 'Importez votre relevé'}
-              {step === 'quote' && 'Votre devis'}
-              {step === 'payment' && 'Paiement'}
-              {step === 'report' && (audit ? 'Votre rapport' : 'Audit en cours')}
+              {step === 'setup' && 'Analyse gratuite'}
+              {step === 'reveal' && (audit ? 'Votre potentiel' : 'Analyse en cours')}
+              {step === 'report' && 'Votre rapport'}
             </h1>
             <p className="mt-1.5 text-[15px] text-ink-500">
               {step === 'import' && 'Déposez votre relevé bancaire (PDF). L\'OCR gère les scans.'}
-              {step === 'quote' && 'Forfait déterminé automatiquement selon la durée détectée.'}
-              {step === 'payment' && 'Réglez pour lancer l\'audit complet de votre relevé.'}
-              {step === 'report' && (audit ? 'Frais indus, agios et dates de valeur analysés.' : 'Le moteur complet analyse vos transactions.')}
+              {step === 'setup' && 'Sélectionnez votre banque et le type de relevé — l\'analyse est gratuite.'}
+              {step === 'reveal' && (audit ? 'Voici ce que vous pourriez récupérer — sans encore payer.' : 'Le moteur complet analyse vos transactions.')}
+              {step === 'report' && 'Détail des frais indus, agios et dates de valeur.'}
             </p>
 
             {error && (
@@ -328,8 +356,8 @@ export default function ExpressAuditPage() {
               </div>
             )}
 
-            {/* ── Step: quote ── */}
-            {step === 'quote' && plan && (
+            {/* ── Step: setup (analyse gratuite) ── */}
+            {step === 'setup' && (
               <div className="mt-7 space-y-4 animate-fade-in-up">
                 <div className="card overflow-hidden">
                   <div className="flex flex-col gap-4 bg-gradient-to-br from-ink-800 to-ink-950 p-6 text-white sm:flex-row sm:items-center sm:justify-between">
@@ -339,9 +367,9 @@ export default function ExpressAuditPage() {
                       <p className="mt-0.5 text-sm text-white/50">{months} mois · {transactions.length} transactions</p>
                     </div>
                     <div className="text-left sm:text-right">
-                      <p className="text-xs uppercase tracking-wide text-white/50">{plan.label}</p>
-                      <p className="font-display text-4xl text-gradient-gold leading-none">{fmt(plan.priceFcfa)}</p>
-                      <p className="text-sm text-white/50">FCFA · paiement unique</p>
+                      <p className="text-xs uppercase tracking-wide text-white/50">Analyse</p>
+                      <p className="font-display text-4xl text-gradient-gold leading-none">Gratuite</p>
+                      <p className="text-sm text-white/50">payez seulement si ça vaut le coup</p>
                     </div>
                   </div>
                 </div>
@@ -392,32 +420,100 @@ export default function ExpressAuditPage() {
                       <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+225 …" className="input mt-1" />
                     </div>
                   </div>
-                  <button onClick={() => setStep('payment')} className="btn btn-primary btn-lg w-full">
-                    Continuer vers le paiement <ArrowRight className="h-4 w-4" />
+                  <button onClick={analyze} disabled={isBusy} className="btn btn-primary btn-lg w-full">
+                    {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Analyse…</> : <><Sparkles className="h-4 w-4" /> Analyser gratuitement mon relevé</>}
                   </button>
+                  <p className="text-center text-[11px] text-ink-400">Aucun paiement à cette étape. Vous verrez d'abord ce que vous pouvez récupérer.</p>
                 </div>
               </div>
             )}
 
-            {/* ── Step: payment ── */}
-            {step === 'payment' && plan && (
+            {/* ── Step: reveal (potentiel + prix indexé) ── */}
+            {step === 'reveal' && (
               <div className="mt-7 animate-fade-in-up">
-                <div className="card space-y-5 p-8 text-center">
-                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-50 text-accent-600"><Building2 className="h-6 w-6" /></span>
-                  <div>
-                    <p className="text-sm text-ink-500">Montant à régler</p>
-                    <p className="font-display text-5xl text-ink-900">{fmt(plan.priceFcfa)} <span className="text-2xl text-ink-400">FCFA</span></p>
-                    <p className="mt-1 text-sm text-ink-500">{plan.label} · paiement mobile money (CinetPay)</p>
+                {!audit || !pricing ? (
+                  <div className="card flex flex-col items-center gap-3 p-12 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-accent-600" />
+                    <p className="font-medium text-ink-800">{auditStep || 'Analyse en cours…'}</p>
+                    <p className="text-sm text-ink-500">Moteur complet (19 détecteurs) — gratuit.</p>
                   </div>
-                  <button onClick={pay} disabled={isBusy} className="btn btn-accent btn-lg w-full">
-                    {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Traitement…</> : <><CheckCircle2 className="h-4 w-4" /> Payer et lancer l'audit</>}
-                  </button>
-                  <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
-                    <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Paiement sécurisé</span>
-                    <button onClick={() => setStep('quote')} className="hover:text-ink-700">← Modifier</button>
+                ) : pricing.recoverableFcfa <= 0 ? (
+                  /* Relevé conforme : rien à récupérer */
+                  <div className="space-y-4">
+                    <div className="card border-emerald-200 bg-emerald-50/60 p-6 text-center">
+                      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-6 w-6" /></span>
+                      <p className="mt-3 font-display text-3xl text-ink-900">Relevé conforme</p>
+                      <p className="mt-1 text-sm text-ink-500">
+                        Aucun frais indu détecté sur {transactions.length} transactions
+                        {usedOfficialGrid ? ', y compris face au barème officiel de votre banque.' : '.'}
+                      </p>
+                    </div>
+                    <button onClick={() => { setStep("report"); }} className="btn btn-primary btn-lg w-full">
+                      Voir le rapport (offert) <ArrowRight className="h-4 w-4" />
+                    </button>
+                    <button onClick={reset} className="mx-auto flex items-center gap-1 text-xs text-ink-400 hover:text-ink-700"><RotateCcw className="h-3 w-3" /> Nouvel audit</button>
                   </div>
-                  <p className="text-[11px] text-ink-400">Sans clés marchandes configurées, le paiement est simulé (aucun débit).</p>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Bandeau récupérable */}
+                    <div className="card overflow-hidden">
+                      <div className="bg-gradient-to-br from-ink-800 to-ink-950 p-6 text-center text-white">
+                        <p className="text-xs uppercase tracking-[0.16em] text-white/50">Montant potentiellement récupérable</p>
+                        <p className="mt-1 font-display text-5xl text-gradient-gold leading-none sm:text-6xl">{fmt(pricing.recoverableFcfa)}</p>
+                        <p className="mt-1 text-sm text-white/50">FCFA · {audit.statistics.totalAnomalies} anomalie{audit.statistics.totalAnomalies > 1 ? 's' : ''} détectée{audit.statistics.totalAnomalies > 1 ? 's' : ''} sur {months} mois</p>
+                        <p className="mt-2 text-[11px] text-white/40">
+                          {usedOfficialGrid ? '✓ Comparé au barème officiel de votre banque (référentiel L2).' : 'Audit sur vos seules transactions (aucun barème officiel disponible).'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Décomposition prix / gain net */}
+                    <div className="card p-6">
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-400">Prix du rapport</p>
+                          <p className="mt-1 text-2xl font-bold text-ink-900">{fmt(pricing.priceFcfa)}</p>
+                          <p className="text-[10px] text-ink-400">FCFA</p>
+                        </div>
+                        <div className="flex items-center justify-center text-ink-300">
+                          <span className="text-2xl">→</span>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-400">Votre gain net</p>
+                          <p className="mt-1 text-2xl font-bold text-emerald-600">{fmt(pricing.netGainFcfa)}</p>
+                          <p className="text-[10px] text-ink-400">FCFA après déduction</p>
+                        </div>
+                      </div>
+                      <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-center text-xs text-emerald-800">
+                        Vous récupérez potentiellement <strong>{fmt(pricing.netGainFcfa)} FCFA de plus</strong> que le prix du rapport.
+                        Le tarif équivaut à {Math.round(pricing.effectiveRate * 100)}% du récupérable — jamais plus.
+                      </p>
+                    </div>
+
+                    {/* Aperçu flouté du détail (incitation) */}
+                    <div className="card p-5">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-400">Aperçu du détail (débloqué après paiement)</p>
+                      <ul className="divide-y divide-primary-100">
+                        {audit.anomalies.slice(0, 4).map((a) => (
+                          <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                            <span className="text-ink-700">{ANOMALY_TYPE_LABELS[a.type] ?? a.type}</span>
+                            <span className="select-none font-semibold text-accent-700 blur-sm">•••• FCFA</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {audit.anomalies.length > 4 && <p className="mt-2 text-xs text-ink-400">+ {audit.anomalies.length - 4} autres lignes dans le rapport complet.</p>}
+                    </div>
+
+                    <button onClick={unlock} disabled={isBusy} className="btn btn-accent btn-lg w-full">
+                      {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Traitement…</> : <><Lock className="h-4 w-4" /> Débloquer le rapport détaillé — {fmt(pricing.priceFcfa)} FCFA</>}
+                    </button>
+                    <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
+                      <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Paiement mobile money sécurisé (CinetPay)</span>
+                      <button onClick={reset} className="hover:text-ink-700">← Recommencer</button>
+                    </div>
+                    <p className="text-center text-[11px] text-ink-400">Sans clés marchandes configurées, le paiement est simulé (aucun débit).</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -435,8 +531,15 @@ export default function ExpressAuditPage() {
                     <div className="card flex items-center gap-3 border-emerald-200 bg-emerald-50/60 p-4">
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-5 w-5" /></span>
                       <div>
-                        <p className="font-semibold text-ink-900">Audit terminé{paymentMode === 'sandbox' ? ' (paiement simulé)' : ''}</p>
-                        <p className="text-sm text-ink-500">{fmtDate(periodStart)} → {fmtDate(periodEnd)} · {months} mois</p>
+                        <p className="font-semibold text-ink-900">
+                          {pricing && !pricing.isFree
+                            ? `Rapport débloqué${paymentMode === 'sandbox' ? ' (paiement simulé)' : ''}`
+                            : 'Rapport (offert)'}
+                        </p>
+                        <p className="text-sm text-ink-500">
+                          {fmtDate(periodStart)} → {fmtDate(periodEnd)} · {months} mois
+                          {pricing && !pricing.isFree ? ` · gain net ${fmt(pricing.netGainFcfa)} FCFA` : ''}
+                        </p>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
