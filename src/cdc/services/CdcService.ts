@@ -372,6 +372,19 @@ export class CdcService {
     return this.dao.publishBankReferenceVersion(versionId);
   }
 
+  /**
+   * Auto-validation (phase de démarrage) — soumet + valide + publie en une
+   * seule opération via la fonction SECURITY DEFINER `admin_autopublish_reference`
+   * (réservée aux admins, lève l'altérité deux-yeux le temps de la transaction).
+   * À réserver au démarrage quand un seul administrateur existe.
+   */
+  async autoPublishBankReferenceVersion(versionId: string): Promise<void> {
+    const { error } = await this.supabase
+      .schema('atlasbanx')
+      .rpc('admin_autopublish_reference', { p_version_id: versionId });
+    if (error) throw new Error(`Erreur auto-publication L2: ${error.message}`);
+  }
+
   // ==========================================================================
   // Regulatory CRUD
   // ==========================================================================

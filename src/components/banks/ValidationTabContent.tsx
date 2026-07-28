@@ -55,7 +55,7 @@ const SEGMENTS: { value: Segment; label: string }[] = [
 type SubmitState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  | { status: 'success'; conditionsCount: number }
+  | { status: 'success'; conditionsCount: number; published: boolean }
   | { status: 'error'; message: string };
 
 interface ValidationTabContentProps {
@@ -81,6 +81,10 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }
   const [fields, setFields] = useState<ExtractedField[]>([]);
   const [activeFieldId, setActiveFieldId] = useState<string | undefined>();
   const [segment, setSegment] = useState<Segment>(defaultSegment ?? '');
+  // Auto-validation (phase de démarrage) : publie directement sans second
+  // validateur. Cochée par défaut tant qu'Atlas Studio n'a qu'un administrateur
+  // — décocher quand un second admin existe pour revenir au workflow deux yeux.
+  const [autoPublish, setAutoPublish] = useState(true);
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [extractionState, setExtractionState] = useState<ExtractionState>({ status: 'idle' });
 
@@ -151,13 +155,18 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }
         pdfUrl,
         fields,
         segment: segment || undefined,
+        autoPublish,
         bankMeta: {
           legalName: bank.name,
           countryIso: bank.country,
           zone: resolveZone(bank),
         },
       });
-      setSubmitState({ status: 'success', conditionsCount: result.conditionsCount });
+      setSubmitState({
+        status: 'success',
+        conditionsCount: result.conditionsCount,
+        published: Boolean(result.published),
+      });
     } catch (err) {
       setSubmitState({
         status: 'error',
@@ -192,6 +201,26 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }
               </button>
             ))}
           </span>
+        </span>
+      </div>
+
+      {/* Auto-validation (phase de démarrage) */}
+      <div className="px-4 py-2 border-b border-canvas-200 bg-white flex items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs text-ink-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={autoPublish}
+            onChange={(e) => setAutoPublish(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-canvas-300 text-ink-900 focus:ring-ink-400"
+          />
+          <span>
+            <strong>Publier directement</strong> (auto-validation)
+          </span>
+        </label>
+        <span className="text-[10px] text-ink-400 text-right max-w-[60%]">
+          {autoPublish
+            ? 'Phase de démarrage : le barème sera publié sans second validateur et servira aussitôt aux audits.'
+            : 'Décoché : soumission au workflow deux yeux (un second admin valide puis publie).'}
         </span>
       </div>
 
@@ -235,9 +264,19 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }
       {submitState.status === 'success' && (
         <div className="px-4 py-2 bg-green-50 border-b border-green-100 text-xs text-green-700 flex items-center gap-2">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          Version soumise à validation ({submitState.conditionsCount} condition
-          {submitState.conditionsCount > 1 ? 's' : ''}). Un pair doit désormais la
-          valider puis la publier (workflow 2 yeux).
+          {submitState.published ? (
+            <>
+              Barème <strong>publié</strong> ({submitState.conditionsCount} condition
+              {submitState.conditionsCount > 1 ? 's' : ''}) — auto-validation. Il est
+              désormais actif : les audits utilisent ce barème officiel.
+            </>
+          ) : (
+            <>
+              Version soumise à validation ({submitState.conditionsCount} condition
+              {submitState.conditionsCount > 1 ? 's' : ''}). Un pair doit désormais la
+              valider puis la publier (workflow 2 yeux).
+            </>
+          )}
         </div>
       )}
       {submitState.status === 'error' && (
