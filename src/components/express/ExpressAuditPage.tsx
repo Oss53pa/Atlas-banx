@@ -97,6 +97,10 @@ export default function ExpressAuditPage() {
   const [officialGridCodes, setOfficialGridCodes] = useState<Set<string>>(new Set());
   const [segment, setSegment] = useState<'particulier' | 'pme' | 'corporate'>('particulier');
   const [usedOfficialGrid, setUsedOfficialGrid] = useState(false);
+  // Barème L2 utilisé (banque + version + date d'effet) — cité dans la méthodologie.
+  const [refGrid, setRefGrid] = useState<
+    { bankName: string; bankCode: string; versionLabel?: string | null; effectiveFrom?: string | null } | null
+  >(null);
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
   // Acceptation des CGV — OBLIGATOIRE avant tout import de relevé.
   const [cgvAccepted, setCgvAccepted] = useState(false);
@@ -160,6 +164,13 @@ export default function ExpressAuditPage() {
             conditions: ref.conditions, segment,
           });
           setUsedOfficialGrid(true);
+          const b = DEFAULT_BANKS.find((x) => x.code === bankCode);
+          setRefGrid({
+            bankName: ref.legalName ?? b?.name ?? bankCode,
+            bankCode,
+            versionLabel: ref.versionLabel ?? null,
+            effectiveFrom: ref.effectiveFrom ?? null,
+          });
         }
       }
       const result = await runFullAudit({
@@ -229,6 +240,7 @@ export default function ExpressAuditPage() {
           summary: audit.summary,
           analysisMode: usedOfficialGrid ? 'Barème officiel (référentiel L2)' : 'Transactions',
           banks: bank ? [{ name: bank.name, code: bank.code }] : undefined,
+          referenceGrids: refGrid ? [refGrid] : undefined,
           auditId: reportRef,
         },
         undefined,
@@ -302,7 +314,7 @@ export default function ExpressAuditPage() {
   const reset = () => {
     setStep('import'); setError(null); setAudit(null); setPricing(null);
     setTransactions([]); setBankCode(''); setEmail(''); setPhone('');
-    setClientName(''); setAccountRef(''); setUsedOfficialGrid(false);
+    setClientName(''); setAccountRef(''); setUsedOfficialGrid(false); setRefGrid(null);
   };
 
   return (
