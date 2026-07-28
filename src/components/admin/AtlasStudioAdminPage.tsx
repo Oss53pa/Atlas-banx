@@ -19,16 +19,18 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Users, Building2, BarChart3, Sparkles } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Users, Building2, BarChart3, Sparkles, CalendarClock } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { BanksPage } from '../banks';
 import { ConditionsIntelligencePage } from '../conditions-intelligence';
+import { ReferenceJournalPanel } from './ReferenceJournalPanel';
 
-type AdminView = 'particuliers' | 'entreprises' | 'benchmark';
+type AdminView = 'particuliers' | 'entreprises' | 'journal' | 'benchmark';
 
 const ADMIN_TABS: { id: AdminView; label: string; Icon: typeof Users }[] = [
   { id: 'particuliers', label: 'Conditions Particuliers', Icon: Users },
   { id: 'entreprises', label: 'Conditions Entreprises', Icon: Building2 },
+  { id: 'journal', label: 'Journal L2', Icon: CalendarClock },
   { id: 'benchmark', label: 'Benchmark', Icon: BarChart3 },
 ];
 
@@ -118,6 +120,12 @@ export default function AtlasStudioAdminPage() {
                 <strong>Benchmark inter-banques</strong> — classement par quartile et par rubrique,
                 comparaison zonale CEMAC/UEMOA, évolution et alertes de dérive sur les barèmes publiés.
               </p>
+            ) : view === 'journal' ? (
+              <p className="mx-auto max-w-4xl text-center leading-relaxed">
+                <strong>Journal du référentiel L2</strong> — barèmes importés par banque, type de client et
+                période. Les <strong>périodes manquantes</strong> (trous de couverture, barème expiré) sont
+                mises en évidence pour savoir quoi importer ensuite.
+              </p>
             ) : (
               <p className="mx-auto max-w-4xl text-center leading-relaxed">
                 Import des conditions <strong>{view === 'particuliers' ? 'Particuliers' : 'Entreprises'}</strong> (référentiel
@@ -131,10 +139,12 @@ export default function AtlasStudioAdminPage() {
           </div>
         </header>
 
-        {/* Vue active : import scopé par segment, ou benchmark */}
+        {/* Vue active : import scopé par segment, journal, ou benchmark */}
         <main className="px-3 py-4 sm:px-6">
           {view === 'benchmark' ? (
             <ConditionsIntelligencePage />
+          ) : view === 'journal' ? (
+            <ReferenceJournalPanel />
           ) : (
             <BanksPage
               key={view}
