@@ -140,11 +140,15 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
   // empreinte est archivée côté Atlas pour contrôle. Voir directive « PDF
   // premium partout » + « livrable toujours certifié, Atlas conserve l'archive ».
   // ============================================================================
-  const premiumReady = !!analysis.lastResult && analysis.lastResult.anomalies.length >= 0;
+  const premiumReady = !!analysis.lastResult;
   const stmt = meta;
   const downloadPremium = async () => {
     const result = analysis.lastResult;
     if (!result) return;
+    // Dates en UTC (parseUTC) pour éviter un décalage d'un jour aux bornes de
+    // période dans les fuseaux à décalage négatif.
+    const pStart = parseUTC(stmt.periodStart);
+    const pEnd = parseUTC(stmt.periodEnd);
     try {
       const { PremiumReportService } = await import('../../../services/PremiumReportService');
       const { sha256Hex, archiveExpressReport } = await import('../../../billing/express/reportArchive');
@@ -153,7 +157,7 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
         {
           title: "Rapport d'audit bancaire",
           clientName: stmt.clientLegalName || 'Titulaire du compte',
-          period: { start: new Date(stmt.periodStart), end: new Date(stmt.periodEnd) },
+          period: { start: pStart, end: pEnd },
           anomalies: result.anomalies,
           statistics: result.statistics,
           summary: result.summary,
@@ -169,7 +173,7 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
       void archiveExpressReport({
         reportRef, pdfSha256,
         bankCode: stmt.bankCode || undefined,
-        periodStart: new Date(stmt.periodStart), periodEnd: new Date(stmt.periodEnd),
+        periodStart: pStart, periodEnd: pEnd,
         anomalyCount: result.statistics.totalAnomalies,
         totalRecoverable: result.statistics.totalAnomalyAmount,
         usedOfficialGrid: false,
@@ -183,6 +187,9 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('[statement-detail] génération PDF premium échouée:', err);
+      window.dispatchEvent(new CustomEvent('atlas-toast', {
+        detail: { type: 'error', message: 'Échec de la génération du PDF premium. Réessayez.' },
+      }));
     }
   };
 

@@ -21,7 +21,8 @@ import {
   deleteReportSnapshot,
 } from '../../services/report/reportSnapshot';
 import { formatCurrency, formatDate } from '../../utils';
-import { Severity } from '../../types';
+import { Severity, type Anomaly } from '../../types';
+import { partitionByCertainty } from '../../services/audit/anomalyCertainty';
 import { ReportViewer, generateAtlasBanxAuditReport } from '../reporting';
 import type { FullReport, BankStatement, ClientReport, Client, AnalysisResult } from '../../types';
 
@@ -49,6 +50,44 @@ export function ReportsPage() {
 
   // Get client by ID
   const getClient = (clientId: string) => clients.find(c => c.id === clientId);
+
+  // Statistiques RECALCULÉES pour le périmètre d'un seul client/relevé. Les
+  // statistiques globales de l'analyse (toutes clients) ne doivent JAMAIS
+  // alimenter un rapport nominatif : sinon le donut/les barres/le graphe par
+  // type exposent la répartition d'AUTRES clients et contredisent l'entête.
+  const buildClientStatistics = (
+    filtered: Anomaly[],
+    statementTxCount: number,
+  ): AnalysisResult['statistics'] => {
+    const bySeverity = {
+      [Severity.CRITICAL]: 0, [Severity.HIGH]: 0, [Severity.MEDIUM]: 0, [Severity.LOW]: 0,
+    } as Record<Severity, number>;
+    const byType: Record<string, number> = {};
+    let totalAmount = 0;
+    for (const a of filtered) {
+      bySeverity[a.severity] = (bySeverity[a.severity] ?? 0) + 1;
+      byType[a.type] = (byType[a.type] ?? 0) + 1;
+      totalAmount += a.amount || 0;
+    }
+    return {
+      totalTransactions: statementTxCount,
+      analyzedTransactions: statementTxCount,
+      totalAnomalies: filtered.length,
+      totalAnomalyAmount: totalAmount,
+      // Économies potentielles = uniquement le récupérable CERTAIN (≥ 90 %).
+      potentialSavings: partitionByCertainty(filtered).certainAmount,
+      anomaliesBySeverity: bySeverity,
+      anomaliesByType: byType,
+    } as AnalysisResult['statistics'];
+  };
+
+  // Nombre de transactions du relevé (périmètre client), pour les stats.
+  const statementTxCount = (statement: BankStatement): number =>
+    transactions.filter(
+      t => t.clientId === statement.clientId &&
+        new Date(t.date) >= new Date(statement.periodStart) &&
+        new Date(t.date) <= new Date(statement.periodEnd),
+    ).length;
 
   // Get statement stats
   const getStatementStats = (statement: BankStatement) => {
@@ -106,32 +145,48 @@ export function ReportsPage() {
   const downloadFrozenReport = async (report: ClientReport) => {
     const snap = getReportSnapshot(report.id);
     if (snap) {
-      await PremiumReportService.download(reviveReportData(snap), undefined, report.id);
+      await PremiumReportService.download(reviveReportData(snap), undefined, report.id, { userPermissions: ['print'] });
       return;
     }
-    // Legacy (rapport antérieur au gel) : reconstruire au mieux depuis l'analyse.
+    // Un rapport GELÉ (contentHash présent) dont le snapshot est introuvable ne
+    // doit PAS être reconstruit depuis l'analyse vivante — cela ferait « bouger »
+    // les données. On le signale plutôt que de livrer un PDF potentiellement
+    // différent de l'original.
+    if (report.contentHash) {
+      window.dispatchEvent(new CustomEvent('atlas-toast', {
+        detail: { type: 'error', message: 'Instantané du rapport introuvable sur cet appareil — régénérez le rapport pour le retélécharger.' },
+      }));
+      return;
+    }
+    // Rapport LEGACY (jamais gelé) : reconstruction au mieux depuis l'analyse.
     const client = getClient(report.clientId);
     const allAnalyses = [...(currentAnalysis ? [currentAnalysis] : []), ...(analysisHistory || [])];
     const analysisData = allAnalyses.find(a =>
       a.anomalies.some(an => an.transactions.some(t => t.clientId === report.clientId)),
     );
     if (client && analysisData) {
+      const clientAnomalies = analysisData.anomalies.filter(an =>
+        an.transactions.some(t => t.clientId === report.clientId),
+      );
       await PremiumReportService.download(
         {
           title: report.title,
           clientName: client.name,
           period: report.period,
-          anomalies: analysisData.anomalies.filter(an =>
-            an.transactions.some(t => t.clientId === report.clientId),
-          ),
-          statistics: analysisData.statistics,
+          anomalies: clientAnomalies,
+          statistics: buildClientStatistics(clientAnomalies, 0),
           summary: analysisData.summary,
           cabinet: buildCabinetBranding(),
           auditId: report.id,
         },
         undefined,
         report.id,
+        { userPermissions: ['print'] },
       );
+    } else {
+      window.dispatchEvent(new CustomEvent('atlas-toast', {
+        detail: { type: 'error', message: 'Aucune analyse disponible pour régénérer ce rapport.' },
+      }));
     }
   };
 
@@ -148,11 +203,22 @@ export function ReportsPage() {
 
     setGenerating(true);
     try {
-      const stats = getStatementStats(statement);
+      // Anomalies du CLIENT uniquement (jamais celles des autres clients).
+      const allAnalyses = [...(currentAnalysis ? [currentAnalysis] : []), ...(analysisHistory || [])];
+      const analysisData = allAnalyses.find(a =>
+        a.anomalies.some(an => an.transactions.some(t => t.clientId === statement.clientId)),
+      );
+      const clientAnomalies = (analysisData?.anomalies ?? []).filter(an =>
+        an.transactions.some(t => t.clientId === statement.clientId),
+      );
+      const clientStats = buildClientStatistics(clientAnomalies, statementTxCount(statement));
+      // Montant affiché = récupérable CERTAIN (≥ 90 %), cohérent avec le PDF.
+      const recoverable = partitionByCertainty(clientAnomalies).certainAmount;
 
-      // Create report data
+      // Identifiant STABLE et unique (le store conserve cet id via le spread).
+      const reportId = crypto.randomUUID();
       const reportData: ClientReport = {
-        id: `report-${Date.now()}`,
+        id: reportId,
         clientId: statement.clientId,
         title: `Rapport ${reportConfig.type} - ${client.name}`,
         type: reportConfig.type,
@@ -160,66 +226,50 @@ export function ReportsPage() {
           start: new Date(statement.periodStart),
           end: new Date(statement.periodEnd),
         },
-        anomalyCount: stats.anomalies,
-        totalAmount: stats.amount,
+        anomalyCount: clientAnomalies.length,
+        totalAmount: recoverable,
         recoveredAmount: 0,
         status: 'final',
         generatedAt: new Date(),
       };
 
-      // Add to store
       addReport(reportData);
 
-      // Audit trail — report generation event
       auditLog({
         eventType: AuditEventType.REPORT_GENERATED,
         resourceType: 'report',
         action: 'created',
-        resourceId: reportData.id,
+        resourceId: reportId,
         clientId: statement.clientId,
         payload: {
           reportType: reportConfig.type,
-          anomalyCount: stats.anomalies,
-          totalAmount: stats.amount,
+          anomalyCount: clientAnomalies.length,
+          recoverableAmount: recoverable,
           period: { start: reportData.period.start, end: reportData.period.end },
         },
       });
 
-      // Generate PDF
-      const allAnalyses = [...(currentAnalysis ? [currentAnalysis] : []), ...(analysisHistory || [])];
-      const analysisData = allAnalyses.find(a =>
-        a.anomalies.some(an => an.transactions.some(t => t.clientId === statement.clientId))
-      );
-
       if (analysisData) {
         // Rapport canonique unifié : PDF premium (même moteur que Analyses /
-        // audit express). On ne passe plus par l'ancien ReportService pour éviter
-        // deux rendus divergents.
-        const cabinetBranding = buildCabinetBranding();
+        // audit express), périmètre client, chiffré (non modifiable).
         const premiumPayload = {
           title: reportData.title,
           clientName: client.name,
           period: reportData.period,
-          anomalies: analysisData.anomalies.filter(an =>
-            an.transactions.some(t => t.clientId === statement.clientId),
-          ),
-          statistics: analysisData.statistics,
+          anomalies: clientAnomalies,
+          statistics: clientStats,
           summary: analysisData.summary,
-          cabinet: cabinetBranding,
-          auditId: reportData.id,
+          cabinet: buildCabinetBranding(),
+          auditId: reportId,
         };
 
-        // Gèle le contenu : à partir d'ici, les données de CE rapport ne
-        // bougent plus, même si l'analyse est relancée. L'empreinte est
-        // rattachée au rapport (preuve de non-altération).
-        const snap = await freezeReportSnapshot(
-          reportData.id,
-          premiumPayload,
-          reportData.generatedAt.toISOString(),
-        );
-        updateReport(reportData.id, { contentHash: snap.contentHash });
+        // Gèle le contenu : à partir d'ici, les données de CE rapport ne bougent
+        // plus, même si l'analyse est relancée. Empreinte rattachée au rapport.
+        const snap = await freezeReportSnapshot(reportId, premiumPayload, reportData.generatedAt.toISOString());
+        updateReport(reportId, { contentHash: snap.contentHash });
 
-        await PremiumReportService.download(premiumPayload, undefined, reportData.id);
+        // Livrable CERTIFIÉ : PDF chiffré, permissions « impression seule ».
+        await PremiumReportService.download(premiumPayload, undefined, reportId, { userPermissions: ['print'] });
       }
 
       setShowGenerateModal(false);
