@@ -13,8 +13,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Trash2,
 } from 'lucide-react';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { useClientStore } from '../../store';
 
 interface StatementRow {
   id: string;
@@ -46,8 +48,17 @@ const MOCK_STATEMENTS: StatementRow[] = [
 
 export function StatementsListPage() {
   const navigate = useNavigate();
+  const deleteStatement = useClientStore((s) => s.deleteStatement);
   const [statements, setStatements] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleDelete = (s: StatementRow) => {
+    if (!window.confirm(`Supprimer le relevé ${s.bankCode} · ${formatPeriod(s.periodStart, s.periodEnd)} ? Cette action est définitive.`)) return;
+    // Retrait optimiste de la liste locale…
+    setStatements((prev) => prev.filter((x) => x.id !== s.id));
+    // …et suppression Supabase + store (ignorée pour la ligne de démonstration).
+    if (s.id !== 'stmt-mock') void deleteStatement(s.id);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -126,34 +137,42 @@ export function StatementsListPage() {
       {!loading && statements.length > 0 && (
         <div className="space-y-2">
           {statements.map((s) => (
-            <button
+            <div
               key={s.id}
-              onClick={() => navigate(`/statements/${s.id}`)}
-              className="w-full text-left bg-white border border-canvas-200 rounded-xl px-4 py-3.5 hover:border-amber-300 hover:shadow-sm transition-all group"
+              className="flex items-center bg-white border border-canvas-200 rounded-xl hover:border-amber-300 hover:shadow-sm transition-all group"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="shrink-0 w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-amber-700" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-ink-900 truncate">
-                        {s.bankCode} · {formatPeriod(s.periodStart, s.periodEnd)}
-                      </span>
-                      <StatusIcon status={s.status} />
-                    </div>
-                    <p className="text-xs text-ink-500 mt-0.5 truncate">
-                      {s.clientName && <span>{s.clientName} · </span>}
-                      <span className="font-mono">{s.accountNumber}</span>
-                      <span> · {s.transactionCount} transactions</span>
-                      {s.importedAt && <span> · importe le {formatDate(s.importedAt)}</span>}
-                    </p>
-                  </div>
+              <button
+                onClick={() => navigate(`/statements/${s.id}`)}
+                className="flex-1 min-w-0 text-left px-4 py-3.5 flex items-center gap-3"
+              >
+                <div className="shrink-0 w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+                  <FileText className="w-4 h-4 text-amber-700" />
                 </div>
-                <ChevronRight className="w-4 h-4 text-ink-400 group-hover:text-amber-600 shrink-0 transition-colors" />
-              </div>
-            </button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-ink-900 truncate">
+                      {s.bankCode} · {formatPeriod(s.periodStart, s.periodEnd)}
+                    </span>
+                    <StatusIcon status={s.status} />
+                  </div>
+                  <p className="text-xs text-ink-500 mt-0.5 truncate">
+                    {s.clientName && <span>{s.clientName} · </span>}
+                    <span className="font-mono">{s.accountNumber}</span>
+                    <span> · {s.transactionCount} transactions</span>
+                    {s.importedAt && <span> · importe le {formatDate(s.importedAt)}</span>}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-ink-400 group-hover:text-amber-600 shrink-0 transition-colors ml-auto" />
+              </button>
+              <button
+                onClick={() => handleDelete(s)}
+                className="shrink-0 mr-2 p-2 rounded-lg text-ink-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                title="Supprimer le relevé"
+                aria-label="Supprimer le relevé"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           ))}
         </div>
       )}

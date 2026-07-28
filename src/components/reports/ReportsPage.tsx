@@ -34,7 +34,16 @@ export function ReportsPage() {
   const { currentAnalysis, analysisHistory } = useAnalysisStore();
   const { transactions } = useTransactionStore();
   const { claudeApi, organization } = useSettingsStore();
-  const { clients, statements, reports, addReport, updateReport, deleteReport } = useClientStore();
+  const { clients, statements, reports, addReport, updateReport, deleteReport, deleteStatement } = useClientStore();
+
+  // Supprime un relevé importé (Supabase + store), après confirmation. Retire
+  // aussi les rapports gelés qui en dépendent n'a pas de sens ici : les rapports
+  // restent, mais le relevé source disparaît de la liste.
+  const handleDeleteStatement = (statement: BankStatement) => {
+    const label = `${getClient(statement.clientId)?.name ?? 'ce client'} · ${formatDate(statement.periodStart)} → ${formatDate(statement.periodEnd)}`;
+    if (!window.confirm(`Supprimer le relevé importé (${label}) ? Cette action est définitive.`)) return;
+    void deleteStatement(statement.id);
+  };
 
   const [activeTab, setActiveTab] = useState<TabType>('statements');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -554,6 +563,13 @@ export function ReportsPage() {
                               >
                                 <ChevronRight className="w-4 h-4" />
                               </button>
+                              <button
+                                onClick={() => handleDeleteStatement(statement)}
+                                className="p-1.5 hover:bg-red-50 rounded text-primary-500 hover:text-red-600"
+                                title="Supprimer le relevé"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -652,6 +668,14 @@ export function ReportsPage() {
                       >
                         <Printer className="w-3 h-3 mr-1" />
                         Generer
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteStatement(statement)}
+                        title="Supprimer le relevé"
+                      >
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
                   </Card>
