@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  coverageForSegment, hasOpenGapToday, type ReferenceJournalRow,
+  coverageForSegment, hasOpenGapToday,
+  rubricLabel, isRateRubric, formatConditionValue,
+  type ReferenceJournalRow,
 } from '../referenceJournal';
 
 function row(p: Partial<ReferenceJournalRow>): ReferenceJournalRow {
@@ -54,5 +56,25 @@ describe('hasOpenGapToday', () => {
   it('faux quand la couverture est ouverte (∞)', () => {
     const spans = coverageForSegment([row({ effectiveFrom: '2026-01-01', effectiveTo: null })], 'particulier');
     expect(hasOpenGapToday(spans, '2026-07-28')).toBe(false);
+  });
+});
+
+describe('détail des conditions — libellés & formatage', () => {
+  it('rubricLabel : mappe les codes connus, prettifie les autres', () => {
+    expect(rubricLabel('compte.tenue_mensuelle')).toBe('Tenue de compte (mensuelle)');
+    expect(rubricLabel('divers.frais_speciaux')).toBe('Frais speciaux');
+  });
+
+  it('isRateRubric : distingue taux/commission des montants', () => {
+    expect(isRateRubric('decouverts.taux_autorise')).toBe(true);
+    expect(isRateRubric('decouverts.commission_mouvement')).toBe(true);
+    expect(isRateRubric('compte.tenue_mensuelle')).toBe(false);
+  });
+
+  it('formatConditionValue : % pour les taux, FCFA pour les montants', () => {
+    const norm = (s: string) => s.replace(/[  ]/g, ' ');
+    expect(formatConditionValue('decouverts.taux_autorise', 14)).toBe('14 %');
+    expect(norm(formatConditionValue('compte.tenue_mensuelle', 1500))).toBe('1 500 FCFA');
+    expect(formatConditionValue('compte.tenue_mensuelle', null)).toBe('—');
   });
 });

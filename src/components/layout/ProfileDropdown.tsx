@@ -81,7 +81,10 @@ export function ProfileDropdown() {
     },
   ];
 
-  const displayName = organization.name || 'Mon Cabinet';
+  // Nom par défaut aligné sur le TYPE DE COMPTE : un compte Entreprise ne doit
+  // pas afficher « Mon Cabinet » (identités contradictoires). L'utilisateur peut
+  // toujours personnaliser via Mon organisation.
+  const displayName = organization.name || (isEnterprise ? 'Mon entreprise' : 'Mon Cabinet');
   const displayRole = 'Administrateur';
   const initials = displayName
     .split(' ')

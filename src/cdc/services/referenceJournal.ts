@@ -49,6 +49,111 @@ export async function fetchReferenceJournal(): Promise<ReferenceJournalRow[]> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Détail d'une version de barème (conditions importées + source)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ReferenceConditionRow {
+  id: string;
+  rubricCode: string;
+  profil: string | null; // dimensions.profil (null = tous segments)
+  valueNumeric: number | null;
+  valueFormula: unknown | null;
+  pdfPage: number | null;
+  notes: string | null;
+}
+
+export interface ReferenceVersionDetail {
+  versionId: string;
+  versionLabel: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  validationStatus: string;
+  sourcePdfUrl: string | null;
+  sourceHash: string | null;
+  conditions: ReferenceConditionRow[];
+}
+
+/** Récupère le détail d'une version : ses conditions importées + la source. */
+export async function fetchReferenceVersionDetail(
+  versionId: string,
+): Promise<ReferenceVersionDetail | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const [{ data: vRows }, { data: cRows }] = await Promise.all([
+    supabase
+      .schema('atlasbanx')
+      .from('bank_reference_versions')
+      .select('id, version_label, effective_from, effective_to, validation_status, source_pdf_url, source_hash_sha256')
+      .eq('id', versionId)
+      .limit(1),
+    supabase
+      .schema('atlasbanx')
+      .from('bank_reference_conditions')
+      .select('id, rubric_code, dimensions, value_numeric, value_formula, pdf_page, notes')
+      .eq('reference_version_id', versionId)
+      .order('rubric_code'),
+  ]);
+
+  const v = (vRows as Record<string, unknown>[] | null)?.[0];
+  if (!v) return null;
+
+  const conditions: ReferenceConditionRow[] = ((cRows as Record<string, unknown>[]) ?? []).map((r) => ({
+    id: String(r.id),
+    rubricCode: String(r.rubric_code),
+    profil: ((r.dimensions as Record<string, unknown> | null)?.profil as string) ?? null,
+    valueNumeric: r.value_numeric !== null && r.value_numeric !== undefined ? Number(r.value_numeric) : null,
+    valueFormula: r.value_formula ?? null,
+    pdfPage: r.pdf_page !== null && r.pdf_page !== undefined ? Number(r.pdf_page) : null,
+    notes: (r.notes as string) ?? null,
+  }));
+
+  return {
+    versionId: String(v.id),
+    versionLabel: (v.version_label as string) ?? null,
+    effectiveFrom: (v.effective_from as string) ?? null,
+    effectiveTo: (v.effective_to as string) ?? null,
+    validationStatus: String(v.validation_status ?? 'draft'),
+    sourcePdfUrl: (v.source_pdf_url as string) ?? null,
+    sourceHash: (v.source_hash_sha256 as string) ?? null,
+    conditions,
+  };
+}
+
+/** Libellé lisible d'un code de rubrique (fallback : prettification du code). */
+export function rubricLabel(code: string): string {
+  const MAP: Record<string, string> = {
+    'compte.tenue_mensuelle': 'Tenue de compte (mensuelle)',
+    'compte.releve_mensuel': 'Relevé mensuel',
+    'compte.inactivite': 'Frais d’inactivité',
+    'cartes.cotisation_debit': 'Cotisation carte de débit',
+    'decouverts.taux_autorise': 'Taux découvert autorisé',
+    'decouverts.taux_non_autorise': 'Taux découvert non autorisé',
+    'decouverts.commission_mouvement': 'Commission de mouvement',
+    'virement.national': 'Virement national',
+    'virement.international': 'Virement international',
+  };
+  if (MAP[code]) return MAP[code];
+  const tail = code.includes('.') ? code.slice(code.indexOf('.') + 1) : code;
+  return tail.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}
+
+/** true si la rubrique s'exprime en pourcentage (taux, commission). */
+export function isRateRubric(code: string): boolean {
+  return /taux|commission|agios?|interet|intérêt/i.test(code);
+}
+
+/** Formate une valeur de condition selon sa nature (taux % ou montant FCFA). */
+export function formatConditionValue(code: string, value: number | null): string {
+  if (value === null) return '—';
+  if (isRateRubric(code)) {
+    const s = Number.isInteger(value) ? String(value) : value.toString().replace('.', ',');
+    return `${s} %`;
+  }
+  return `${Math.round(value).toLocaleString('fr-FR')} FCFA`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Analyse de couverture / trous
 // ────────────────────────────────────────────────────────────────────────────
 
