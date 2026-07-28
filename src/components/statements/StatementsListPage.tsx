@@ -31,21 +31,6 @@ interface StatementRow {
   importedAt: string;
 }
 
-const MOCK_STATEMENTS: StatementRow[] = [
-  {
-    id: 'stmt-mock',
-    bankCode: 'NSIA',
-    bankName: 'NSIA Banque Cote d\'Ivoire',
-    accountNumber: '86315802001',
-    clientName: 'Pamela ATOKOUNA',
-    periodStart: '2026-02-10',
-    periodEnd: '2026-05-08',
-    transactionCount: 94,
-    status: 'imported',
-    importedAt: '2026-05-09T18:00:00Z',
-  },
-];
-
 export function StatementsListPage() {
   const navigate = useNavigate();
   const deleteStatement = useClientStore((s) => s.deleteStatement);
@@ -54,10 +39,9 @@ export function StatementsListPage() {
 
   const handleDelete = (s: StatementRow) => {
     if (!window.confirm(`Supprimer le relevé ${s.bankCode} · ${formatPeriod(s.periodStart, s.periodEnd)} ? Cette action est définitive.`)) return;
-    // Retrait optimiste de la liste locale…
+    // Retrait optimiste de la liste locale + suppression Supabase + store.
     setStatements((prev) => prev.filter((x) => x.id !== s.id));
-    // …et suppression Supabase + store (ignorée pour la ligne de démonstration).
-    if (s.id !== 'stmt-mock') void deleteStatement(s.id);
+    void deleteStatement(s.id);
   };
 
   useEffect(() => {
@@ -74,9 +58,11 @@ export function StatementsListPage() {
             .order('imported_at', { ascending: false })
             .limit(50);
 
-          if (!cancelled && data && (data as unknown[]).length > 0) {
+          if (!cancelled) {
+            // Uniquement des données réelles : liste vide si aucun relevé importé
+            // (plus de relevé de démonstration).
             setStatements(
-              (data as Record<string, unknown>[]).map((r) => ({
+              ((data as Record<string, unknown>[] | null) ?? []).map((r) => ({
                 id: r.id as string,
                 bankCode: (r.bank_code as string) ?? '',
                 bankName: (r.bank_name as string) ?? '',
@@ -89,14 +75,12 @@ export function StatementsListPage() {
                 importedAt: (r.imported_at as string) ?? '',
               })),
             );
-          } else if (!cancelled) {
-            setStatements(MOCK_STATEMENTS);
           }
         } else {
-          if (!cancelled) setStatements(MOCK_STATEMENTS);
+          if (!cancelled) setStatements([]);
         }
       } catch {
-        if (!cancelled) setStatements(MOCK_STATEMENTS);
+        if (!cancelled) setStatements([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
