@@ -75,6 +75,56 @@ export interface ReferenceVersionDetail {
   conditions: ReferenceConditionRow[];
 }
 
+const BANK_REFERENCES_BUCKET = 'bank-references';
+
+export type SourceDocKind = 'http' | 'storage' | 'seed' | 'none';
+
+/**
+ * Résout une URL ouvrable pour le document source d'un barème :
+ *  - URL http(s) → renvoyée telle quelle ;
+ *  - chemin de stockage (bank-references/…) → URL signée temporaire ;
+ *  - référence de démonstration (seed://) ou absente → pas d'URL.
+ */
+export async function resolveSourceDocumentUrl(
+  sourcePdfUrl: string | null,
+): Promise<{ url: string | null; kind: SourceDocKind }> {
+  if (!sourcePdfUrl) return { url: null, kind: 'none' };
+  if (/^https?:\/\//.test(sourcePdfUrl)) return { url: sourcePdfUrl, kind: 'http' };
+  if (sourcePdfUrl.startsWith('seed://')) return { url: null, kind: 'seed' };
+  const supabase = getSupabaseClient();
+  if (!supabase) return { url: null, kind: 'storage' };
+  const path = sourcePdfUrl.startsWith(BANK_REFERENCES_BUCKET + '/')
+    ? sourcePdfUrl.slice(BANK_REFERENCES_BUCKET.length + 1)
+    : sourcePdfUrl;
+  const { data } = await supabase.storage
+    .from(BANK_REFERENCES_BUCKET)
+    .createSignedUrl(path, 3600);
+  return { url: data?.signedUrl ?? null, kind: 'storage' };
+}
+
+/**
+ * Supprime un barème L2 (version + conditions) via la RPC admin. Retire aussi,
+ * au mieux, le PDF source du stockage s'il s'agit d'un fichier importé.
+ */
+export async function deleteReferenceVersion(
+  versionId: string,
+  sourcePdfUrl?: string | null,
+): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+  const { error } = await supabase
+    .schema('atlasbanx')
+    .rpc('admin_delete_reference_version', { p_version_id: versionId });
+  if (error) return false;
+  if (sourcePdfUrl && !/^https?:\/\//.test(sourcePdfUrl) && !sourcePdfUrl.startsWith('seed://')) {
+    const path = sourcePdfUrl.startsWith(BANK_REFERENCES_BUCKET + '/')
+      ? sourcePdfUrl.slice(BANK_REFERENCES_BUCKET.length + 1)
+      : sourcePdfUrl;
+    try { await supabase.storage.from(BANK_REFERENCES_BUCKET).remove([path]); } catch { /* best-effort */ }
+  }
+  return true;
+}
+
 /** Récupère le détail d'une version : ses conditions importées + la source. */
 export async function fetchReferenceVersionDetail(
   versionId: string,

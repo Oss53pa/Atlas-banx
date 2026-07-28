@@ -10,12 +10,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Landmark, CheckCircle2, AlertTriangle, Loader2, CalendarClock, FileText, Download, Upload,
-  Eye, X, FileSearch, ShieldCheck,
+  Eye, X, FileSearch, ShieldCheck, ExternalLink, Trash2,
 } from 'lucide-react';
 import {
   fetchReferenceJournal, coverageForSegment, hasOpenGapToday, bankHasMissingPeriods, journalToCsv,
   CONCRETE_SEGMENTS, SEGMENT_LABELS,
   fetchReferenceVersionDetail, rubricLabel, formatConditionValue,
+  resolveSourceDocumentUrl, deleteReferenceVersion,
   type ReferenceJournalRow, type JournalSegment, type ReferenceVersionDetail,
 } from '../../cdc/services/referenceJournal';
 
@@ -92,11 +93,48 @@ export function ReferenceJournalPanel({ onImport }: ReferenceJournalPanelProps =
   };
   const closeDetail = () => { setDetail(null); setDetailLoading(false); };
 
+  const reload = () => { void fetchReferenceJournal().then(setRows); };
   useEffect(() => {
     let cancelled = false;
     void fetchReferenceJournal().then((r) => { if (!cancelled) setRows(r); });
     return () => { cancelled = true; };
   }, []);
+
+  // Ouverture du document source (URL signée pour un fichier importé).
+  const [openingSource, setOpeningSource] = useState(false);
+  const openSourceDocument = async (sourcePdfUrl: string | null) => {
+    setOpeningSource(true);
+    try {
+      const { url, kind } = await resolveSourceDocumentUrl(sourcePdfUrl);
+      if (url) { window.open(url, '_blank', 'noopener,noreferrer'); return; }
+      window.dispatchEvent(new CustomEvent('atlas-toast', { detail: {
+        type: 'info',
+        message: kind === 'seed'
+          ? 'Référence de démonstration — aucun document réel associé.'
+          : 'Document source indisponible.',
+      } }));
+    } finally { setOpeningSource(false); }
+  };
+
+  // Suppression d'un barème (version + conditions) — admin, avec confirmation.
+  const [deleting, setDeleting] = useState(false);
+  const deleteVersion = async () => {
+    if (!detail) return;
+    if (!window.confirm(
+      `Supprimer définitivement le barème « ${detail.versionLabel ?? 'sans nom'} » et ses ${detail.conditions.length} condition(s) ?\n\n`
+      + 'Ce barème ne sera plus disponible pour les audits. Action irréversible.',
+    )) return;
+    setDeleting(true);
+    const ok = await deleteReferenceVersion(detail.versionId, detail.sourcePdfUrl);
+    setDeleting(false);
+    if (ok) {
+      closeDetail();
+      reload();
+      window.dispatchEvent(new CustomEvent('atlas-toast', { detail: { type: 'success', message: 'Barème supprimé.' } }));
+    } else {
+      window.dispatchEvent(new CustomEvent('atlas-toast', { detail: { type: 'error', message: 'Suppression impossible (droits admin requis ?).' } }));
+    }
+  };
 
   const banks = useMemo(() => {
     if (!rows) return [];
@@ -400,23 +438,23 @@ export function ReferenceJournalPanel({ onImport }: ReferenceJournalPanelProps =
                   <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-400">
                     <ShieldCheck className="h-3.5 w-3.5" /> Source importée
                   </p>
-                  {detail.sourcePdfUrl && /^https?:\/\//.test(detail.sourcePdfUrl) ? (
-                    <a
-                      href={detail.sourcePdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline"
-                    >
-                      <FileText className="h-3.5 w-3.5" /> Ouvrir le PDF source
-                    </a>
-                  ) : (
-                    <p className="text-xs text-primary-700">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 text-xs text-primary-700">
                       <span className="text-primary-500">Référence : </span>
-                      <span className="font-mono">{detail.sourcePdfUrl ?? '—'}</span>
+                      <span className="font-mono break-all">{detail.sourcePdfUrl ?? '—'}</span>
                     </p>
-                  )}
+                    <button
+                      onClick={() => void openSourceDocument(detail.sourcePdfUrl)}
+                      disabled={openingSource || !detail.sourcePdfUrl}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+                      title="Ouvrir le document source importé"
+                    >
+                      {openingSource ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                      Ouvrir le document
+                    </button>
+                  </div>
                   {detail.sourceHash && (
-                    <p className="mt-1 break-all text-[10px] text-primary-400">
+                    <p className="mt-1.5 break-all text-[10px] text-primary-400">
                       Empreinte SHA-256 : <span className="font-mono">{detail.sourceHash}</span>
                     </p>
                   )}
@@ -462,6 +500,21 @@ export function ReferenceJournalPanel({ onImport }: ReferenceJournalPanelProps =
                     </table>
                   </div>
                 )}
+
+                {/* Actions — suppression du barème (admin) */}
+                <div className="mt-5 flex items-center justify-between border-t border-primary-100 pt-4">
+                  <p className="text-[11px] text-primary-400">
+                    La suppression retire le barème et ses conditions du référentiel.
+                  </p>
+                  <button
+                    onClick={() => void deleteVersion()}
+                    disabled={deleting}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-40"
+                  >
+                    {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Supprimer ce barème
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="py-16 text-center text-sm text-primary-500">Détail indisponible.</div>
