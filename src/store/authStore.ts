@@ -46,7 +46,19 @@ type AuthStore = AuthState & AuthActions;
 // ----------------------------------------------------------------------------
 
 function isDemoModeEnabled(): boolean {
-  return import.meta.env.VITE_DEMO_MODE === 'true';
+  if (import.meta.env.VITE_DEMO_MODE !== 'true') return false;
+  // Garde-fou : le mode démo monte un profil ADMIN fictif et court-circuite
+  // l'authentification. Dans un build de PRODUCTION, il ne s'active QUE si
+  // explicitement autorisé (VITE_ALLOW_DEMO_IN_PROD), afin qu'un build prod
+  // marqué démo par erreur n'expose pas l'interface d'administration.
+  if (import.meta.env.PROD && import.meta.env.VITE_ALLOW_DEMO_IN_PROD !== 'true') {
+    console.error(
+      '[auth] VITE_DEMO_MODE=true IGNORÉ en production : définir VITE_ALLOW_DEMO_IN_PROD=true '
+      + 'pour l\'autoriser explicitement (déconseillé sur un déploiement public).',
+    );
+    return false;
+  }
+  return true;
 }
 
 const DEMO_USER: User = {

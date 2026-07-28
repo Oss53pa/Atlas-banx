@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Anomaly } from '../types';
 import { reportsRepo } from '../lib/repositories';
 import type { ReportDraft as RepoReportDraft, GeneratedReport as RepoGeneratedReport } from '../lib/repositories';
@@ -418,6 +418,18 @@ export const useReportStore = create<ReportStore>()(
     }),
     {
       name: 'atlasbanx-reports',
+      // Stockage CLOISONNÉ par utilisateur : sur un poste partagé, un compte ne
+      // doit pas relire les rapports/brouillons d'un autre compte. La clé réelle
+      // est suffixée par l'id utilisateur courant. reHydrateOnUserChange()
+      // recharge le bon jeu quand l'utilisateur change.
+      storage: createJSONStorage(() => {
+        const scoped = (key: string) => `${key}::${currentUserId() ?? 'anon'}`;
+        return {
+          getItem: (key) => localStorage.getItem(scoped(key)),
+          setItem: (key, value) => localStorage.setItem(scoped(key), value),
+          removeItem: (key) => localStorage.removeItem(scoped(key)),
+        };
+      }),
     }
   )
 );
