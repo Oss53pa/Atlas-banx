@@ -133,6 +133,59 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
     );
   }
 
+  // ============================================================================
+  // Rapport premium CERTIFIÉ — même moteur (PDF chiffré, non modifiable) que
+  // l'audit express et la page Analyses. Alimenté par le résultat en mémoire de
+  // l'analyse client (analysis.lastResult), donc jamais tronqué / vide. Une
+  // empreinte est archivée côté Atlas pour contrôle. Voir directive « PDF
+  // premium partout » + « livrable toujours certifié, Atlas conserve l'archive ».
+  // ============================================================================
+  const premiumReady = !!analysis.lastResult && analysis.lastResult.anomalies.length >= 0;
+  const stmt = meta;
+  const downloadPremium = async () => {
+    const result = analysis.lastResult;
+    if (!result) return;
+    try {
+      const { PremiumReportService } = await import('../../../services/PremiumReportService');
+      const { sha256Hex, archiveExpressReport } = await import('../../../billing/express/reportArchive');
+      const reportRef = `AXB-${Date.now().toString(36).toUpperCase()}`;
+      const doc = await PremiumReportService.build(
+        {
+          title: "Rapport d'audit bancaire",
+          clientName: stmt.clientLegalName || 'Titulaire du compte',
+          period: { start: new Date(stmt.periodStart), end: new Date(stmt.periodEnd) },
+          anomalies: result.anomalies,
+          statistics: result.statistics,
+          summary: result.summary,
+          banks: [{ name: stmt.bankLegalName || stmt.bankCode, code: stmt.bankCode }],
+          cabinet: { name: workspace?.name || 'CRMC · Atlas Studio' },
+          auditId: reportRef,
+        },
+        undefined,
+        { userPermissions: ['print'] },
+      );
+      const buffer = doc.output('arraybuffer') as ArrayBuffer;
+      const pdfSha256 = await sha256Hex(buffer);
+      void archiveExpressReport({
+        reportRef, pdfSha256,
+        bankCode: stmt.bankCode || undefined,
+        periodStart: new Date(stmt.periodStart), periodEnd: new Date(stmt.periodEnd),
+        anomalyCount: result.statistics.totalAnomalies,
+        totalRecoverable: result.statistics.totalAnomalyAmount,
+        usedOfficialGrid: false,
+      });
+      const blob = new Blob([buffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rapport-audit-atlasbanx.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[statement-detail] génération PDF premium échouée:', err);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-canvas-50 overflow-hidden">
       {/* === Header sticky : breadcrumb + titre + actions + status banner + tabs === */}
@@ -303,6 +356,8 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
             onGenerateReport={(t) => void reportH.generateReport(t)}
             onSignAndSend={async (args) => { await reportH.signAndSend(args); }}
             onGenerateComplaintLetter={(ids) => void reportH.generateComplaintLetter(ids)}
+            premiumReady={premiumReady}
+            onDownloadPremium={() => void downloadPremium()}
           />
         )}
       </main>
