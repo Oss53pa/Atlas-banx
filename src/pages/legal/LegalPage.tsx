@@ -12,8 +12,14 @@ import { FileText, ArrowLeft } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardBody, TabNav } from '../../components/ui';
 import type { Tab } from '../../components/ui';
 import { ConsentService, type PolicyVersion, type PolicyType } from '../../security';
+import { CGV_PARTICULIER_VERSION, CGV_PARTICULIER_SECTIONS } from '../../billing/express/cgvParticulier';
 
-const POLICY_LABELS: Record<PolicyType, string> = {
+// Onglet supplémentaire 'cgv' rendu depuis le texte embarqué (source unique
+// partagée avec la barrière d'acceptation du parcours express particulier).
+type LegalTab = PolicyType | 'cgv';
+
+const POLICY_LABELS: Record<LegalTab, string> = {
+  cgv: 'CGV (Particulier)',
   cgu: 'CGU',
   privacy: 'Confidentialité',
   legal: 'Mentions légales',
@@ -23,7 +29,7 @@ const POLICY_LABELS: Record<PolicyType, string> = {
 export default function LegalPage() {
   const [policies, setPolicies] = useState<PolicyVersion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<PolicyType>('cgu');
+  const [activeTab, setActiveTab] = useState<LegalTab>('cgv');
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +47,7 @@ export default function LegalPage() {
     };
   }, []);
 
-  const tabs: Tab[] = (Object.keys(POLICY_LABELS) as PolicyType[]).map((key) => ({
+  const tabs: Tab[] = (Object.keys(POLICY_LABELS) as LegalTab[]).map((key) => ({
     id: key,
     label: POLICY_LABELS[key],
   }));
@@ -76,11 +82,29 @@ export default function LegalPage() {
             <TabNav
               tabs={tabs}
               activeTab={activeTab}
-              onTabChange={(id) => setActiveTab(id as PolicyType)}
+              onTabChange={(id) => setActiveTab(id as LegalTab)}
             />
 
             <div className="mt-4">
-              {loading ? (
+              {activeTab === 'cgv' ? (
+                <div>
+                  <div className="text-xs text-primary-500 mb-4">
+                    Version {CGV_PARTICULIER_VERSION} — Conditions Générales de Vente, Audit express (particuliers)
+                  </div>
+                  <div className="space-y-5">
+                    {CGV_PARTICULIER_SECTIONS.map((s) => (
+                      <div key={s.title}>
+                        <h2 className="text-sm font-semibold text-primary-900">{s.title}</h2>
+                        <div className="mt-1 space-y-1.5">
+                          {s.body.map((p, i) => (
+                            <p key={i} className="text-[13px] leading-relaxed text-primary-700">{p}</p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : loading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-5 h-5 border-2 border-primary-900 border-t-transparent rounded-full animate-spin" />
                 </div>

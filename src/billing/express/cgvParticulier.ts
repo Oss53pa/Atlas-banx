@@ -10,26 +10,49 @@
 //    exploitation commerciale — ne constitue pas un avis juridique.
 // ============================================================================
 
-export const CGV_PARTICULIER_VERSION = '2026-07-28';
+export const CGV_PARTICULIER_VERSION = '2026-07-29';
 
 export interface CgvSection {
   title: string;
   body: string[];
 }
 
+// ⚠️ À COMPLÉTER par l'éditeur avant exploitation commerciale (mentions légales
+//    obligatoires). Les crochets signalent les informations à renseigner.
+export const EDITOR_IDENTITY_FIELDS: { label: string; value: string }[] = [
+  { label: 'Raison sociale', value: '[Raison sociale complète]' },
+  { label: 'Forme juridique', value: '[SARL / SA / SAS …]' },
+  { label: 'Capital social', value: '[Montant du capital]' },
+  { label: 'RCCM', value: '[Numéro RCCM]' },
+  { label: 'NIF / IDU', value: '[Numéro d’identification fiscale]' },
+  { label: 'Siège social', value: '[Adresse complète, Abidjan, Côte d’Ivoire]' },
+  { label: 'Directeur de la publication', value: '[Nom du représentant légal]' },
+  { label: 'Email de contact', value: '[contact@…]' },
+  { label: 'Téléphone', value: '[+225 …]' },
+  { label: 'Médiateur de la consommation', value: '[Nom / coordonnées du médiateur]' },
+];
+
 export const CGV_PARTICULIER_SECTIONS: CgvSection[] = [
+  {
+    title: '0. Identité de l’éditeur',
+    body: [
+      'Le service est édité par Atlas Studio. Les informations légales complètes de l’éditeur sont les suivantes :',
+      ...EDITOR_IDENTITY_FIELDS.map((f) => `${f.label} : ${f.value}`),
+    ],
+  },
   {
     title: '1. Objet et éditeur',
     body: [
       "Les présentes Conditions Générales de Vente (« CGV ») régissent le service « Audit express » proposé par Atlas Studio (Abidjan, Côte d'Ivoire) aux personnes physiques agissant à des fins non professionnelles (le « Client »).",
-      "Le service consiste à analyser un relevé de compte bancaire fourni par le Client afin de détecter d'éventuels frais bancaires non conformes, puis à lui remettre un rapport détaillé et une lettre de réclamation type.",
+      "Le service consiste à analyser un relevé de compte bancaire fourni par le Client afin de détecter d'éventuels frais bancaires non conformes, puis à lui remettre un rapport d'audit détaillé et une lettre de réclamation type.",
       "En cochant la case d'acceptation, le Client reconnaît avoir lu et accepté sans réserve les présentes CGV. À défaut d'acceptation, le service ne peut être utilisé.",
     ],
   },
   {
-    title: '2. Description du service',
+    title: '2. Description du service et du livrable',
     body: [
       "1) Import d'un relevé bancaire au format PDF ; 2) analyse automatisée GRATUITE par le moteur de détection ; 3) affichage du montant potentiellement récupérable estimé ; 4) sur décision du Client, déblocage payant du rapport détaillé et de la lettre de réclamation.",
+      "Le livrable est un rapport d'audit remis sous la forme d'un document PDF CERTIFIÉ et NON MODIFIABLE (chiffré, permissions restreintes à l'impression), portant une référence unique. Il est imprimable et enregistrable par le Client.",
       "L'analyse est réalisée par des algorithmes ; elle peut être complétée d'un traitement d'aide à la lecture. Aucune intervention humaine individualisée n'est garantie.",
     ],
   },
@@ -53,14 +76,15 @@ export const CGV_PARTICULIER_SECTIONS: CgvSection[] = [
   {
     title: '5. Service sans compte, éphémère',
     body: [
-      "Le service est accessible sans création de compte. Le parcours est éphémère : à sa clôture, le relevé importé et le rapport généré ne sont pas conservés par Atlas Studio.",
+      "Le service est accessible sans création de compte. Le parcours est éphémère : à sa clôture, le relevé importé, les transactions et les données personnelles ne sont pas conservés par Atlas Studio.",
       "Il appartient au Client de télécharger et de conserver son rapport et sa lettre de réclamation ; ils ne pourront pas être régénérés ultérieurement.",
     ],
   },
   {
-    title: '6. Données personnelles et confidentialité',
+    title: '6. Données personnelles, confidentialité et archive de preuve',
     body: [
-      "Le relevé est traité uniquement pour réaliser l'analyse demandée, le temps de la session, puis supprimé. Aucune donnée du relevé n'est conservée après la clôture du parcours.",
+      "Le relevé et les transactions sont traités uniquement pour réaliser l'analyse demandée, le temps de la session, puis supprimés. AUCUNE donnée du relevé (opérations, soldes, nom du titulaire, numéro de compte) n'est conservée après la clôture du parcours.",
+      "Par exception et à des fins exclusives de PREUVE en cas de contrôle ou d'enquête, Atlas Studio conserve une ARCHIVE MINIMALE et inviolable de chaque livrable certifié : sa référence unique, l'empreinte cryptographique (SHA-256) du PDF, et des métadonnées NON NOMINATIVES (banque concernée, période, nombre d'anomalies, montant total). Cette archive ne contient ni le relevé, ni le nom du Client, ni le détail des opérations. Elle permet uniquement d'attester l'authenticité d'un rapport présenté ultérieurement.",
       "Les coordonnées éventuellement saisies (email, téléphone) servent exclusivement à la remise du rapport et à l'exécution du paiement. Le Client dispose d'un droit d'accès, de rectification et d'effacement de ses données.",
     ],
   },

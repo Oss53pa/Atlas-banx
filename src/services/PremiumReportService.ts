@@ -151,9 +151,28 @@ export class PremiumReportService {
 
   /**
    * Build the document but don't trigger download.
+   * @param security  Optionnel : chiffre le PDF et restreint les permissions
+   *   (par défaut « impression seule », rendant le document NON MODIFIABLE).
+   *   Utilisé pour les livrables certifiés (audit express particulier).
    */
-  static async build(data: PremiumReportData, reportId?: string): Promise<jsPDF> {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  static async build(
+    data: PremiumReportData,
+    reportId?: string,
+    security?: { ownerPassword?: string; userPermissions?: Array<'print' | 'modify' | 'copy' | 'annot-forms'> },
+  ): Promise<jsPDF> {
+    const doc = new jsPDF({
+      orientation: 'portrait', unit: 'mm', format: 'a4',
+      ...(security
+        ? {
+            encryption: {
+              // Pas de mot de passe utilisateur → ouverture libre ; mot de passe
+              // propriétaire → les permissions ne peuvent être levées sans lui.
+              ownerPassword: security.ownerPassword ?? Math.random().toString(36).slice(2) + Date.now().toString(36),
+              userPermissions: security.userPermissions ?? ['print'],
+            },
+          }
+        : {}),
+    });
     const ctx = createCtx(doc, data);
 
     drawCover(ctx);
