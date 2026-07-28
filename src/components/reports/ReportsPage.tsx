@@ -13,7 +13,7 @@ import {
   Select,
 } from '../ui';
 import { useAnalysisStore, useTransactionStore, useSettingsStore, useClientStore } from '../../store';
-import { ReportService, auditLog, AuditEventType } from '../../services';
+import { PremiumReportService, auditLog, AuditEventType } from '../../services';
 import { formatCurrency, formatDate } from '../../utils';
 import { Severity } from '../../types';
 import { ReportViewer, generateAtlasBanxAuditReport } from '../reporting';
@@ -26,7 +26,7 @@ export function ReportsPage() {
   const navigate = useNavigate();
   const { currentAnalysis, analysisHistory } = useAnalysisStore();
   const { transactions } = useTransactionStore();
-  const { claudeApi } = useSettingsStore();
+  const { claudeApi, organization } = useSettingsStore();
   const { clients, statements, reports, addReport, deleteReport } = useClientStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('statements');
@@ -130,19 +130,37 @@ export function ReportsPage() {
       );
 
       if (analysisData) {
-        const pdfData = {
-          title: reportData.title,
-          clientName: client.name,
-          period: reportData.period,
-          anomalies: analysisData.anomalies.filter(an =>
-            an.transactions.some(t => t.clientId === statement.clientId)
-          ),
-          statistics: analysisData.statistics,
-          summary: analysisData.summary,
-          includeAIAnalysis: reportConfig.includeAI && claudeApi.isEnabled,
-          aiSummary: analysisData.summary.message,
-        };
-        await ReportService.downloadPDF(pdfData, undefined, reportData.id);
+        // Rapport canonique unifié : PDF premium (même moteur que Analyses /
+        // audit express). On ne passe plus par l'ancien ReportService pour éviter
+        // deux rendus divergents.
+        const cabinetBranding = organization?.name
+          ? {
+              name: organization.name,
+              tagline: organization.legalName || undefined,
+              address: [organization.address, organization.city, organization.country].filter(Boolean).join(', ') || undefined,
+              phone: organization.phone || undefined,
+              email: organization.senderEmail || undefined,
+              website: organization.website || undefined,
+              logo: organization.logo || undefined,
+              accentColor: organization.accentColor || undefined,
+            }
+          : undefined;
+        await PremiumReportService.download(
+          {
+            title: reportData.title,
+            clientName: client.name,
+            period: reportData.period,
+            anomalies: analysisData.anomalies.filter(an =>
+              an.transactions.some(t => t.clientId === statement.clientId),
+            ),
+            statistics: analysisData.statistics,
+            summary: analysisData.summary,
+            cabinet: cabinetBranding,
+            auditId: reportData.id,
+          },
+          undefined,
+          reportData.id,
+        );
       }
 
       setShowGenerateModal(false);

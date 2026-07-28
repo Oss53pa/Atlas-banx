@@ -13,6 +13,7 @@ import {
   type Transaction,
   type BankConditions,
   type Anomaly as CoreAnomaly,
+  type AnalysisResult,
 } from '../../../types';
 import type { BankTransaction } from '../types/statement.types';
 
@@ -35,6 +36,8 @@ export interface UseStatementAnalysisResult {
   detectedAnomalies: CoreAnomaly[];
   /** Resume de la derniere analyse. */
   summary: AnalysisResultSummary | null;
+  /** Résultat complet de la dernière analyse (pour le rapport PDF premium). */
+  lastResult: AnalysisResult | null;
   /** Lance l'analyse sur les transactions fournies. */
   run: (bankTxs: BankTransaction[], bankConditions?: BankConditions) => Promise<void>;
 }
@@ -81,6 +84,7 @@ export function useStatementAnalysis(
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
   const [detectedAnomalies, setDetectedAnomalies] = useState<CoreAnomaly[]>([]);
   const [summary, setSummary] = useState<AnalysisResultSummary | null>(null);
+  const [lastResult, setLastResult] = useState<AnalysisResult | null>(null);
 
   const run = useCallback(
     async (bankTxs: BankTransaction[], bankConditions?: BankConditions) => {
@@ -110,6 +114,7 @@ export function useStatementAnalysis(
         });
 
         setLastRunAt(new Date().toISOString());
+        setLastResult(result);
 
         // Store detected anomalies
         setDetectedAnomalies(result.anomalies);
@@ -141,5 +146,5 @@ export function useStatementAnalysis(
     [meta],
   );
 
-  return { running, progress, progressStep, error, lastRunAt, detectedAnomalies, summary, run };
+  return { running, progress, progressStep, error, lastRunAt, detectedAnomalies, summary, lastResult, run };
 }
