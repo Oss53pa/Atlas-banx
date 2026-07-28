@@ -9,10 +9,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Landmark, CheckCircle2, AlertTriangle, Loader2, CalendarClock, FileText,
+  Search, Landmark, CheckCircle2, AlertTriangle, Loader2, CalendarClock, FileText, Download,
 } from 'lucide-react';
 import {
-  fetchReferenceJournal, coverageForSegment, hasOpenGapToday,
+  fetchReferenceJournal, coverageForSegment, hasOpenGapToday, bankHasMissingPeriods, journalToCsv,
   CONCRETE_SEGMENTS, SEGMENT_LABELS,
   type ReferenceJournalRow, type JournalSegment,
 } from '../../cdc/services/referenceJournal';
@@ -45,6 +45,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function ReferenceJournalPanel() {
   const [rows, setRows] = useState<ReferenceJournalRow[] | null>(null);
   const [search, setSearch] = useState('');
+  const [missingOnly, setMissingOnly] = useState(false);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   useEffect(() => {
@@ -63,10 +64,22 @@ export function ReferenceJournalPanel() {
       e.rows.push(r);
       map.set(r.bankCode, e);
     }
-    return Array.from(map.entries())
-      .map(([code, e]) => ({ code, ...e }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-  }, [rows, search]);
+    let list = Array.from(map.entries()).map(([code, e]) => ({ code, ...e }));
+    if (missingOnly) list = list.filter((b) => bankHasMissingPeriods(b.rows, today));
+    return list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  }, [rows, search, missingOnly, today]);
+
+  const exportCsv = () => {
+    const flat = banks.flatMap((b) => b.rows);
+    const csv = journalToCsv(flat, today);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `journal-referentiel-l2-${today}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (rows === null) {
     return (
@@ -86,20 +99,41 @@ export function ReferenceJournalPanel() {
             Par banque, type de client et période — les <span className="font-medium text-red-600">périodes manquantes</span> sont mises en évidence.
           </p>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher une banque…"
-            className="h-9 w-56 rounded-lg border border-primary-200 pl-8 pr-3 text-sm focus:border-primary-400 focus:outline-none"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+            missingOnly ? 'border-red-300 bg-red-50 text-red-700' : 'border-primary-200 bg-white text-primary-600 hover:bg-primary-50'
+          }`}>
+            <input type="checkbox" checked={missingOnly} onChange={(e) => setMissingOnly(e.target.checked)} className="h-3.5 w-3.5 rounded border-primary-300 text-red-600 focus:ring-red-400" />
+            <AlertTriangle className="h-3.5 w-3.5" /> Périodes manquantes
+          </label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une banque…"
+              className="h-9 w-48 rounded-lg border border-primary-200 pl-8 pr-3 text-sm focus:border-primary-400 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={exportCsv}
+            disabled={banks.length === 0}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary-200 bg-white px-3 text-xs font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" /> Exporter CSV
+          </button>
         </div>
       </div>
 
       {banks.length === 0 && (
         <div className="rounded-xl border border-primary-200 bg-white p-8 text-center text-sm text-primary-500">
-          Aucun barème au référentiel. Importez et publiez des conditions via les onglets « Conditions ».
+          {missingOnly && rows.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" /> Aucune banque avec périodes manquantes.
+            </span>
+          ) : (
+            'Aucun barème au référentiel. Importez et publiez des conditions via les onglets « Conditions ».'
+          )}
         </div>
       )}
 

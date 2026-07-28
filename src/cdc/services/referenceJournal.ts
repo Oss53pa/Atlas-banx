@@ -114,3 +114,54 @@ export function hasOpenGapToday(spans: CoverageSpan[], todayIso: string): boolea
   // Dernier span couvert et fermé, dont la fin est passée → trou jusqu'à aujourd'hui.
   return last.covered && last.to !== null && last.to <= todayIso;
 }
+
+/**
+ * Une banque a des « périodes manquantes » si AU MOINS un segment concret
+ * ayant une couverture présente un trou temporel ou une couverture expirée.
+ * (Un segment jamais couvert n'est pas compté comme « trou » : c'est un
+ * référentiel non démarré, pas une période manquante entre deux barèmes.)
+ */
+export function bankHasMissingPeriods(rows: ReferenceJournalRow[], todayIso: string): boolean {
+  return CONCRETE_SEGMENTS.some((seg) => {
+    const spans = coverageForSegment(rows, seg);
+    if (spans.length === 0) return false;
+    return spans.some((s) => !s.covered) || hasOpenGapToday(spans, todayIso);
+  });
+}
+
+/** Échappe une valeur pour un CSV (délimiteur point-virgule, style FR/Excel). */
+function csvCell(v: string | number | null | undefined): string {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Sérialise le journal (une ligne par version) en CSV point-virgule, avec un
+ * indicateur « périodes manquantes » au niveau banque. BOM UTF-8 pour Excel.
+ */
+export function journalToCsv(rows: ReferenceJournalRow[], todayIso: string): string {
+  const byBank = new Map<string, ReferenceJournalRow[]>();
+  for (const r of rows) {
+    const list = byBank.get(r.bankCode) ?? [];
+    list.push(r);
+    byBank.set(r.bankCode, list);
+  }
+  const missingByBank = new Map<string, boolean>();
+  for (const [code, list] of byBank) missingByBank.set(code, bankHasMissingPeriods(list, todayIso));
+
+  const header = [
+    'Banque', 'Code', 'Zone', 'Pays', 'Période début', 'Période fin',
+    'Types de client', 'Statut', 'Nb conditions', 'Version', 'Périodes manquantes (banque)',
+  ];
+  const lines = [header.join(';')];
+  for (const r of rows) {
+    lines.push([
+      csvCell(r.bankName), csvCell(r.bankCode), csvCell(r.zone), csvCell(r.countryIso),
+      csvCell(r.effectiveFrom), csvCell(r.effectiveTo ?? '∞'),
+      csvCell(r.segments.join(', ')), csvCell(r.validationStatus),
+      csvCell(r.conditionsCount), csvCell(r.versionLabel ?? ''),
+      csvCell(missingByBank.get(r.bankCode) ? 'OUI' : 'non'),
+    ].join(';'));
+  }
+  return '﻿' + lines.join('\r\n');
+}
