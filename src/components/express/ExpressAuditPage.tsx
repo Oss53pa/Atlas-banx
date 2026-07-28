@@ -24,6 +24,7 @@ import { runFullAudit } from '../../services/audit/runFullAudit';
 import { countAuditedMonths } from '../../billing/auditPlans';
 import { pricingForRecovery, type RecoveryPricing } from '../../billing/recoveryPricing';
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
+import { buildParticulierComplaintLetter, complaintLetterToHtml } from '../../billing/express/complaintLetter';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
 import { fetchPublicBankReference, fetchPublicBankList } from '../../services/publicBankReference';
@@ -87,6 +88,8 @@ export default function ExpressAuditPage() {
   const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [accountRef, setAccountRef] = useState('');
   const [bankCode, setBankCode] = useState('');
   // Codes des banques dont le barème officiel L2 est publié — sert à annoter
   // le catalogue (« barème officiel disponible ») sans restreindre le choix.
@@ -211,9 +214,33 @@ export default function ExpressAuditPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Lettre de réclamation prête à envoyer — réutilise le résultat du MÊME
+  // moteur de détection + l'annuaire d'adresses des banques.
+  const downloadComplaintLetter = () => {
+    if (!audit) return;
+    const bank = DEFAULT_BANKS.find((b) => b.code === bankCode);
+    const { text } = buildParticulierComplaintLetter({
+      clientFullName: clientName,
+      accountRef,
+      bankCode: bankCode || '',
+      bankLegalName: bank?.name ?? '',
+      period: { start: periodStart, end: periodEnd },
+      anomalies: audit.anomalies,
+      totalRecoverableFcfa: audit.statistics.totalAnomalyAmount,
+    });
+    const blob = new Blob([complaintLetterToHtml(text)], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lettre-reclamation-banque.html';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const reset = () => {
     setStep('import'); setError(null); setAudit(null); setPricing(null);
-    setTransactions([]); setBankCode(''); setEmail(''); setPhone(''); setUsedOfficialGrid(false);
+    setTransactions([]); setBankCode(''); setEmail(''); setPhone('');
+    setClientName(''); setAccountRef(''); setUsedOfficialGrid(false);
   };
 
   return (
@@ -412,6 +439,16 @@ export default function ExpressAuditPage() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
+                      <label className="label">Nom complet <span className="font-normal text-ink-400">(pour la lettre de réclamation)</span></label>
+                      <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Prénom NOM" className="input mt-1" />
+                    </div>
+                    <div>
+                      <label className="label">N° de compte <span className="font-normal text-ink-400">(optionnel)</span></label>
+                      <input value={accountRef} onChange={(e) => setAccountRef(e.target.value)} placeholder="CI••• …" className="input mt-1" />
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
                       <label className="label">Email <span className="font-normal text-ink-400">(réception du rapport)</span></label>
                       <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vous@email.com" className="input mt-1" />
                     </div>
@@ -570,6 +607,25 @@ export default function ExpressAuditPage() {
                           ))}
                         </ul>
                         {audit.anomalies.length > 10 && <p className="mt-2 text-xs text-ink-400">+ {audit.anomalies.length - 10} autres dans le rapport complet.</p>}
+                      </div>
+                    )}
+                    {/* Lettre de réclamation prête à envoyer — c'est ce qui transforme
+                        « récupérable » en « récupéré ». */}
+                    {audit.anomalies.some((a) => (a.amount ?? 0) > 0) && (
+                      <div className="card border-accent-200 bg-accent-50/40 p-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="flex items-center gap-1.5 font-semibold text-ink-900">
+                              <FileText className="h-4 w-4 text-accent-600" /> Votre lettre de réclamation
+                            </p>
+                            <p className="mt-0.5 text-sm text-ink-500">
+                              Courrier formel pré-rempli (montants, période, banque) à imprimer et envoyer à votre agence.
+                            </p>
+                          </div>
+                          <button onClick={downloadComplaintLetter} className="btn btn-accent btn-md whitespace-nowrap">
+                            <Download className="h-4 w-4" /> Lettre (A4)
+                          </button>
+                        </div>
                       </div>
                     )}
                     <button onClick={downloadReport} className="btn btn-primary btn-lg w-full"><Download className="h-4 w-4" /> Télécharger le rapport complet</button>
