@@ -42,18 +42,19 @@ export async function archiveExpressReport(row: ExpressArchiveRow): Promise<bool
   try {
     const supabase = getSupabaseClient();
     if (!supabase) return false;
+    // Écriture via la fonction contrôlée (valide le format, borne les montants,
+    // ignore les collisions) — plus d'INSERT direct anonyme (cf. migration 047).
     const { error } = await supabase
       .schema('atlasbanx')
-      .from('express_report_archive')
-      .insert({
-        report_ref: row.reportRef,
-        pdf_sha256: row.pdfSha256,
-        bank_code: row.bankCode || null,
-        period_start: toIsoDate(row.periodStart),
-        period_end: toIsoDate(row.periodEnd),
-        anomaly_count: row.anomalyCount,
-        total_recoverable: Math.round(row.totalRecoverable),
-        used_official_grid: row.usedOfficialGrid,
+      .rpc('express_archive_insert', {
+        p_report_ref: row.reportRef,
+        p_pdf_sha256: row.pdfSha256,
+        p_bank_code: row.bankCode || null,
+        p_period_start: toIsoDate(row.periodStart),
+        p_period_end: toIsoDate(row.periodEnd),
+        p_anomaly_count: row.anomalyCount,
+        p_total_recoverable: Math.round(row.totalRecoverable),
+        p_used_official_grid: row.usedOfficialGrid,
       });
     return !error;
   } catch {
