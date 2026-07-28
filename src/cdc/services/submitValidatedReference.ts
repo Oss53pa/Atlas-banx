@@ -38,11 +38,20 @@ export interface SubmitReferenceInput {
    * présente au référentiel CDC).
    */
   bankMeta?: { legalName: string; countryIso: string; zone: 'UEMOA' | 'CEMAC' };
+  /**
+   * Auto-validation (phase de démarrage) : publie immédiatement la version au
+   * lieu de la laisser en attente d'un second validateur. Réservé aux admins
+   * (imposé côté base par admin_autopublish_reference). À n'utiliser que
+   * lorsqu'un seul administrateur Atlas Studio existe.
+   */
+  autoPublish?: boolean;
 }
 
 export interface SubmitReferenceResult {
   versionId: string;
   conditionsCount: number;
+  /** true si la version a été publiée immédiatement (auto-validation). */
+  published?: boolean;
 }
 
 /**
@@ -162,8 +171,18 @@ export async function submitValidatedReference(
     await service.addBankReferenceConditions(version.id, conditions);
   }
 
-  // 4. Soumettre à validation (étape 1 — un pair validera puis publiera)
-  await service.submitBankReferenceVersion(version.id);
+  // 4. Auto-validation (phase de démarrage) : publier tout de suite si demandé.
+  //    On passe DIRECTEMENT du brouillon à « publié » via la fonction admin
+  //    (draft → published), sans l'étape « submitted » — la base impose que
+  //    l'appelant soit admin, gère la supersession des versions chevauchantes,
+  //    et lève l'altérité deux-yeux le temps de la transaction.
+  if (input.autoPublish) {
+    await service.autoPublishBankReferenceVersion(version.id);
+    return { versionId: version.id, conditionsCount: conditions.length, published: true };
+  }
 
-  return { versionId: version.id, conditionsCount: conditions.length };
+  // 4bis. Sinon : soumettre à validation (workflow deux yeux — un pair validera
+  //       puis publiera).
+  await service.submitBankReferenceVersion(version.id);
+  return { versionId: version.id, conditionsCount: conditions.length, published: false };
 }
