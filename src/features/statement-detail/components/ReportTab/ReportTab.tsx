@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, ShieldCheck, Download } from 'lucide-react';
 import type {
   Anomaly,
   AccountConvention,
@@ -51,6 +51,10 @@ interface ReportTabProps {
     message: string;
   }) => Promise<void>;
   onGenerateComplaintLetter?: (anomalyIds: string[]) => void;
+  /** Le résultat d'analyse client est disponible → PDF premium générable. */
+  premiumReady?: boolean;
+  /** Télécharge le rapport premium certifié (PDF chiffré, non modifiable). */
+  onDownloadPremium?: () => void;
 }
 
 export function ReportTab(props: ReportTabProps) {
@@ -130,6 +134,39 @@ export function ReportTab(props: ReportTabProps) {
   return (
     <>
       <div className="flex flex-col gap-4 p-4 sm:p-6">
+        {/* Rapport premium certifié — même moteur PDF que l'audit express et la
+            page Analyses. Non modifiable (chiffré, impression seule) et archivé
+            par Atlas. Disponible dès que l'analyse a été lancée. */}
+        {props.onDownloadPremium && (
+          <div className="bg-white border border-canvas-200 rounded-lg p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-5 h-5 text-emerald-700" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-ink-900">Rapport d'audit premium certifié</div>
+              <p className="text-xs text-ink-500 mt-0.5">
+                PDF vectoriel complet (détail des frais, renvoi aux conditions bancaires,
+                séparation des anomalies certaines ≥ 90 % et à confirmer). Chiffré et non
+                modifiable ; une empreinte est archivée par Atlas pour contrôle.
+              </p>
+              {!props.premiumReady && (
+                <p className="text-xs text-amber-700 mt-1.5">
+                  Lancez d'abord l'analyse dans l'onglet « Analyse » pour générer ce rapport.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={!props.premiumReady}
+              onClick={() => props.onDownloadPremium?.()}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Télécharger
+            </button>
+          </div>
+        )}
+
         <TemplateChooser chosen={chosenTemplate} onChoose={handleChoose} />
 
         {/* Loading */}
