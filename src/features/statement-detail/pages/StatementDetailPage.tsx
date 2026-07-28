@@ -357,10 +357,6 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
               displayName: userDisplayName,
               role: role ?? 'consultation',
             }}
-            generatedReport={reportH.generatedReport}
-            loading={reportH.loading}
-            error={reportH.error}
-            onGenerateReport={(t) => void reportH.generateReport(t)}
             onSignAndSend={async (args) => { await reportH.signAndSend(args); }}
             onGenerateComplaintLetter={(ids) => void reportH.generateComplaintLetter(ids)}
             premiumReady={premiumReady}
