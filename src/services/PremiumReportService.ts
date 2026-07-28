@@ -863,7 +863,7 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
         e.expectedValue !== undefined && e.appliedValue !== undefined
           ? `Attendu: ${e.expectedValue}\nFacturé: ${e.appliedValue}`
           : String(e.value ?? '—'),
-        [e.source, e.conditionRef].filter(Boolean).join('\n') || '—',
+        [e.source, e.conditionRef, e.reference].filter(Boolean).join('\n') || '—',
       ]),
       styles: {
         font: 'helvetica',
@@ -889,6 +889,42 @@ function drawAnomalyCard(ctx: DrawCtx, a: Anomaly, index: number): void {
     });
     // @ts-expect-error jspdf-autotable adds lastAutoTable
     y = (doc.lastAutoTable?.finalY ?? y) + 8;
+  }
+
+  // Renvoi explicite aux conditions bancaires (article / section) + réglementation
+  const conditionRefs = Array.from(
+    new Set(
+      (a.evidence ?? [])
+        .map((e) => [e.source, e.conditionRef].filter(Boolean).join(' — '))
+        .filter((s) => s.length > 0),
+    ),
+  );
+  const regRef = a.aiAnalysis?.regulatoryReference?.trim();
+  if (conditionRefs.length > 0 || regRef) {
+    if (y > ctx.pageHeight - 44) {
+      doc.addPage();
+      drawPageHeader(ctx, `Anomalie #${String(index).padStart(3, '0')} (suite)`);
+      y = 48;
+    }
+    const lines: string[] = [];
+    conditionRefs.forEach((r) => lines.push(`• Barème appliqué : ${r}`));
+    if (regRef) lines.push(`• Référence réglementaire : ${regRef}`);
+    const wrapped = lines.flatMap((l) => doc.splitTextToSize(l, ctx.contentWidth - 14) as string[]);
+    const boxH = 14 + wrapped.length * 4.5;
+
+    setFill(doc, ctx.accentWash);
+    setDraw(doc, ctx.accentPale);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(ctx.margin, y, ctx.contentWidth, boxH, 1.5, 1.5, 'FD');
+
+    setFont(doc, 'Inter', 8, 'bold');
+    setColor(doc, ctx.accentDark);
+    doc.text('RENVOI AUX CONDITIONS BANCAIRES', ctx.margin + 6, y + 8, { charSpace: 1.5 });
+
+    setFont(doc, 'Inter', 9, 'normal');
+    setColor(doc, INK_900);
+    doc.text(wrapped, ctx.margin + 6, y + 14);
+    y += boxH + 8;
   }
 
   // Transactions table
