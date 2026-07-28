@@ -25,6 +25,7 @@ import { useBankStore } from '../../store/bankStore';
 import { BanksPage } from '../banks';
 import { ConditionsIntelligencePage } from '../conditions-intelligence';
 import { ReferenceJournalPanel } from './ReferenceJournalPanel';
+import { ImportGuidePanel } from './ImportGuidePanel';
 
 type AdminView = 'particuliers' | 'entreprises' | 'journal' | 'benchmark';
 
@@ -165,10 +166,13 @@ export default function AtlasStudioAdminPage() {
           ) : view === 'journal' ? (
             <ReferenceJournalPanel onImport={handleImportFromJournal} />
           ) : (
-            <BanksPage
-              key={view}
-              defaultSegment={view === 'particuliers' ? 'particuliers' : 'entreprises'}
-            />
+            <>
+              <ImportGuidePanel />
+              <BanksPage
+                key={view}
+                defaultSegment={view === 'particuliers' ? 'particuliers' : 'entreprises'}
+              />
+            </>
           )}
         </main>
       </div>
