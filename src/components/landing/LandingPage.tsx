@@ -875,20 +875,20 @@ function Pricing({ onCta, onExpress }: { onCta: () => void; onExpress: () => voi
     {
       name: 'Particulier',
       audience: 'Sans compte',
-      price: '15 000',
-      period: '/audit · 3 mois',
-      euroNote: '≈ 25 € · paiement unique, sans abonnement',
-      desc: 'Auditez votre relevé bancaire ponctuellement, sans créer de compte.',
+      price: 'Gratuit',
+      period: 'à l\'analyse',
+      euroNote: 'Vous ne payez que si vous récupérez de l\'argent',
+      desc: 'Découvrez GRATUITEMENT ce que votre banque vous doit — vous ne payez que pour débloquer le détail.',
       features: [
-        'Sans création de compte',
-        'Import PDF · OCR pour les scans',
-        'Audit complet — 19 détecteurs',
-        'Rapport détaillé téléchargeable',
-        'Forfaits : 3 mois 15 000 · 6 mois 25 000 · 1 an 40 000',
-        'Paiement mobile money',
-        'Aucune donnée conservée',
+        'Analyse gratuite — voyez le récupérable avant de payer',
+        'Prix = une fraction du montant récupérable (≈ 20 %)',
+        'Vous gagnez toujours plus que ce que vous payez',
+        'Récupérable trop faible ? Rapport offert',
+        'Audit complet — 19 détecteurs · OCR',
+        'Rapport A4 + paiement mobile money',
+        'Sans compte · aucune donnée conservée',
       ],
-      cta: 'Auditer mon relevé',
+      cta: 'Analyser gratuitement mon relevé',
       highlighted: false,
       target: 'express' as const,
     },
@@ -952,7 +952,7 @@ function Pricing({ onCta, onExpress }: { onCta: () => void; onExpress: () => voi
         </div>
         <p className="mt-8 text-center text-xs text-ink-500">
           Tarifs en FCFA, hors taxes. Abonnements : engagement annuel <span className="font-semibold text-ink-700">−15%</span>.
-          {' '}Particulier : paiement à l'audit, sans compte.
+          {' '}Particulier : analyse gratuite, prix indexé sur le récupérable, sans compte.
         </p>
       </div>
     </section>
@@ -1017,9 +1017,11 @@ function PricingCard({
             {plan.price}
           </span>
           <div className="flex flex-col">
-            <span className={`text-sm font-bold ${plan.highlighted ? 'text-accent-300' : 'text-accent-700'}`}>
-              FCFA
-            </span>
+            {/\d/.test(plan.price) && (
+              <span className={`text-sm font-bold ${plan.highlighted ? 'text-accent-300' : 'text-accent-700'}`}>
+                FCFA
+              </span>
+            )}
             <span className={`text-xs -mt-0.5 ${plan.highlighted ? 'text-white/50' : 'text-ink-500'}`}>
               {plan.period}
             </span>
