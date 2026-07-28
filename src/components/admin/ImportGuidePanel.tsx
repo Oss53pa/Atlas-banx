@@ -1,18 +1,17 @@
 // ============================================================================
 // ImportGuidePanel — guide pas-à-pas de l'import des conditions L2 (admin)
 // ============================================================================
-// Affiché en tête des vues d'import (Particuliers / Entreprises) pour que
-// l'administrateur importe un barème SANS se tromper. Repliable, l'état est
-// mémorisé par utilisateur (localStorage) : ouvert par défaut, refermable.
+// Rendu comme un BOUTON compact (« Guide d'import ») à placer dans l'en-tête :
+// il n'occupe aucune place à l'écran et ouvre le guide dans une fenêtre modale
+// à la demande. L'admin importe ainsi un barème sans se tromper, sans que le
+// mode d'emploi n'encombre la console.
 // ============================================================================
 
 import { useState } from 'react';
 import {
-  ChevronDown, Landmark, FileUp, ListChecks, Send, ShieldCheck, CalendarClock,
-  AlertTriangle, BookOpen,
+  Landmark, FileUp, ListChecks, Send, ShieldCheck, CalendarClock,
+  AlertTriangle, BookOpen, X,
 } from 'lucide-react';
-
-const STORAGE_KEY = 'atlasbanx_admin_import_guide_open';
 
 interface Step {
   Icon: typeof Landmark;
@@ -65,68 +64,81 @@ const PITFALLS: string[] = [
   'Référentiel vide = pas de comparaison au barème officiel : importez au moins un barème publié par banque et type de client.',
 ];
 
+/** Bouton compact « Guide d'import » + fenêtre modale du guide (à la demande). */
 export function ImportGuidePanel() {
-  const [open, setOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem(STORAGE_KEY) !== '0'; } catch { return true; }
-  });
-  const toggle = () => {
-    setOpen((v) => {
-      const next = !v;
-      try { localStorage.setItem(STORAGE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
-      return next;
-    });
-  };
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-primary-200 bg-white">
+    <>
       <button
-        onClick={toggle}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-primary-50/60"
-        aria-expanded={open}
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+        title="Guide pas à pas pour importer un barème"
       >
-        <span className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
-            <BookOpen className="h-4 w-4" />
-          </span>
-          <span>
-            <span className="block text-sm font-semibold text-primary-900">Comment importer un barème — guide pas à pas</span>
-            <span className="block text-[11px] text-primary-500">7 étapes · de l'ouverture de la banque à la publication</span>
-          </span>
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-primary-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <BookOpen className="h-3.5 w-3.5" /> Guide d'import
       </button>
 
       {open && (
-        <div className="border-t border-primary-100 px-4 py-4">
-          <ol className="grid gap-3 sm:grid-cols-2">
-            {STEPS.map((s) => (
-              <li key={s.title} className="flex gap-3 rounded-lg border border-primary-100 bg-primary-50/40 p-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 border border-primary-200">
-                  <s.Icon className="h-4 w-4" />
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/40 p-4 sm:p-8"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="mt-4 w-full max-w-3xl rounded-xl border border-primary-200 bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* En-tête */}
+            <div className="flex items-start justify-between gap-3 border-b border-primary-100 px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
+                  <BookOpen className="h-4 w-4" />
                 </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-primary-900">{s.title}</p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-primary-600">{s.body}</p>
+                <div>
+                  <p className="text-sm font-semibold text-primary-900">Comment importer un barème — guide pas à pas</p>
+                  <p className="text-[11px] text-primary-500">7 étapes · de l'ouverture de la banque à la publication</p>
                 </div>
-              </li>
-            ))}
-          </ol>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-md p-1.5 text-primary-400 hover:bg-primary-50 hover:text-primary-700"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
-            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-              <AlertTriangle className="h-3.5 w-3.5" /> Pièges à éviter
-            </p>
-            <ul className="space-y-1">
-              {PITFALLS.map((p, i) => (
-                <li key={i} className="flex gap-1.5 text-[11px] leading-relaxed text-amber-900">
-                  <span className="text-amber-500">•</span>
-                  <span>{p}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="max-h-[75vh] overflow-y-auto px-5 py-4">
+              <ol className="grid gap-3 sm:grid-cols-2">
+                {STEPS.map((s) => (
+                  <li key={s.title} className="flex gap-3 rounded-lg border border-primary-100 bg-primary-50/40 p-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 border border-primary-200">
+                      <s.Icon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-primary-900">{s.title}</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-primary-600">{s.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+                <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Pièges à éviter
+                </p>
+                <ul className="space-y-1">
+                  {PITFALLS.map((p, i) => (
+                    <li key={i} className="flex gap-1.5 text-[11px] leading-relaxed text-amber-900">
+                      <span className="text-amber-500">•</span>
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

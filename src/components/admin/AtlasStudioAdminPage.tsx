@@ -119,6 +119,7 @@ export default function AtlasStudioAdminPage() {
                   </button>
                 ))}
               </nav>
+              {(view === 'particuliers' || view === 'entreprises') && <ImportGuidePanel />}
               <button
                 onClick={() => navigate('/')}
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-primary-500 hover:bg-primary-100 hover:text-primary-800"
@@ -166,13 +167,10 @@ export default function AtlasStudioAdminPage() {
           ) : view === 'journal' ? (
             <ReferenceJournalPanel onImport={handleImportFromJournal} />
           ) : (
-            <>
-              <ImportGuidePanel />
-              <BanksPage
-                key={view}
-                defaultSegment={view === 'particuliers' ? 'particuliers' : 'entreprises'}
-              />
-            </>
+            <BanksPage
+              key={view}
+              defaultSegment={view === 'particuliers' ? 'particuliers' : 'entreprises'}
+            />
           )}
         </main>
       </div>
