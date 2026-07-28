@@ -359,6 +359,12 @@ export interface ClientReport {
   generatedAt: Date;
   sentAt?: Date;
   filePath?: string;
+  /**
+   * Empreinte SHA-256 du contenu gelé à la génération. Sa présence atteste que
+   * le rapport dispose d'un snapshot immuable (données figées) : les
+   * re-téléchargements et l'aperçu relisent ce snapshot, pas l'analyse vivante.
+   */
+  contentHash?: string;
 }
 
 // ----------------------------------------------------------------------------

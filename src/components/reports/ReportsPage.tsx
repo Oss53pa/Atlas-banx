@@ -14,6 +14,12 @@ import {
 } from '../ui';
 import { useAnalysisStore, useTransactionStore, useSettingsStore, useClientStore } from '../../store';
 import { PremiumReportService, auditLog, AuditEventType } from '../../services';
+import {
+  freezeReportSnapshot,
+  getReportSnapshot,
+  reviveReportData,
+  deleteReportSnapshot,
+} from '../../services/report/reportSnapshot';
 import { formatCurrency, formatDate } from '../../utils';
 import { Severity } from '../../types';
 import { ReportViewer, generateAtlasBanxAuditReport } from '../reporting';
@@ -27,7 +33,7 @@ export function ReportsPage() {
   const { currentAnalysis, analysisHistory } = useAnalysisStore();
   const { transactions } = useTransactionStore();
   const { claudeApi, organization } = useSettingsStore();
-  const { clients, statements, reports, addReport, deleteReport } = useClientStore();
+  const { clients, statements, reports, addReport, updateReport, deleteReport } = useClientStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('statements');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -77,6 +83,62 @@ export function ReportsPage() {
       new Date(r.period.start).getTime() === new Date(statement.periodStart).getTime() &&
       new Date(r.period.end).getTime() === new Date(statement.periodEnd).getTime()
     );
+  };
+
+  // Charte cabinet (marque blanche) dérivée des réglages d'organisation.
+  const buildCabinetBranding = () =>
+    organization?.name
+      ? {
+          name: organization.name,
+          tagline: organization.legalName || undefined,
+          address: [organization.address, organization.city, organization.country].filter(Boolean).join(', ') || undefined,
+          phone: organization.phone || undefined,
+          email: organization.senderEmail || undefined,
+          website: organization.website || undefined,
+          logo: organization.logo || undefined,
+          accentColor: organization.accentColor || undefined,
+        }
+      : undefined;
+
+  // Re-télécharge un rapport DÉJÀ généré depuis son snapshot gelé : les données
+  // sont exactement celles de la génération initiale (immuables). Repli sur
+  // l'analyse vivante uniquement pour les anciens rapports sans snapshot.
+  const downloadFrozenReport = async (report: ClientReport) => {
+    const snap = getReportSnapshot(report.id);
+    if (snap) {
+      await PremiumReportService.download(reviveReportData(snap), undefined, report.id);
+      return;
+    }
+    // Legacy (rapport antérieur au gel) : reconstruire au mieux depuis l'analyse.
+    const client = getClient(report.clientId);
+    const allAnalyses = [...(currentAnalysis ? [currentAnalysis] : []), ...(analysisHistory || [])];
+    const analysisData = allAnalyses.find(a =>
+      a.anomalies.some(an => an.transactions.some(t => t.clientId === report.clientId)),
+    );
+    if (client && analysisData) {
+      await PremiumReportService.download(
+        {
+          title: report.title,
+          clientName: client.name,
+          period: report.period,
+          anomalies: analysisData.anomalies.filter(an =>
+            an.transactions.some(t => t.clientId === report.clientId),
+          ),
+          statistics: analysisData.statistics,
+          summary: analysisData.summary,
+          cabinet: buildCabinetBranding(),
+          auditId: report.id,
+        },
+        undefined,
+        report.id,
+      );
+    }
+  };
+
+  // Suppression : retire aussi le snapshot gelé associé.
+  const removeReport = (id: string) => {
+    deleteReportSnapshot(id);
+    deleteReport(id);
   };
 
   // Generate report for statement
@@ -133,34 +195,31 @@ export function ReportsPage() {
         // Rapport canonique unifié : PDF premium (même moteur que Analyses /
         // audit express). On ne passe plus par l'ancien ReportService pour éviter
         // deux rendus divergents.
-        const cabinetBranding = organization?.name
-          ? {
-              name: organization.name,
-              tagline: organization.legalName || undefined,
-              address: [organization.address, organization.city, organization.country].filter(Boolean).join(', ') || undefined,
-              phone: organization.phone || undefined,
-              email: organization.senderEmail || undefined,
-              website: organization.website || undefined,
-              logo: organization.logo || undefined,
-              accentColor: organization.accentColor || undefined,
-            }
-          : undefined;
-        await PremiumReportService.download(
-          {
-            title: reportData.title,
-            clientName: client.name,
-            period: reportData.period,
-            anomalies: analysisData.anomalies.filter(an =>
-              an.transactions.some(t => t.clientId === statement.clientId),
-            ),
-            statistics: analysisData.statistics,
-            summary: analysisData.summary,
-            cabinet: cabinetBranding,
-            auditId: reportData.id,
-          },
-          undefined,
+        const cabinetBranding = buildCabinetBranding();
+        const premiumPayload = {
+          title: reportData.title,
+          clientName: client.name,
+          period: reportData.period,
+          anomalies: analysisData.anomalies.filter(an =>
+            an.transactions.some(t => t.clientId === statement.clientId),
+          ),
+          statistics: analysisData.statistics,
+          summary: analysisData.summary,
+          cabinet: cabinetBranding,
+          auditId: reportData.id,
+        };
+
+        // Gèle le contenu : à partir d'ici, les données de CE rapport ne
+        // bougent plus, même si l'analyse est relancée. L'empreinte est
+        // rattachée au rapport (preuve de non-altération).
+        const snap = await freezeReportSnapshot(
           reportData.id,
+          premiumPayload,
+          reportData.generatedAt.toISOString(),
         );
+        updateReport(reportData.id, { contentHash: snap.contentHash });
+
+        await PremiumReportService.download(premiumPayload, undefined, reportData.id);
       }
 
       setShowGenerateModal(false);
@@ -229,6 +288,38 @@ export function ReportsPage() {
         recommendations: [],
       },
     };
+  };
+
+  // Aperçu d'un rapport DÉJÀ généré : rendu depuis le snapshot gelé (données
+  // figées). Repli sur l'analyse vivante pour les anciens rapports sans snapshot.
+  const handleViewFrozenReport = (report: ClientReport) => {
+    const client = getClient(report.clientId);
+    if (!client) return;
+    const snap = getReportSnapshot(report.id);
+    if (!snap) {
+      const statement = statements.find(s =>
+        s.clientId === report.clientId &&
+        new Date(s.periodStart).getTime() === new Date(report.period.start).getTime(),
+      );
+      if (statement) handleViewReport(statement);
+      return;
+    }
+    const frozen = reviveReportData(snap);
+    const base = createEmptyAnalysis(client);
+    const analysis = {
+      ...base,
+      anomalies: frozen.anomalies,
+      statistics: frozen.statistics,
+      summary: frozen.summary,
+    } as unknown as AnalysisResult;
+    const rendered = generateAtlasBanxAuditReport({
+      client: client as any,
+      analysis,
+      auditorName: 'Expert-Comptable',
+      auditorCompany: buildCabinetBranding()?.name ?? 'Cabinet d\'Expertise Comptable',
+    });
+    setPreviewReport(rendered);
+    setShowViewer(true);
   };
 
   const statusConfig = {
@@ -604,20 +695,21 @@ export function ReportsPage() {
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => {
-                                  const statement = statements.find(s =>
-                                    s.clientId === report.clientId &&
-                                    new Date(s.periodStart).getTime() === new Date(report.period.start).getTime()
-                                  );
-                                  if (statement) handleViewReport(statement);
-                                }}
+                                onClick={() => handleViewFrozenReport(report)}
                                 className="p-1.5 hover:bg-primary-100 rounded text-primary-500 hover:text-primary-700"
-                                title="Voir le rapport"
+                                title="Voir le rapport (données figées)"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => deleteReport(report.id)}
+                                onClick={() => void downloadFrozenReport(report)}
+                                className="p-1.5 hover:bg-primary-100 rounded text-primary-500 hover:text-primary-700"
+                                title="Télécharger le PDF (données figées)"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => removeReport(report.id)}
                                 className="p-1.5 hover:bg-red-50 rounded text-primary-500 hover:text-red-600"
                                 title="Supprimer"
                               >
@@ -691,21 +783,23 @@ export function ReportsPage() {
                         variant="secondary"
                         size="sm"
                         className="flex-1"
-                        onClick={() => {
-                          const statement = statements.find(s =>
-                            s.clientId === report.clientId &&
-                            new Date(s.periodStart).getTime() === new Date(report.period.start).getTime()
-                          );
-                          if (statement) handleViewReport(statement);
-                        }}
+                        onClick={() => handleViewFrozenReport(report)}
                       >
                         <Eye className="w-3 h-3 mr-1" />
                         Voir
                       </Button>
                       <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void downloadFrozenReport(report)}
+                        title="Télécharger le PDF (données figées)"
+                      >
+                        <Download className="w-3 h-3" />
+                      </Button>
+                      <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => deleteReport(report.id)}
+                        onClick={() => removeReport(report.id)}
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
