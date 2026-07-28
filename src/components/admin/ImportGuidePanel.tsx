@@ -8,6 +8,7 @@
 // ============================================================================
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Landmark, FileUp, ListChecks, Send, ShieldCheck, CalendarClock,
   AlertTriangle, BookOpen, X,
@@ -78,13 +79,13 @@ export function ImportGuidePanel() {
         <BookOpen className="h-3.5 w-3.5" /> Guide d'import
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/40 p-4 sm:p-8"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
           onClick={() => setOpen(false)}
         >
           <div
-            className="mt-4 w-full max-w-3xl rounded-xl border border-primary-200 bg-white shadow-xl"
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-primary-200 bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* En-tête */}
@@ -107,7 +108,7 @@ export function ImportGuidePanel() {
               </button>
             </div>
 
-            <div className="max-h-[75vh] overflow-y-auto px-5 py-4">
+            <div className="flex-1 overflow-y-auto px-5 py-4">
               <ol className="grid gap-3 sm:grid-cols-2">
                 {STEPS.map((s) => (
                   <li key={s.title} className="flex gap-3 rounded-lg border border-primary-100 bg-primary-50/40 p-3">
@@ -137,7 +138,8 @@ export function ImportGuidePanel() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
