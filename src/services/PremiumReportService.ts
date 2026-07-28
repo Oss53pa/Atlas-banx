@@ -100,6 +100,16 @@ export interface PremiumReportData {
   analysisMode?: string;
   /** Bank context — single bank or multi-bank */
   banks?: Array<{ name: string; code: string }>;
+  /**
+   * Barème(s) de référence L2 effectivement utilisés pour la détection —
+   * cités explicitement dans la méthodologie (traçabilité de l'audit).
+   */
+  referenceGrids?: Array<{
+    bankName: string;
+    bankCode: string;
+    versionLabel?: string | null;
+    effectiveFrom?: string | null;
+  }>;
   /** Reference number / audit ID */
   auditId?: string;
 }
@@ -884,7 +894,25 @@ function drawMethodology(ctx: DrawCtx): void {
     },
     {
       title: 'Référentiel tarifaire',
-      body: 'Chaque écriture est confrontée à la grille tarifaire active de la banque, telle que publiée par l’établissement et stockée dans le coffre AtlasBanx. La grille fait foi pour la détection des écarts.',
+      body: (() => {
+        const grids = ctx.data.referenceGrids ?? [];
+        if (grids.length === 0) {
+          return 'Chaque écriture est confrontée à la grille tarifaire active de la banque, telle que publiée par l’établissement et stockée dans le coffre AtlasBanx. La grille fait foi pour la détection des écarts.';
+        }
+        const list = grids
+          .map((g) => {
+            const ver = g.versionLabel ? ` — version « ${g.versionLabel} »` : '';
+            const eff = g.effectiveFrom ? `, en vigueur depuis le ${formatEffectiveDate(g.effectiveFrom)}` : '';
+            return `• ${g.bankName} (${g.bankCode})${ver}${eff}`;
+          })
+          .join('\n');
+        return (
+          'Chaque écriture est confrontée à la grille tarifaire officielle suivante, publiée par ' +
+          'l’établissement et archivée dans le référentiel bancaire AtlasBanx (couche L2, versionnée et ' +
+          'horodatée) :\n' + list + '\n' +
+          'La grille en vigueur à la date de chaque opération fait foi pour la détection des écarts.'
+        );
+      })(),
     },
     {
       title: 'Détection algorithmique',
@@ -1057,6 +1085,16 @@ function setFill(doc: jsPDF, [r, g, b]: [number, number, number]): void {
 }
 function setDraw(doc: jsPDF, [r, g, b]: [number, number, number]): void {
   doc.setDrawColor(r, g, b);
+}
+/** Formate une date d'entrée en vigueur (ISO ou YYYY-MM-DD) en français. */
+function formatEffectiveDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const months = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+  ];
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 function setColor(doc: jsPDF, [r, g, b]: [number, number, number]): void {
   doc.setTextColor(r, g, b);

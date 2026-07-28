@@ -469,10 +469,25 @@ export function AnalysesPage() {
       const bankCodesUsed = selectedBanks.length > 0
         ? selectedBanks
         : Array.from(new Set(displayTransactions.map((t) => t.bankCode).filter(Boolean)));
-      const reportBanks = bankCodesUsed
+      const usedBanks = bankCodesUsed
         .map((code) => banks.find((b) => b.code === code))
-        .filter((b): b is NonNullable<typeof b> => !!b)
-        .map((b) => ({ name: b.name, code: b.code }));
+        .filter((b): b is NonNullable<typeof b> => !!b);
+      const reportBanks = usedBanks.map((b) => ({ name: b.name, code: b.code }));
+      // Barème(s) effectivement appliqués — grille active de chaque banque,
+      // cités dans la méthodologie du rapport (traçabilité de l'audit).
+      const referenceGrids = usedBanks
+        .map((b) => {
+          const grids = b.conditionGrids ?? [];
+          const grid = grids.find((g) => g.status === 'active') ?? grids[0];
+          if (!grid) return null;
+          return {
+            bankName: b.name,
+            bankCode: b.code,
+            versionLabel: grid.name || grid.version || null,
+            effectiveFrom: grid.effectiveDate ? new Date(grid.effectiveDate).toISOString() : null,
+          };
+        })
+        .filter((g): g is NonNullable<typeof g> => !!g);
 
       await PremiumReportService.download(
         {
@@ -484,6 +499,7 @@ export function AnalysesPage() {
           summary,
           analysisMode,
           banks: reportBanks,
+          referenceGrids: referenceGrids.length > 0 ? referenceGrids : undefined,
           auditId: currentAnalysis?.id ?? `DEMO-${Date.now().toString(36).toUpperCase()}`,
         },
         undefined,
