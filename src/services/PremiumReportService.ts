@@ -87,6 +87,10 @@ export interface PremiumReportData {
     phone?: string;
     email?: string;
     website?: string;
+    /** Logo du cabinet (data URL) — affiché sur la page de garde. */
+    logo?: string | null;
+    /** Couleur d'accent de marque (hex) — page de garde. */
+    accentColor?: string;
   };
   /** Period audited */
   period: { start: Date; end: Date };
@@ -234,28 +238,48 @@ function createCtx(doc: jsPDF, data: PremiumReportData): DrawCtx {
 
 function drawCover(ctx: DrawCtx): void {
   const { doc, data, pageWidth, pageHeight } = ctx;
+  const cabinet = data.cabinet;
+  // Couleur d'accent : celle du cabinet si fournie, sinon le doré de marque.
+  const accent = hexToRgb(cabinet?.accentColor);
 
   // Full-page ink background
   setFill(doc, INK_950);
   doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-  // Champagne gold accent stripe (top-left to bottom-right diagonal vibe via two rects)
+  // Accent stripe (couleur cabinet)
   setFill(doc, GOLD_700);
   doc.rect(0, 0, 8, pageHeight, 'F');
-  setFill(doc, GOLD_500);
+  setFill(doc, accent);
   doc.rect(8, 0, 2, pageHeight, 'F');
 
-  // Top brand block
-  setFont(doc, 'GrandHotel', 56);
-  setColor(doc, GOLD_500);
-  doc.text('AtlasBanx', 24, 50);
+  // Logo du cabinet (haut-droite) si fourni.
+  if (cabinet?.logo && /^data:image\//i.test(cabinet.logo)) {
+    try {
+      const fmt = /^data:image\/png/i.test(cabinet.logo) ? 'PNG' : 'JPEG';
+      doc.addImage(cabinet.logo, fmt, pageWidth - 24 - 30, 30, 30, 30, undefined, 'FAST');
+    } catch { /* logo illisible → ignoré */ }
+  }
 
-  setFont(doc, 'Inter', 9, 'normal');
-  setColor(doc, GOLD_300);
-  doc.text('AUDIT BANCAIRE — INTELLIGENCE TARIFAIRE', 24, 58, { charSpace: 1.2 });
+  // Bloc de marque : nom du cabinet (white-label) ou AtlasBanx par défaut.
+  if (cabinet?.name) {
+    setFont(doc, 'Inter', 30, 'bold');
+    setColor(doc, accent);
+    const nameLines = doc.splitTextToSize(cabinet.name, pageWidth - 90);
+    doc.text(nameLines, 24, 48);
+    setFont(doc, 'Inter', 9, 'normal');
+    setColor(doc, GOLD_300);
+    doc.text((cabinet.tagline || 'AUDIT BANCAIRE — INTELLIGENCE TARIFAIRE').toUpperCase(), 24, 48 + nameLines.length * 9, { charSpace: 1.2 });
+  } else {
+    setFont(doc, 'GrandHotel', 56);
+    setColor(doc, accent);
+    doc.text('AtlasBanx', 24, 50);
+    setFont(doc, 'Inter', 9, 'normal');
+    setColor(doc, GOLD_300);
+    doc.text('AUDIT BANCAIRE — INTELLIGENCE TARIFAIRE', 24, 58, { charSpace: 1.2 });
+  }
 
   // Subtle horizontal hairline
-  setDraw(doc, GOLD_500);
+  setDraw(doc, accent);
   doc.setLineWidth(0.3);
   doc.line(24, 64, pageWidth - 24, 64);
 
@@ -275,7 +299,7 @@ function drawCover(ctx: DrawCtx): void {
   const cardY = pageHeight - 110;
   setFill(doc, INK_900);
   doc.rect(0, cardY, pageWidth, 60, 'F');
-  setFill(doc, GOLD_500);
+  setFill(doc, accent);
   doc.rect(0, cardY, 4, 60, 'F');
 
   setFont(doc, 'Inter', 8, 'normal');
@@ -1086,6 +1110,16 @@ function setFill(doc: jsPDF, [r, g, b]: [number, number, number]): void {
 function setDraw(doc: jsPDF, [r, g, b]: [number, number, number]): void {
   doc.setDrawColor(r, g, b);
 }
+/** Convertit un hex (#RRGGBB) en triplet RGB ; repli sur le doré de marque. */
+function hexToRgb(hex?: string): [number, number, number] {
+  const fallback: [number, number, number] = GOLD_500;
+  if (!hex) return fallback;
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 /** Formate une date d'entrée en vigueur (ISO ou YYYY-MM-DD) en français. */
 function formatEffectiveDate(iso: string): string {
   const d = new Date(iso);

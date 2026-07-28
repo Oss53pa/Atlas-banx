@@ -47,6 +47,8 @@ interface OrganizationSettings {
   name: string;
   legalName: string;
   logo: string | null;
+  /** Couleur d'accent de marque (hex) — page de garde des rapports. */
+  accentColor: string;
   address: string;
   city: string;
   postalCode: string;
@@ -270,6 +272,7 @@ const defaultOrganization: OrganizationSettings = {
   name: '',
   legalName: '',
   logo: null,
+  accentColor: '#C9954A',
   address: '',
   city: '',
   postalCode: '',

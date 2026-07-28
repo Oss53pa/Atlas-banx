@@ -158,6 +158,20 @@ export function OrganizationSettings({ onSave }: Props) {
                       </span>
                     </label>
                   </div>
+                  {/* Couleur d'accent — page de garde des rapports */}
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-primary-600 mb-1">Couleur d'accent (rapports)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={organization.accentColor || '#C9954A'}
+                        onChange={(e) => handleChange('accentColor', e.target.value)}
+                        className="h-9 w-12 cursor-pointer rounded border border-primary-200 bg-white p-0.5"
+                        title="Couleur de marque utilisée sur la page de garde des rapports"
+                      />
+                      <span className="font-mono text-xs text-primary-500">{organization.accentColor || '#C9954A'}</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex-1 grid grid-cols-2 gap-3">
                   <Input

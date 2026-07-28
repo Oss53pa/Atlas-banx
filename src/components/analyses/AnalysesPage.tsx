@@ -150,7 +150,7 @@ export function AnalysesPage() {
     completeAnalysis,
     failAnalysis,
   } = useAnalysisStore();
-  const { thresholds, bankConditions, claudeApi } = useSettingsStore();
+  const { thresholds, bankConditions, claudeApi, organization } = useSettingsStore();
 
   // Enterprise mode: the implicit self client is the only client
   const selfClient = isEnterprise ? clients[0] : undefined;
@@ -489,6 +489,21 @@ export function AnalysesPage() {
         })
         .filter((g): g is NonNullable<typeof g> => !!g);
 
+      // Branding cabinet (white-label) : nom + logo + couleur d'accent tirés
+      // des paramètres. Réservé aux comptes cabinet (l'auditeur est le cabinet).
+      const cabinetBranding = !isEnterprise && organization?.name
+        ? {
+            name: organization.name,
+            tagline: organization.legalName || undefined,
+            address: [organization.address, organization.city, organization.country].filter(Boolean).join(', ') || undefined,
+            phone: organization.phone || undefined,
+            email: organization.senderEmail || undefined,
+            website: organization.website || undefined,
+            logo: organization.logo || undefined,
+            accentColor: organization.accentColor || undefined,
+          }
+        : undefined;
+
       await PremiumReportService.download(
         {
           title: `Rapport d'audit bancaire`,
@@ -500,6 +515,7 @@ export function AnalysesPage() {
           analysisMode,
           banks: reportBanks,
           referenceGrids: referenceGrids.length > 0 ? referenceGrids : undefined,
+          cabinet: cabinetBranding,
           auditId: currentAnalysis?.id ?? `DEMO-${Date.now().toString(36).toUpperCase()}`,
         },
         undefined,
