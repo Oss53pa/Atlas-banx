@@ -42,10 +42,12 @@ export default function AtlasStudioAdminPage() {
     isDemoMode,
     profile,
     isLoading,
+    isInitialized,
     error: authError,
     signInWithEmail,
     signOut,
     clearError,
+    loadProfile,
   } = useAuthStore();
 
   const { banks: storeBanks, setSelectedBank } = useBankStore();
@@ -60,8 +62,16 @@ export default function AtlasStudioAdminPage() {
     setView(segment === 'particulier' ? 'particuliers' : 'entreprises');
   };
 
-  const isAdmin = profile?.role === 'admin';
+  // Aligné sur public.is_admin() côté base : admin OU super_admin (+ démo).
+  // NB : le type généré de profile.role diverge du schéma réel ; comparaison
+  // par string.
+  const role = profile?.role as string | undefined;
+  const isAdmin = isDemoMode || role === 'admin' || role === 'super_admin';
   const authed = isAuthenticated || isDemoMode;
+  // Session ouverte mais profil pas encore chargé (ou échec de chargement) : on
+  // NE DOIT PAS afficher « Accès refusé » — sinon un admin légitime est bloqué
+  // le temps que loadProfile résolve, ou définitivement si l'appel a échoué.
+  const profilePending = isAuthenticated && !isDemoMode && !profile;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,8 +240,37 @@ export default function AtlasStudioAdminPage() {
           </div>
         )}
 
-        {/* --- Authentifié mais non admin : accès refusé --- */}
-        {authed && !isAdmin && (
+        {/* --- Session ouverte, profil en cours de chargement / échec --- */}
+        {profilePending && (
+          <div className="mx-auto max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+            <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/10 text-amber-300">
+              <Lock className="h-5 w-5" />
+            </span>
+            <h1 className="font-serif text-xl text-white">Vérification du profil…</h1>
+            <p className="mt-2 text-sm text-white/50">
+              {isInitialized
+                ? "Le profil n'a pas pu être chargé. Réessayez ou reconnectez-vous."
+                : 'Chargement de votre profil administrateur.'}
+            </p>
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <button
+                onClick={() => void loadProfile()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200 hover:bg-amber-400/20"
+              >
+                Réessayer
+              </button>
+              <button
+                onClick={() => signOut()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/5"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Se déconnecter
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- Authentifié, profil chargé mais non admin : accès refusé --- */}
+        {authed && !profilePending && !isAdmin && (
           <div className="mx-auto max-w-md rounded-2xl border border-red-500/20 bg-red-500/[0.04] p-8 text-center">
             <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300">
               <ShieldAlert className="h-5 w-5" />
