@@ -15,6 +15,7 @@ import {
   type Transaction,
   type BankConditions,
   type DetectionThresholds,
+  type DailyBalance,
 } from '../../types';
 
 /** Les 12 détecteurs de l'audit complet (mêmes que le détail relevé). */
@@ -68,6 +69,18 @@ export async function runFullAudit(params: RunFullAuditParams): Promise<Analysis
     bankCodes: undefined,
   } as unknown as AnalysisConfig;
 
+  // Soldes quotidiens dérivés des transactions (date, solde, n° de compte) :
+  // sans eux, le détecteur d'intérêts/agios (INTEREST_ERROR) était désactivé et
+  // les agios indus — une catégorie récupérable majeure — n'étaient jamais
+  // détectés. On les reconstitue à partir du solde courant de chaque écriture.
+  const accountBalances: DailyBalance[] = params.transactions
+    .filter((t) => typeof t.balance === 'number' && !Number.isNaN(t.balance))
+    .map((t) => ({
+      date: t.date instanceof Date ? t.date : new Date(t.date),
+      balance: t.balance as number,
+      accountNumber: t.accountNumber ?? '',
+    }));
+
   const service = getAnalysisService(params.thresholds);
   return service.analyzeTransactions(
     params.transactions,
@@ -79,6 +92,10 @@ export async function runFullAudit(params: RunFullAuditParams): Promise<Analysis
     // détecteurs. Ce point d'entrée partagé (funnel particulier, détail relevé)
     // privilégie la fiabilité — quelques centaines de transactions s'analysent
     // instantanément en séquentiel.
-    { useWorkers: false, onProgress: params.onProgress },
+    {
+      useWorkers: false,
+      onProgress: params.onProgress,
+      accountBalances: accountBalances.length > 0 ? accountBalances : undefined,
+    },
   );
 }
