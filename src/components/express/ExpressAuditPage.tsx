@@ -25,6 +25,7 @@ import { countAuditedMonths } from '../../billing/auditPlans';
 import { pricingForRecovery, type RecoveryPricing } from '../../billing/recoveryPricing';
 import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { buildParticulierComplaintLetter, complaintLetterToHtml } from '../../billing/express/complaintLetter';
+import { CGV_PARTICULIER_VERSION, CGV_PARTICULIER_SECTIONS } from '../../billing/express/cgvParticulier';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
 import { fetchPublicBankReference, fetchPublicBankList } from '../../services/publicBankReference';
@@ -97,6 +98,9 @@ export default function ExpressAuditPage() {
   const [segment, setSegment] = useState<'particulier' | 'pme' | 'corporate'>('particulier');
   const [usedOfficialGrid, setUsedOfficialGrid] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'sandbox' | 'live'>('sandbox');
+  // Acceptation des CGV — OBLIGATOIRE avant tout import de relevé.
+  const [cgvAccepted, setCgvAccepted] = useState(false);
+  const [cgvChecked, setCgvChecked] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -184,7 +188,7 @@ export default function ExpressAuditPage() {
       const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const init = await provider.initiate({
         amount: pricing.priceFcfa, currency: 'XOF',
-        description: `Audit express — déblocage rapport (${fmt(pricing.recoverableFcfa)} FCFA récupérables)`,
+        description: `Audit express — déblocage rapport (${fmt(pricing.recoverableFcfa)} FCFA récupérables) · CGV v${CGV_PARTICULIER_VERSION} acceptées`,
         reference, customerEmail: email || undefined, customerPhone: phone || undefined,
       });
       setPaymentMode(init.mode);
@@ -312,6 +316,63 @@ export default function ExpressAuditPage() {
           </button>
         </header>
 
+        {/* ============ BARRIÈRE CGV — avant TOUT import ============ */}
+        {!cgvAccepted ? (
+          <div className="flex-1 px-5 py-8 sm:px-10 sm:py-12">
+            <div className="mx-auto w-full max-w-3xl">
+              <h1 className="font-display text-4xl sm:text-5xl text-ink-900 leading-tight">Avant de commencer</h1>
+              <p className="mt-1.5 text-[15px] text-ink-500">
+                Merci de lire et d'accepter nos Conditions Générales de Vente. L'analyse de votre relevé est
+                gratuite ; vous ne payez que si vous choisissez de débloquer le rapport détaillé.
+              </p>
+
+              <div className="card mt-6 max-h-[52vh] overflow-y-auto p-6">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-accent-600">
+                  Conditions Générales de Vente — Audit express (particuliers) · v{CGV_PARTICULIER_VERSION}
+                </p>
+                <div className="mt-4 space-y-5">
+                  {CGV_PARTICULIER_SECTIONS.map((s) => (
+                    <div key={s.title}>
+                      <h2 className="text-sm font-semibold text-ink-900">{s.title}</h2>
+                      <div className="mt-1 space-y-1.5">
+                        {s.body.map((p, i) => (
+                          <p key={i} className="text-[13px] leading-relaxed text-ink-600">{p}</p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <label className="mt-5 flex cursor-pointer items-start gap-2.5 rounded-xl border border-primary-200 bg-white p-4 text-sm text-ink-700">
+                <input
+                  type="checkbox"
+                  checked={cgvChecked}
+                  onChange={(e) => setCgvChecked(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-primary-300 text-ink-900 focus:ring-ink-400"
+                />
+                <span>
+                  J'ai lu et j'accepte les <strong>Conditions Générales de Vente</strong> (v{CGV_PARTICULIER_VERSION}).
+                  Je demande l'exécution immédiate du service et reconnais qu'aucune donnée n'est conservée.
+                </span>
+              </label>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <button onClick={() => navigate('/landing')} className="text-sm text-ink-500 hover:text-ink-800">
+                  ← Retour à l'accueil
+                </button>
+                <button
+                  onClick={() => setCgvAccepted(true)}
+                  disabled={!cgvChecked}
+                  className="btn btn-primary btn-lg sm:w-auto disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Accepter et commencer <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Stepper horizontal (progression des étapes) — étapes nommées */}
         <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-2 border-b border-primary-100/70 bg-white/40 px-4 py-3">
           {STEPS.map((s, i) => {
@@ -639,6 +700,8 @@ export default function ExpressAuditPage() {
             )}
           </div>
         </div>
+        </>
+        )}
       </main>
     </div>
   );
