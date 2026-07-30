@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../store/authStore';
 import { useStatement } from '../hooks/useStatement';
 import { useAnomalies } from '../hooks/useAnomalies';
@@ -64,8 +65,10 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
     props.onTabChange?.(next);
   }
 
+  const navigate = useNavigate();
+
   // === Données ===
-  const { meta, loading: metaLoading } = useStatement(props.statementId);
+  const { meta, loading: metaLoading, error: metaError } = useStatement(props.statementId);
   const { team, convention } = useStatementContext(meta?.accountId);
   const { workspace, type: workspaceType } = useWorkspace();
 
@@ -125,10 +128,31 @@ export function StatementDetailPage(props: StatementDetailPageProps) {
 
   // ============================================================================
 
-  if (metaLoading || !meta) {
+  if (metaLoading) {
     return (
       <div className="flex items-center justify-center h-screen text-sm text-ink-500">
         Chargement du relevé…
+      </div>
+    );
+  }
+
+  // Chargement terminé mais pas de relevé : erreur ou introuvable — on affiche
+  // un état clair (jamais un relevé fictif).
+  if (!meta) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-sm font-semibold text-ink-900">Relevé introuvable</p>
+        <p className="max-w-md text-xs text-ink-500">
+          {metaError
+            ? `Impossible de charger ce relevé : ${metaError}`
+            : "Ce relevé n'existe pas ou a été supprimé."}
+        </p>
+        <button
+          onClick={() => navigate('/statements')}
+          className="mt-1 rounded-lg border border-canvas-300 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-canvas-100"
+        >
+          Retour aux relevés
+        </button>
       </div>
     );
   }

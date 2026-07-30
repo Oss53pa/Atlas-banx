@@ -49,7 +49,11 @@ export function useStatement(statementId: string): UseStatementResult {
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'load failed');
-          setMeta({ ...FALLBACK_META, id: statementId });
+          // Ne JAMAIS injecter de fausse donnée en production : le relevé de
+          // repli n'est utilisé qu'en développement hors-ligne (Supabase non
+          // configuré). En cas d'erreur réelle, on laisse meta null → l'UI
+          // affiche un état d'erreur, pas un relevé fictif.
+          setMeta(isSupabaseConfigured() ? null : { ...FALLBACK_META, id: statementId });
         }
       } finally {
         if (!cancelled) setLoading(false);
