@@ -48,8 +48,8 @@ const STEPS: Step[] = [
   },
   {
     Icon: ShieldCheck,
-    title: '6. Publier (contrôle deux yeux)',
-    body: "Dans l'onglet « Validation IA » de la banque, un SECOND administrateur valide puis publie le barème (ou activez l'auto-validation si un seul admin). Une fois publié, il devient la référence utilisée par les audits.",
+    title: '6. Publier au référentiel (contrôle deux yeux)',
+    body: "Depuis l'onglet « Documents » de la banque, cliquez sur « Publier au référentiel » (ou l'onglet « Publier au référentiel ») : un SECOND administrateur valide puis publie le barème (ou activez l'auto-validation si un seul admin). Une fois publié, il devient la référence utilisée par les audits (express + partagés).",
   },
   {
     Icon: BookOpen,
