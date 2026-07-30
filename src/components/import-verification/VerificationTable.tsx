@@ -11,7 +11,7 @@
 //                section locked.
 // ============================================================================
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   CheckCircle2,
   XCircle,
@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Trash2,
 } from 'lucide-react';
 import {
   type ConditionRow,
@@ -43,6 +44,7 @@ interface Props {
   onToggleValidation: (id: string) => void;
   onSetState: (id: string, state: RowState) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  onRemove: (id: string) => void;
 }
 
 const STATE_TONES: Record<RowState, { dot: string; text: string; bg: string }> = {
@@ -67,6 +69,7 @@ export function VerificationTable({
   onToggleValidation,
   onSetState,
   onPatch,
+  onRemove,
 }: Props) {
   const [filter, setFilter] = useState<'all' | 'pending' | 'validated' | 'rejected' | 'low'>('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -148,6 +151,7 @@ export function VerificationTable({
                 onSetState={(s) => onSetState(row.id, s)}
                 onExpand={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
                 onPatch={(p) => onPatch(row.id, p)}
+                onRemove={() => onRemove(row.id)}
               />
             ) : (
               <ConditionRowView
@@ -161,6 +165,7 @@ export function VerificationTable({
                 onSetState={(s) => onSetState(row.id, s)}
                 onExpand={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
                 onPatch={(p) => onPatch(row.id, p)}
+                onRemove={() => onRemove(row.id)}
               />
             ),
           )
@@ -183,6 +188,7 @@ function StatementRowView({
   onSetState,
   onExpand,
   onPatch,
+  onRemove,
 }: {
   row: StatementRow;
   focused: boolean;
@@ -192,6 +198,7 @@ function StatementRowView({
   onSetState: (s: RowState) => void;
   onExpand: () => void;
   onPatch: (p: Record<string, unknown>) => void;
+  onRemove: () => void;
 }) {
   const tone = STATE_TONES[row.state];
   const description = getEffective(row, 'description') as string;
@@ -285,6 +292,14 @@ function StatementRowView({
           >
             Rejeter
           </button>
+          <button
+            onClick={onRemove}
+            title="Supprimer définitivement cette ligne"
+            className="text-[10px] p-1 rounded-pill border border-red-200 text-red-600 hover:bg-red-100"
+            aria-label="Supprimer la ligne"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
         </div>
       </div>
 
@@ -331,6 +346,7 @@ function ConditionRowView({
   onSetState,
   onExpand,
   onPatch,
+  onRemove,
 }: {
   row: ConditionRow;
   customRubrics?: ClassifiedRubric[];
@@ -341,6 +357,7 @@ function ConditionRowView({
   onSetState: (s: RowState) => void;
   onExpand: () => void;
   onPatch: (p: Record<string, unknown>) => void;
+  onRemove: () => void;
 }) {
   const tone = STATE_TONES[row.state];
   const label = getEffective(row, 'label') as string;
@@ -478,8 +495,75 @@ function ConditionRowView({
           >
             Rejeter
           </button>
+          <button
+            onClick={onRemove}
+            title="Supprimer définitivement cette ligne"
+            className="text-[10px] p-1 rounded-pill border border-red-200 text-red-600 hover:bg-red-100"
+            aria-label="Supprimer la ligne"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
         </div>
       </div>
+
+      {/* Expanded detail — what the extractor actually read for this line, so
+          the user can verify / correct / delete with full context. */}
+      {expanded && (
+        <div className="px-3 pb-3 -mt-1 space-y-2">
+          {row.warnings.length > 0 && (
+            <ul className="text-[11px] text-amber-700 space-y-0.5">
+              {row.warnings.map((w, i) => (
+                <li key={i} className="flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+            <DetailCell label="Valeur extraite (brute)">
+              {qualitative
+                ? qualitativeLabel(qualitative)
+                : `${formatAmount(row.data.value)}${unit ? ` ${unit}` : ''}`}
+            </DetailCell>
+            <DetailCell label="Libellé extrait (brut)">{row.data.label || '—'}</DetailCell>
+            <DetailCell label="Rubrique (clé)">{rubricKey || '— non rattachée —'}</DetailCell>
+            <DetailCell label="Source rubrique">
+              {isCustom ? 'Détectée (auto)' : rubricKey ? 'Registre standard' : '—'}
+            </DetailCell>
+            <DetailCell label="Section">{row.data.section || '—'}</DetailCell>
+            <DetailCell label="Unité">{unit || '—'}</DetailCell>
+            <DetailCell label="Page (source)">
+              {row.boundingBox ? `p. ${row.boundingBox.page}` : '—'}
+            </DetailCell>
+            <DetailCell label="Confiance">{Math.round(row.confidence * 100)}%</DetailCell>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              onClick={() => onSetState('rejected')}
+              className="text-[10px] px-2 py-0.5 rounded-pill border border-red-200 text-red-700 hover:bg-red-50"
+            >
+              Rejeter (garder)
+            </button>
+            <button
+              onClick={onRemove}
+              className="text-[10px] px-2 py-0.5 rounded-pill border border-red-300 text-red-700 hover:bg-red-100 inline-flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" /> Supprimer la ligne
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A labelled read-only field used in the expanded detail panel. */
+function DetailCell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-ink-500">{label}</p>
+      <p className="text-ink-800 truncate">{children}</p>
     </div>
   );
 }

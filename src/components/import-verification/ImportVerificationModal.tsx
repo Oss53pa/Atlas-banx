@@ -501,6 +501,7 @@ function ModalBody({
               onToggleValidation={state.toggleRowValidation}
               onSetState={state.setRowState}
               onPatch={state.patchRowData}
+              onRemove={state.removeRow}
             />
           </div>
         </div>

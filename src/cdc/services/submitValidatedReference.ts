@@ -132,6 +132,18 @@ export async function submitValidatedReference(
   // 2. Créer la version brouillon
   const effectiveFrom = input.effectiveFrom ?? new Date();
   const sourceHash = input.sourceHashSha256 ?? (await hashPdf(input.pdfUrl));
+
+  // 2bis. Anti-doublon : refuser de republier le MÊME document source (même
+  //       empreinte SHA-256) tant qu'une version active existe pour la banque.
+  const duplicate = await service.findBankReferenceVersionByHash(bank.id, sourceHash);
+  if (duplicate) {
+    throw new Error(
+      `Ce document source est déjà publié au référentiel pour cette banque `
+      + `(version « ${duplicate.versionLabel} », statut ${duplicate.validationStatus}). `
+      + `Import ignoré pour éviter un doublon.`,
+    );
+  }
+
   const version = await service.createBankReferenceVersion({
     bankId: bank.id,
     versionLabel: `Validation IA — ${effectiveFrom.toISOString().slice(0, 10)}`,

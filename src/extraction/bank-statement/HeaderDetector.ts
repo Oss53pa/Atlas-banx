@@ -115,7 +115,21 @@ export function clusterRows(
   page: number,
   tolerance = 3,
 ): ReconstructedRow[] {
-  const pageItems = items.filter((it) => it.page === page);
+  return clusterRowsFromItems(items.filter((it) => it.page === page), page, tolerance);
+}
+
+/**
+ * Same as clusterRows but takes an already-filtered item list (single page,
+ * or a single column band). Exposed so callers that pre-segment a page into
+ * vertical column bands can cluster rows WITHIN each band independently —
+ * essential for multi-column page layouts where a page-wide Y clustering
+ * would merge cells from unrelated side-by-side blocks.
+ */
+export function clusterRowsFromItems(
+  pageItems: PositionedItem[],
+  page: number,
+  tolerance = 3,
+): ReconstructedRow[] {
   // Sort by Y descending (PDF coords have Y growing upward)
   const sorted = [...pageItems].sort((a, b) => b.y - a.y);
   const rows: ReconstructedRow[] = [];

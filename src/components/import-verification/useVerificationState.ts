@@ -44,6 +44,9 @@ export interface UseVerificationStateReturn {
   setRowState: (id: string, state: RowState) => void;
   toggleRowValidation: (id: string) => void;
   patchRowData: (id: string, patch: Record<string, unknown>) => void;
+  /** Remove a row entirely (not just reject it). Used to purge garbage /
+   *  duplicate lines produced by noisy OCR. */
+  removeRow: (id: string) => void;
   /** Bulk actions */
   validateAll: () => void;
   rejectAll: () => void;
@@ -102,6 +105,10 @@ export function useVerificationState({
         } as AnyRow;
       }),
     );
+  }, []);
+
+  const removeRow = useCallback((id: string) => {
+    setRows((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
   // ─── Bulk actions ─────────────────────────────────────────────────────
@@ -173,6 +180,7 @@ export function useVerificationState({
     setRowState,
     toggleRowValidation,
     patchRowData,
+    removeRow,
     validateAll,
     rejectAll,
     clearAllStates,

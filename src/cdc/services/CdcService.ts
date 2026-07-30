@@ -328,6 +328,30 @@ export class CdcService {
     return this.mapBankRefVersion(data);
   }
 
+  /**
+   * Retourne une version de référence EXISTANTE pour cette banque dont le PDF
+   * source a exactement la même empreinte SHA-256 — sert à empêcher la
+   * publication en double du même document. On ignore les versions
+   * remplacées (superseded) : seule une version encore active fait doublon.
+   */
+  async findBankReferenceVersionByHash(
+    bankId: string,
+    sourceHashSha256: string,
+  ): Promise<BankReferenceVersion | null> {
+    const { data, error } = await this.supabase
+      .schema('atlasbanx')
+      .from('bank_reference_versions')
+      .select('*')
+      .eq('bank_id', bankId)
+      .eq('source_hash_sha256', sourceHashSha256)
+      .is('superseded_by', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw new Error(`Erreur findBankReferenceVersionByHash: ${error.message}`);
+    return data ? this.mapBankRefVersion(data) : null;
+  }
+
   async addBankReferenceConditions(
     versionId: string,
     conditions: Array<Omit<BankReferenceCondition, 'id' | 'createdAt' | 'referenceVersionId'>>,
