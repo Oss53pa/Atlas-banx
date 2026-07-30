@@ -599,6 +599,17 @@ export function BankConditionsModal({
     // guarantee the final state is dirty regardless of React batching.
     setHasChanges(true);
 
+    // Alerte de non-correspondance : le type de client DÉTECTÉ dans le document
+    // ne correspond pas à l'onglet d'import courant → on prévient l'admin (et le
+    // « Type de client » du document reste corrigeable dans la liste).
+    if (detectedSegment && defaultSegment && detectedSegment !== defaultSegment) {
+      const lbl = (s: TariffSegment) => (s === 'particuliers' ? 'Particuliers' : s === 'entreprises' ? 'Entreprises' : 'Associations');
+      window.dispatchEvent(new CustomEvent('atlas-toast', { detail: {
+        type: 'warning',
+        message: `Ce document a été détecté comme « ${lbl(detectedSegment)} », mais vous importez dans « ${lbl(defaultSegment)} ». Vérifiez le « Type de client » du document et corrigez-le si besoin avant de publier.`,
+      } }));
+    }
+
     // Close the verification modal first — keeps the UI snappy.
     setVerification(null);
 
@@ -1888,6 +1899,35 @@ export function BankConditionsModal({
                                 {' • '}{(doc.fileSize / 1024).toFixed(0)} Ko
                                 {doc.extractedAt && ` • ${hasValues ? Object.keys(doc.extractedValues!).length + ' champs extraits' : 'Données extraites'}`}
                               </p>
+                              {/* Type de client du document — VISIBLE et CORRIGEABLE.
+                                  Évite d'importer un relevé/barème entreprise dans les
+                                  particuliers sans s'en rendre compte. */}
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                <span className="text-[10px] uppercase tracking-wide text-primary-400">Type de client</span>
+                                <select
+                                  value={doc.segment ?? ''}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const seg = (e.target.value || undefined) as TariffSegment | undefined;
+                                    setConditions((prev) => ({
+                                      ...prev,
+                                      documents: prev.documents.map((d) => (d.id === doc.id ? { ...d, segment: seg } : d)),
+                                    }));
+                                    setHasChanges(true);
+                                  }}
+                                  className="rounded border border-primary-300 bg-white px-1.5 py-0.5 text-[11px] font-medium text-primary-800"
+                                >
+                                  <option value="">Non précisé</option>
+                                  <option value="particuliers">Particuliers</option>
+                                  <option value="entreprises">Entreprises</option>
+                                  <option value="associations">Associations</option>
+                                </select>
+                                {defaultSegment && doc.segment && doc.segment !== defaultSegment && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                    <AlertTriangle className="h-3 w-3" /> diffère de l'onglet {defaultSegment === 'particuliers' ? 'Particuliers' : defaultSegment === 'entreprises' ? 'Entreprises' : 'Associations'}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
