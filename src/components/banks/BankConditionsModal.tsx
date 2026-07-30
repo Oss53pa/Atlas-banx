@@ -792,28 +792,28 @@ export function BankConditionsModal({
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex-shrink-0 border-b border-primary-200 bg-primary-50">
-          <div className="flex gap-1 px-4 overflow-x-auto">
+        {/* Corps : sidebar de navigation (verticale) + contenu de la section */}
+        <div className="flex-1 flex min-h-0">
+          {/* Sidebar — toutes les sections visibles, sans débordement horizontal */}
+          <nav className="w-56 shrink-0 overflow-y-auto border-r border-primary-200 bg-primary-50 py-2">
             {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium border-l-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-primary-900 text-primary-900 bg-white'
-                    : 'border-transparent text-primary-500 hover:text-primary-700'
+                    ? 'border-primary-900 bg-white text-primary-900'
+                    : 'border-transparent text-primary-500 hover:bg-white/60 hover:text-primary-800'
                 }`}
               >
-                {tab.icon}
-                {tab.label}
+                <span className="shrink-0">{tab.icon}</span>
+                <span className="truncate text-left">{tab.label}</span>
               </button>
             ))}
-          </div>
-        </div>
+          </nav>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
           {/* Onglet Compte */}
           {activeTab === 'compte' && (
             <div className="max-w-4xl mx-auto space-y-4">
@@ -2001,6 +2001,7 @@ export function BankConditionsModal({
               }
             />
           )}
+          </div>
         </div>
 
         {/* Footer */}
