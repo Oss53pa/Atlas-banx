@@ -170,6 +170,7 @@ export default function AtlasStudioAdminPage() {
             <BanksPage
               key={view}
               defaultSegment={view === 'particuliers' ? 'particuliers' : 'entreprises'}
+              showConditionsCoverage
             />
           )}
         </main>

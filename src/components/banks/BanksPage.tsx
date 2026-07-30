@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Landmark, Plus, Search, X, Upload, Eye, History,
   CheckCircle2, Archive, FileText, Loader2, ChevronRight,
@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardBody, Button, Input, Select, Badge } from '../ui';
 import { useBankStore } from '../../store/bankStore';
+import {
+  fetchReferenceJournal, bankSegmentCounts, type BankSegmentCounts,
+} from '../../cdc/services/referenceJournal';
 import { BankConditionsModal } from './BankConditionsModal';
 import { BankFormModal } from './BankFormModal';
 import { BankGridsPanel } from './BankGridsPanel';
@@ -187,9 +190,14 @@ interface BanksPageProps {
    * cliente standard, tous segments.
    */
   defaultSegment?: TariffSegment;
+  /**
+   * Console admin : affiche une pastille par banque indiquant le nombre de
+   * barèmes importés couvrant les Particuliers / Entreprises (référentiel L2).
+   */
+  showConditionsCoverage?: boolean;
 }
 
-export function BanksPage({ defaultSegment }: BanksPageProps = {}) {
+export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageProps = {}) {
   const {
     banks,
     addBank,
@@ -206,6 +214,18 @@ export function BanksPage({ defaultSegment }: BanksPageProps = {}) {
     deleteConditionGrid,
     setActiveGrid,
   } = useBankStore();
+
+  // Pastille de couverture (console admin) : nb de barèmes importés par banque,
+  // ventilés Particuliers / Entreprises, d'après le journal du référentiel L2.
+  const [segCounts, setSegCounts] = useState<Map<string, BankSegmentCounts>>(new Map());
+  useEffect(() => {
+    if (!showConditionsCoverage) return;
+    let cancelled = false;
+    void fetchReferenceJournal().then((rows) => {
+      if (!cancelled) setSegCounts(bankSegmentCounts(rows));
+    });
+    return () => { cancelled = true; };
+  }, [showConditionsCoverage]);
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('banks');
@@ -669,7 +689,24 @@ export function BanksPage({ defaultSegment }: BanksPageProps = {}) {
                             </p>
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-primary-300 flex-shrink-0" />
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {showConditionsCoverage && (() => {
+                            const c = segCounts.get(bank.code);
+                            const p = c?.particulier ?? 0;
+                            const e = c?.entreprise ?? 0;
+                            return (
+                              <span className="flex items-center gap-1" title={`${p} barème(s) Particuliers · ${e} barème(s) Entreprises`}>
+                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${p > 0 ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-primary-200 bg-primary-50 text-primary-400'}`}>
+                                  P {p}
+                                </span>
+                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${e > 0 ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-primary-200 bg-primary-50 text-primary-400'}`}>
+                                  E {e}
+                                </span>
+                              </span>
+                            );
+                          })()}
+                          <ChevronRight className="w-4 h-4 text-primary-300" />
+                        </div>
                       </div>
                     </div>
                   );
