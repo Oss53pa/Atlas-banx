@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { MainLayout } from './components/layout';
 import { ErrorBoundary } from './components/ui';
+import { ToastHost } from './components/ui/ToastHost';
 import { useBankStore } from './store/bankStore';
 import { useClientStore } from './store/clientStore';
 import { useTransactionStore } from './store/transactionStore';
@@ -366,6 +367,7 @@ function App() {
   return (
     <Router>
       <AppRoutes />
+      <ToastHost />
     </Router>
   );
 }
