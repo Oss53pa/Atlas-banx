@@ -19,6 +19,7 @@ import {
   getReportSnapshot,
   reviveReportData,
   deleteReportSnapshot,
+  isSnapshotIntact,
 } from '../../services/report/reportSnapshot';
 import { formatCurrency, formatDate } from '../../utils';
 import { Severity, type Anomaly } from '../../types';
@@ -154,6 +155,14 @@ export function ReportsPage() {
   const downloadFrozenReport = async (report: ClientReport) => {
     const snap = getReportSnapshot(report.id);
     if (snap) {
+      // Contrôle d'intégrité : l'instantané gelé ne doit pas avoir été altéré.
+      if (!(await isSnapshotIntact(snap))) {
+        window.dispatchEvent(new CustomEvent('atlas-toast', { detail: {
+          type: 'error',
+          message: "Intégrité du rapport gelé compromise (stockage local altéré) — régénérez le rapport.",
+        } }));
+        return;
+      }
       await PremiumReportService.download(reviveReportData(snap), undefined, report.id, { userPermissions: ['print'] });
       return;
     }
