@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   coverageForSegment, hasOpenGapToday,
-  rubricLabel, isRateRubric, formatConditionValue,
+  rubricLabel, isRateRubric, formatConditionValue, bankSegmentCounts,
   type ReferenceJournalRow,
 } from '../referenceJournal';
 
@@ -78,5 +78,22 @@ describe('détail des conditions — libellés & formatage', () => {
     expect(formatConditionValue('decouverts.taux_autorise', 14)).toBe('14 %');
     expect(norm(formatConditionValue('compte.tenue_mensuelle', 1500))).toBe('1 500 FCFA');
     expect(formatConditionValue('compte.tenue_mensuelle', null)).toBe('—');
+  });
+});
+
+describe('bankSegmentCounts — pastille par banque', () => {
+  it('compte les barèmes par type (tous = particulier + entreprise), ignore rejeté', () => {
+    const rows = [
+      row({ bankCode: 'NSIA', segments: ['particulier'] }),
+      row({ bankCode: 'NSIA', segments: ['corporate'] }),
+      row({ bankCode: 'NSIA', segments: ['tous'] }),
+      row({ bankCode: 'NSIA', segments: ['particulier'], validationStatus: 'rejected' }),
+      row({ bankCode: 'BOA', segments: ['pme'] }),
+    ];
+    const m = bankSegmentCounts(rows);
+    // NSIA : particulier (1) + tous (1) = 2 ; corporate (1) + tous (1) = 2 ; rejeté ignoré.
+    expect(m.get('NSIA')).toEqual({ particulier: 2, entreprise: 2 });
+    // BOA : pme compte comme entreprise.
+    expect(m.get('BOA')).toEqual({ particulier: 0, entreprise: 1 });
   });
 });
