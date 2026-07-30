@@ -218,6 +218,31 @@ export interface CoverageSpan {
   covered: boolean;   // true = couvert par un barème publié ; false = trou
 }
 
+export interface BankSegmentCounts {
+  /** Nombre de barèmes couvrant les particuliers. */
+  particulier: number;
+  /** Nombre de barèmes couvrant les entreprises (PME + corporate). */
+  entreprise: number;
+}
+
+/**
+ * Compte, par banque, le nombre de barèmes IMPORTÉS couvrant chaque type de
+ * client (un barème « tous segments » compte pour les deux). Les barèmes
+ * rejetés sont ignorés. Sert de pastille de couverture dans la liste des banques.
+ */
+export function bankSegmentCounts(rows: ReferenceJournalRow[]): Map<string, BankSegmentCounts> {
+  const m = new Map<string, BankSegmentCounts>();
+  for (const r of rows) {
+    if (r.validationStatus === 'rejected') continue;
+    const e = m.get(r.bankCode) ?? { particulier: 0, entreprise: 0 };
+    const segs = r.segments;
+    if (segs.includes('particulier') || segs.includes('tous')) e.particulier++;
+    if (segs.includes('corporate') || segs.includes('pme') || segs.includes('tous')) e.entreprise++;
+    m.set(r.bankCode, e);
+  }
+  return m;
+}
+
 /** Segments concrets (hors 'tous'). */
 export const CONCRETE_SEGMENTS: JournalSegment[] = ['particulier', 'pme', 'corporate'];
 

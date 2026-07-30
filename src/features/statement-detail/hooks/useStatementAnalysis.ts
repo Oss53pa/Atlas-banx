@@ -68,8 +68,9 @@ function toAnalysisTransaction(tx: BankTransaction, meta: { clientId: string; ac
 const DEFAULT_BANK_CONDITIONS = {
   bankName: '',
   accountType: 'current',
-  fees: {},
-  interestRates: {},
+  // Tableaux (itérés par les détecteurs) — pas des objets {}.
+  fees: [],
+  interestRates: [],
   limits: {},
 } as unknown as BankConditions;
 

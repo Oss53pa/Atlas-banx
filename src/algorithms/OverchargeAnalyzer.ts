@@ -190,7 +190,9 @@ export class OverchargeAnalyzer {
 
     const codes = codeMapping[serviceType] || [];
 
-    for (const fee of bankConditions.fees) {
+    // Garde : sans barème officiel (audit « sur les seules transactions »),
+    // bankConditions.fees peut être absent → ne pas itérer sur undefined.
+    for (const fee of bankConditions.fees ?? []) {
       if (codes.some((code) => fee.code.toUpperCase().includes(code))) {
         return fee;
       }

@@ -37,8 +37,10 @@ export const FULL_AUDIT_DETECTORS: AnomalyType[] = [
 const EMPTY_BANK_CONDITIONS = {
   bankName: '',
   accountType: 'current',
-  fees: {},
-  interestRates: {},
+  // fees / interestRates DOIVENT être des tableaux (les détecteurs itèrent
+  // dessus) : un objet {} n'est pas itérable → « fees is not iterable ».
+  fees: [],
+  interestRates: [],
   limits: {},
 } as unknown as BankConditions;
 
