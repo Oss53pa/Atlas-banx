@@ -16,7 +16,8 @@ import type { PositionedItem, ReconstructedRow } from '../bank-statement/types';
 import { computeBoundingBox } from '../bank-statement/types';
 import { findAmounts, parseAmount } from '../bank-statement/AmountParser';
 import type { LabelValuePair } from './types';
-import { clusterRows } from '../bank-statement/HeaderDetector';
+import { clusterRowsFromItems } from '../bank-statement/HeaderDetector';
+import { segmentColumnBands } from './columnBands';
 
 /** Section number prefix at the start of a label (eg "10.1.2", "8.1") */
 const SECTION_NUMBER_PREFIX = /^(?:\d+(?:\.\d+){1,5})\s+/;
@@ -158,48 +159,96 @@ function splitLabelValue(row: ReconstructedRow): SplitResult | null {
   return null;
 }
 
+/**
+ * Reconstruct label/value pairs from an ordered list of visual rows on one
+ * page (or one column band). Section headers encountered along the way are
+ * appended to `sections` and tagged onto subsequent pairs.
+ */
+function pairsFromRows(
+  rows: ReconstructedRow[],
+  page: number,
+  allHeights: number[],
+  sections: string[],
+): LabelValuePair[] {
+  const pairs: LabelValuePair[] = [];
+  let currentSection: string | undefined;
+
+  for (const row of rows) {
+    const split = splitLabelValue(row);
+
+    if (!split) {
+      // Maybe a section header
+      if (looksLikeSection(row, allHeights)) {
+        const text = row.items.map((i) => i.text).join(' ').trim();
+        currentSection = text;
+        if (!sections.includes(text)) sections.push(text);
+      }
+      continue;
+    }
+
+    pairs.push({
+      label: split.label,
+      rawValue: split.rawValue,
+      value: split.value,
+      unit: split.unit,
+      qualitative: split.qualitative,
+      confidence: split.confidence,
+      page,
+      y: row.y,
+      section: currentSection,
+      boundingBox: computeBoundingBox(row.items),
+    });
+  }
+
+  return pairs;
+}
+
 export function extractLabelValuePairs(
   items: PositionedItem[],
   totalPages: number,
 ): { pairs: LabelValuePair[]; sections: string[] } {
   const pairs: LabelValuePair[] = [];
   const sections: string[] = [];
-  let currentSection: string | undefined;
 
   // Compute global height percentile (used by section detection)
   const allHeights = items.map((i) => i.height ?? 8);
 
   for (let p = 1; p <= totalPages; p++) {
-    const rows = clusterRows(items, p, 3);
+    const pageItems = items.filter((it) => it.page === p);
+    if (pageItems.length === 0) continue;
 
-    for (const row of rows) {
-      // Multi-line label support: if the row is purely text and not a header,
-      // we'll prepend it to the next row's label below.
-      const split = splitLabelValue(row);
+    // ── Single-column baseline: cluster rows across the whole page ────────
+    const baselineSections: string[] = [];
+    const baselineRows = clusterRowsFromItems(pageItems, p, 3);
+    const baselinePairs = pairsFromRows(baselineRows, p, allHeights, baselineSections);
 
-      if (!split) {
-        // Maybe a section header
-        if (looksLikeSection(row, allHeights)) {
-          const text = row.items.map((i) => i.text).join(' ').trim();
-          currentSection = text;
-          if (!sections.includes(text)) sections.push(text);
-        }
-        continue;
+    // ── Multi-column attempt: segment into vertical bands, cluster rows
+    //    WITHIN each band, and extract per band. Only adopt this if it yields
+    //    strictly MORE pairs — a wrong split can never win (it strands numbers
+    //    without labels / labels without numbers, both → 0 pairs).
+    const bands = segmentColumnBands(pageItems);
+    let chosenPairs = baselinePairs;
+    let chosenSections = baselineSections;
+
+    if (bands.length > 1) {
+      const bandSections: string[] = [];
+      const bandPairs: LabelValuePair[] = [];
+      // Process bands left-to-right for stable section ordering.
+      const orderedBands = [...bands].sort(
+        (a, b) => Math.min(...a.map((i) => i.x)) - Math.min(...b.map((i) => i.x)),
+      );
+      for (const band of orderedBands) {
+        const rows = clusterRowsFromItems(band, p, 3);
+        bandPairs.push(...pairsFromRows(rows, p, allHeights, bandSections));
       }
-
-      pairs.push({
-        label: split.label,
-        rawValue: split.rawValue,
-        value: split.value,
-        unit: split.unit,
-        qualitative: split.qualitative,
-        confidence: split.confidence,
-        page: p,
-        y: row.y,
-        section: currentSection,
-        boundingBox: computeBoundingBox(row.items),
-      });
+      if (bandPairs.length > baselinePairs.length) {
+        chosenPairs = bandPairs;
+        chosenSections = bandSections;
+      }
     }
+
+    pairs.push(...chosenPairs);
+    for (const s of chosenSections) if (!sections.includes(s)) sections.push(s);
   }
 
   return { pairs, sections };
