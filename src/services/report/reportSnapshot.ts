@@ -169,6 +169,19 @@ export function getReportSnapshot(id: string): ReportSnapshot | null {
   return memCache.get(id) ?? readAll()[id] ?? null;
 }
 
+/**
+ * Vérifie l'intégrité d'un instantané : l'empreinte recalculée sur son contenu
+ * doit correspondre à celle enregistrée au gel. Un écart signale une altération
+ * du stockage local (le rapport « non modifiable » a été touché hors de l'app).
+ */
+export async function isSnapshotIntact(snap: ReportSnapshot): Promise<boolean> {
+  try {
+    return (await hashReportData(reviveReportData(snap))) === snap.contentHash;
+  } catch {
+    return false;
+  }
+}
+
 export function deleteReportSnapshot(id: string): void {
   memCache.delete(id);
   const all = readAll();

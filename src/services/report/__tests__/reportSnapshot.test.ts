@@ -68,6 +68,14 @@ describe('reportSnapshot', () => {
     expect(h1).not.toBe(h3);
   });
 
+  it('vérifie l\'intégrité : intact → true, altéré → false', async () => {
+    const { isSnapshotIntact } = await import('../reportSnapshot');
+    const snap = await freezeReportSnapshot('rep-int', makeData(7000), '2026-02-01T00:00:00Z');
+    expect(await isSnapshotIntact(snap)).toBe(true);
+    const tampered = { ...snap, data: { ...snap.data, statistics: { ...snap.data.statistics, totalAnomalyAmount: 999999 } } };
+    expect(await isSnapshotIntact(tampered)).toBe(false);
+  });
+
   it('supprime le snapshot', async () => {
     await freezeReportSnapshot('rep-4', makeData(1000), '2026-02-01T00:00:00Z');
     deleteReportSnapshot('rep-4');
