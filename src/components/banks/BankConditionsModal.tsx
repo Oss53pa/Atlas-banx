@@ -120,7 +120,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'credits', label: 'Crédits & Agios', icon: <Percent className="w-4 h-4" /> },
   { id: 'ebanking', label: 'E-Banking', icon: <Smartphone className="w-4 h-4" /> },
   { id: 'divers', label: 'Divers', icon: <Settings className="w-4 h-4" /> },
-  { id: 'validation', label: 'Validation IA', icon: <Sparkles className="w-4 h-4" /> },
+  { id: 'validation', label: 'Publier au référentiel', icon: <Sparkles className="w-4 h-4" /> },
 ];
 
 
@@ -1812,6 +1812,26 @@ export function BankConditionsModal({
                     grille pour chaque transaction. Le formulaire affiche les valeurs du dernier document appliqué.
                   </p>
                 </div>
+                {/* Publication au référentiel L2 (mutualisé) — indispensable pour
+                    que l'audit express + les audits partagés comparent au tarif. */}
+                {isAdmin && conditions.documents.length > 0 && (
+                  <div className="mb-4 p-3 rounded-lg border border-emerald-200 bg-emerald-50/70 flex items-start gap-3">
+                    <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-emerald-900">
+                        <strong>« Appliquer » alimente la grille locale de ce client.</strong> Pour que ce barème serve à
+                        l'<strong>audit mutualisé</strong> (audit express + audits partagés), il faut le <strong>publier au
+                        référentiel L2</strong> — c'est ce référentiel que l'audit compare au tarif officiel.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('validation')}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
+                    >
+                      Publier au référentiel →
+                    </button>
+                  </div>
+                )}
                 {conditions.documents.length === 0 ? (
                   <div className="text-center py-8 text-primary-500">
                     <FileUp className="w-12 h-12 mx-auto mb-2 opacity-50" />
