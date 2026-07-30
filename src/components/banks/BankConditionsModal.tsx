@@ -158,9 +158,10 @@ export function BankConditionsModal({
   // pour une nouvelle banque, ou explicitement après un Save.
   const [baseline, setBaseline] = useState<string>('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  // Success toast + auto-close after save. When showSaveSuccess === true,
-  // a banner displays "Conditions bancaires importées avec succès" then the
-  // modal auto-closes ~1.5s later.
+  // Success toast after save. When showSaveSuccess === true, a banner displays
+  // "Conditions bancaires importées avec succès". The modal then auto-closes
+  // ~1.5s later — EXCEPT from the « Publier au référentiel » tab, where it
+  // stays open so the user can save then publish without losing context.
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   // Verification modal — opens after extraction so the user can review the
@@ -382,17 +383,20 @@ export function BankConditionsModal({
     }));
   };
 
-  // Sauvegarder les conditions — persiste, affiche un toast de succès,
-  // puis ferme la modale automatiquement après 1.5s.
+  // Sauvegarder les conditions — persiste, affiche un toast de succès.
+  // Ferme la modale après 1,5 s SAUF depuis l'onglet « Publier au référentiel » :
+  // on y est en pleine session de validation, fermer ferait perdre le contexte
+  // (on veut enregistrer PUIS publier sans quitter). Depuis cet onglet, on
+  // garde la modale ouverte.
   const handleSave = () => {
     onSaveConditions(bank.id, conditions as any);
     // Re-baseline → diff devient 0 → hasChanges devient false → bouton désactivé.
     setBaseline(serializeForDiff(conditions));
-    // Affiche le toast de succès puis ferme la modale.
     setShowSaveSuccess(true);
+    const keepOpen = activeTab === 'validation';
     setTimeout(() => {
       setShowSaveSuccess(false);
-      onClose();
+      if (!keepOpen) onClose();
     }, 1500);
   };
 
