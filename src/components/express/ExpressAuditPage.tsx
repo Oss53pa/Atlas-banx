@@ -82,6 +82,14 @@ export default function ExpressAuditPage() {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // Qualité d'extraction (confiance, avertissements) pour que l'utilisateur
+  // vérifie l'import avant l'analyse.
+  const [extractConfidence, setExtractConfidence] = useState<number | null>(null);
+  const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
+  // Disponibilité du barème officiel pour la banque + période sélectionnées.
+  const [refStatus, setRefStatus] = useState<
+    { loading: boolean; available: boolean; coversPeriod: boolean; versionLabel?: string | null; effectiveFrom?: string | null } | null
+  >(null);
   const [periodStart, setPeriodStart] = useState<Date | null>(null);
   const [periodEnd, setPeriodEnd] = useState<Date | null>(null);
   const [months, setMonths] = useState(0);
@@ -134,6 +142,8 @@ export default function ExpressAuditPage() {
       const end = new Date(Math.max(...times));
       const m = countAuditedMonths([{ start, end }]);
       setTransactions(txs);
+      setExtractConfidence(result.stats?.averageConfidence ?? null);
+      setExtractWarnings(result.warnings ?? []);
       setPeriodStart(start);
       setPeriodEnd(end);
       setMonths(m);
@@ -189,6 +199,24 @@ export default function ExpressAuditPage() {
       setIsBusy(false);
     }
   };
+
+  // Transparence : dès qu'une banque est choisie, on vérifie si un barème
+  // officiel est disponible et s'il couvre la période auditée — AVANT l'analyse.
+  useEffect(() => {
+    if (!bankCode) { setRefStatus(null); return; }
+    let cancelled = false;
+    setRefStatus({ loading: true, available: false, coversPeriod: false });
+    void fetchPublicBankReference(bankCode)
+      .then((ref) => {
+        if (cancelled) return;
+        const available = !!ref?.found && (ref?.conditions?.length ?? 0) > 0;
+        const effFrom = ref?.effectiveFrom ?? null;
+        const coversPeriod = available && (!effFrom || !periodEnd || effFrom <= periodEnd.toISOString().slice(0, 10));
+        setRefStatus({ loading: false, available, coversPeriod, versionLabel: ref?.versionLabel ?? null, effectiveFrom: effFrom });
+      })
+      .catch(() => { if (!cancelled) setRefStatus({ loading: false, available: false, coversPeriod: false }); });
+    return () => { cancelled = true; };
+  }, [bankCode, periodEnd]);
 
   // Déblocage payant du rapport détaillé (uniquement si le récupérable dépasse
   // le seuil de gratuité). L'audit est DÉJÀ calculé — on ne facture que le
@@ -537,6 +565,57 @@ export default function ExpressAuditPage() {
                   </div>
                 </div>
 
+                {/* Vérification de l'import : aperçu des transactions + confiance */}
+                <div className="card p-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-ink-900">Relevé importé — vérifiez avant d'analyser</p>
+                    {extractConfidence !== null && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        extractConfidence >= 0.8 ? 'bg-emerald-50 text-emerald-700'
+                        : extractConfidence >= 0.5 ? 'bg-amber-50 text-amber-700'
+                        : 'bg-rose-50 text-rose-700'
+                      }`}>
+                        Confiance extraction : {Math.round(extractConfidence * 100)}%
+                      </span>
+                    )}
+                  </div>
+                  {extractConfidence !== null && extractConfidence < 0.6 && (
+                    <p className="mb-2 text-[11px] text-amber-700">
+                      Confiance faible : vérifiez que les montants et soldes correspondent à votre relevé (PDF de meilleure qualité recommandé).
+                    </p>
+                  )}
+                  {extractWarnings.length > 0 && (
+                    <p className="mb-2 text-[11px] text-amber-700">{extractWarnings.slice(0, 3).join(' · ')}</p>
+                  )}
+                  <div className="overflow-x-auto rounded-lg border border-primary-100">
+                    <table className="w-full text-xs">
+                      <thead className="bg-primary-50/60 text-left text-[11px] text-ink-500">
+                        <tr>
+                          <th className="px-2 py-1.5 font-medium">Date</th>
+                          <th className="px-2 py-1.5 font-medium">Libellé</th>
+                          <th className="px-2 py-1.5 text-right font-medium">Montant</th>
+                          <th className="px-2 py-1.5 text-right font-medium">Solde</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary-100">
+                        {transactions.slice(0, 8).map((t, i) => (
+                          <tr key={t.id ?? i}>
+                            <td className="whitespace-nowrap px-2 py-1.5">{fmtDate(t.date as unknown as Date)}</td>
+                            <td className="max-w-[220px] truncate px-2 py-1.5">{t.description}</td>
+                            <td className={`px-2 py-1.5 text-right font-medium ${t.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {t.amount.toLocaleString('fr-FR')}
+                            </td>
+                            <td className="px-2 py-1.5 text-right text-ink-500">{(t.balance ?? 0).toLocaleString('fr-FR')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {transactions.length > 8 && (
+                    <p className="mt-1.5 text-[11px] text-ink-400">+ {transactions.length - 8} autres · {transactions.length} transactions au total</p>
+                  )}
+                </div>
+
                 <div className="card space-y-5 p-6">
                   <div>
                     <label className="label">Type de relevé</label>
@@ -572,6 +651,19 @@ export default function ExpressAuditPage() {
                     <p className="mt-1.5 text-[11px] text-ink-400">
                       {DEFAULT_BANKS.length} banques référencées (CEMAC + UEMOA). Les banques marquées «&nbsp;✓ barème officiel&nbsp;» sont comparées au tarif publié ; les autres sont auditées sur les seules transactions.
                     </p>
+                    {/* Disponibilité du barème pour la banque + période — transparence */}
+                    {bankCode && refStatus && (
+                      <div className={`mt-2 rounded-lg border p-2.5 text-[11px] leading-relaxed ${
+                        refStatus.loading ? 'border-primary-200 bg-primary-50 text-ink-500'
+                        : refStatus.coversPeriod ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : 'border-amber-200 bg-amber-50 text-amber-800'
+                      }`}>
+                        {refStatus.loading ? 'Vérification du barème officiel pour cette banque…'
+                          : refStatus.coversPeriod ? <>✓ Barème officiel disponible{refStatus.versionLabel ? ` (${refStatus.versionLabel})` : ''} et couvrant la période {fmtDate(periodStart)} → {fmtDate(periodEnd)}. Les frais indus seront comparés au tarif publié.</>
+                          : refStatus.available ? <>⚠ Un barème existe mais démarre le {refStatus.effectiveFrom} — il ne couvre pas toute la période auditée. La partie non couverte sera auditée sur les seules transactions.</>
+                          : <>⚠ Aucun barème officiel publié pour cette banque sur cette période — audit sur les seules transactions (les frais ne seront pas comparés à un tarif). Publiez le barème dans la console admin pour une comparaison complète.</>}
+                      </div>
+                    )}
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
