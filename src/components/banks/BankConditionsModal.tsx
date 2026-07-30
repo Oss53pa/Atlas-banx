@@ -37,7 +37,7 @@ import { ValidationTabContent } from './ValidationTabContent';
 import { useAuthStore } from '../../store/authStore';
 import { AFRICAN_COUNTRIES, ZONE_CURRENCIES } from '../../types';
 import { getDocumentEngine, type ExtractionReport } from '../../extraction';
-import { extractConditions } from '../../extraction/conditions';
+import { extractConditions, listApprovedRubrics } from '../../extraction/conditions';
 import {
   type FullBankConditions,
   type CustomFee,
@@ -455,6 +455,11 @@ export function BankConditionsModal({
           return;
         }
 
+        // Rubriques déjà validées au référentiel → reconnues automatiquement
+        // (plus de proposition à refaire pour celles-là).
+        const approvedKeys = (await listApprovedRubrics().catch(() => []))
+          .map((r) => r.rubricKey);
+
         const payload = buildConditionsPayload({
           fileName: file.name,
           bankCode: bank.code,
@@ -463,6 +468,7 @@ export function BankConditionsModal({
           detectedSegment: result.detectedSegment,
           detectedEffectiveDate: result.detectedEffectiveDate,
           detectedPeriodLabel: result.detectionEvidence?.periodLabel,
+          approvedRubricKeys: approvedKeys,
         });
 
         setVerification({ file, payload, contentHash });

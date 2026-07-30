@@ -29,6 +29,14 @@ export {
   parseSuggestions,
 } from './aiRubricNormalizer';
 export type { AiNormalizeItem, AiRubricSuggestion } from './aiRubricNormalizer';
+export {
+  proposeRubric,
+  listRubricProposals,
+  listApprovedRubrics,
+  approveRubricProposal,
+  rejectRubricProposal,
+} from './rubricProposals';
+export type { RubricProposal, ProposalStatus, ProposeRubricInput } from './rubricProposals';
 
 export type {
   LabelValuePair,

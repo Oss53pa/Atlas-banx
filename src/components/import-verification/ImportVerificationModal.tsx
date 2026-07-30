@@ -496,6 +496,7 @@ function ModalBody({
               rows={state.rows}
               mode={payload.mode}
               rubricCatalog={payload.rubricCatalog}
+              bankCode={payload.bankCode}
               focusedRowId={state.focusedRowId}
               onFocus={state.setFocusedRowId}
               onToggleValidation={state.toggleRowValidation}

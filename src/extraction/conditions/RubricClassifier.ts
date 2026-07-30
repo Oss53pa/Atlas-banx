@@ -144,10 +144,21 @@ export function customRubricKey(category: RubricCategory, label: string): string
   return `${CUSTOM_RUBRIC_PREFIX}${category}:${slug}`;
 }
 
+export interface ClassifyOptions {
+  /** Clés de rubriques déjà VALIDÉES au référentiel (rubriques custom promues
+   *  par un admin). Une paire dont la clé auto-créée y figure est traitée comme
+   *  une rubrique CONNUE (source 'registry') : plus besoin de la proposer. */
+  approvedKeys?: Set<string>;
+}
+
 // ─── Main entry ─────────────────────────────────────────────────────────────
-export function classifyPairs(pairs: LabelValuePair[]): ClassificationResult {
+export function classifyPairs(
+  pairs: LabelValuePair[],
+  opts: ClassifyOptions = {},
+): ClassificationResult {
   const perPair: PairClassification[] = [];
   const catalog = new Map<string, ClassifiedRubric>();
+  const approved = opts.approvedKeys ?? new Set<string>();
 
   for (const pair of pairs) {
     // 1. Strong registry match wins.
@@ -167,8 +178,16 @@ export function classifyPairs(pairs: LabelValuePair[]): ClassificationResult {
     const label = cleanRubricLabel(pair.label);
     const category = sectionToCategory(pair.section, label);
     const key = customRubricKey(category, label);
-    perPair.push({ key, label, category, source: 'custom', similarity: 1 });
-    if (!catalog.has(key)) {
+    // 2bis. Rubrique déjà validée au référentiel → connue (pas une proposition).
+    const isKnown = approved.has(key);
+    perPair.push({
+      key,
+      label,
+      category,
+      source: isKnown ? 'registry' : 'custom',
+      similarity: 1,
+    });
+    if (!isKnown && !catalog.has(key)) {
       catalog.set(key, { key, label, category, source: 'custom' });
     }
   }

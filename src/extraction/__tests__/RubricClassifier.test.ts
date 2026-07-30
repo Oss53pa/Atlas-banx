@@ -35,6 +35,21 @@ describe('RubricClassifier — exhaustivité', () => {
     }
   });
 
+  it('reconnaît une rubrique custom DÉJÀ validée au référentiel (source registry, pas de catalogue)', () => {
+    const p = pair({ label: 'Frais spéciaux inconnus XYZ', value: 42, unit: 'FCFA' });
+    // Sans clés validées : rubrique custom auto (proposable), listée au catalogue.
+    const before = classifyPairs([p]);
+    expect(before.perPair[0].source).toBe('custom');
+    const key = before.perPair[0].key;
+    expect(before.catalog.some((c) => c.key === key)).toBe(true);
+
+    // Avec cette clé marquée validée : reconnue (source registry), hors catalogue.
+    const after = classifyPairs([p], { approvedKeys: new Set([key]) });
+    expect(after.perPair[0].key).toBe(key); // même clé déterministe
+    expect(after.perPair[0].source).toBe('registry');
+    expect(after.catalog.some((c) => c.key === key)).toBe(false);
+  });
+
   it('fait primer le registre sur une correspondance forte', () => {
     const { perPair } = classifyPairs([
       pair({ label: 'Tenue de compte particulier', value: 5000, unit: 'FCFA' }),
