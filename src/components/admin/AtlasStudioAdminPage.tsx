@@ -19,20 +19,22 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Users, Building2, BarChart3, Sparkles, CalendarClock } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, LogOut, AlertCircle, Users, Building2, BarChart3, Sparkles, CalendarClock, Tag } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useBankStore } from '../../store/bankStore';
 import { BanksPage } from '../banks';
 import { ConditionsIntelligencePage } from '../conditions-intelligence';
 import { ReferenceJournalPanel } from './ReferenceJournalPanel';
 import { ImportGuidePanel } from './ImportGuidePanel';
+import { RubricProposalsPanel } from './RubricProposalsPanel';
 
-type AdminView = 'particuliers' | 'entreprises' | 'journal' | 'benchmark';
+type AdminView = 'particuliers' | 'entreprises' | 'journal' | 'rubriques' | 'benchmark';
 
 const ADMIN_TABS: { id: AdminView; label: string; Icon: typeof Users }[] = [
   { id: 'particuliers', label: 'Conditions Particuliers', Icon: Users },
   { id: 'entreprises', label: 'Conditions Entreprises', Icon: Building2 },
   { id: 'journal', label: 'Journal L2', Icon: CalendarClock },
+  { id: 'rubriques', label: 'Rubriques proposées', Icon: Tag },
   { id: 'benchmark', label: 'Benchmark', Icon: BarChart3 },
 ];
 
@@ -147,6 +149,12 @@ export default function AtlasStudioAdminPage() {
                 période. Les <strong>périodes manquantes</strong> (trous de couverture, barème expiré) sont
                 mises en évidence pour savoir quoi importer ensuite.
               </p>
+            ) : view === 'rubriques' ? (
+              <p className="mx-auto max-w-4xl text-center leading-relaxed">
+                <strong>Rubriques proposées</strong> — quand un import contient une rubrique absente de
+                l'application, l'opérateur la propose ici. En la <strong>validant</strong>, elle devient une
+                rubrique connue, réutilisée automatiquement par les imports suivants.
+              </p>
             ) : (
               <p className="mx-auto max-w-4xl text-center leading-relaxed">
                 Import des conditions <strong>{view === 'particuliers' ? 'Particuliers' : 'Entreprises'}</strong> (référentiel
@@ -166,6 +174,8 @@ export default function AtlasStudioAdminPage() {
             <ConditionsIntelligencePage />
           ) : view === 'journal' ? (
             <ReferenceJournalPanel onImport={handleImportFromJournal} />
+          ) : view === 'rubriques' ? (
+            <RubricProposalsPanel />
           ) : (
             <BanksPage
               key={view}

@@ -76,13 +76,19 @@ interface ConditionsBuildArgs {
   detectedSegment?: import('../../types').TariffSegment | null;
   detectedEffectiveDate?: Date | null;
   detectedPeriodLabel?: string | null;
+  /** Clés de rubriques déjà VALIDÉES au référentiel : une paire retombant sur
+   *  l'une d'elles est reconnue automatiquement (plus de proposition à faire). */
+  approvedRubricKeys?: Iterable<string>;
 }
 
 export function buildConditionsPayload(args: ConditionsBuildArgs): VerificationPayload {
   // Exhaustive classification: EVERY pair is assigned a rubric — a standard
-  // registry rubric when it matches strongly, otherwise an auto-created,
-  // deduplicated custom rubric. No line is ever left « Non rattachée ».
-  const { perPair, catalog } = classifyPairs(args.pairs);
+  // registry rubric when it matches strongly, an already-approved custom rubric
+  // when its key was validated before, otherwise an auto-created, deduplicated
+  // custom rubric. No line is ever left « Non rattachée ».
+  const { perPair, catalog } = classifyPairs(args.pairs, {
+    approvedKeys: args.approvedRubricKeys ? new Set(args.approvedRubricKeys) : undefined,
+  });
 
   const rows: ConditionRow[] = args.pairs.map((pair, i) => {
     const cls = perPair[i];

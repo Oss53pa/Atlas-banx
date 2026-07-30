@@ -30,7 +30,12 @@ import {
   hasEdits,
 } from './types';
 import { FIELD_DEFINITIONS } from '../../extraction';
-import { isCustomRubricKey, type ClassifiedRubric } from '../../extraction/conditions';
+import {
+  isCustomRubricKey,
+  parseCustomRubricKey,
+  proposeRubric,
+  type ClassifiedRubric,
+} from '../../extraction/conditions';
 
 type AnyRow = StatementRow | ConditionRow;
 
@@ -39,6 +44,8 @@ interface Props {
   mode: VerificationMode;
   /** Conditions mode: auto-created custom rubrics to offer in the combobox. */
   rubricCatalog?: ClassifiedRubric[];
+  /** Conditions mode: bank code for the proposal context. */
+  bankCode?: string;
   focusedRowId: string | null;
   onFocus: (id: string | null) => void;
   onToggleValidation: (id: string) => void;
@@ -64,6 +71,7 @@ export function VerificationTable({
   rows,
   mode,
   rubricCatalog,
+  bankCode,
   focusedRowId,
   onFocus,
   onToggleValidation,
@@ -158,6 +166,7 @@ export function VerificationTable({
                 key={row.id}
                 row={row as ConditionRow}
                 customRubrics={rubricCatalog}
+                bankCode={bankCode}
                 focused={focusedRowId === row.id}
                 expanded={expandedRow === row.id}
                 onFocus={() => onFocus(row.id)}
@@ -339,6 +348,7 @@ function StatementRowView({
 function ConditionRowView({
   row,
   customRubrics,
+  bankCode,
   focused,
   expanded,
   onFocus,
@@ -350,6 +360,7 @@ function ConditionRowView({
 }: {
   row: ConditionRow;
   customRubrics?: ClassifiedRubric[];
+  bankCode?: string;
   focused: boolean;
   expanded: boolean;
   onFocus: () => void;
@@ -359,6 +370,8 @@ function ConditionRowView({
   onPatch: (p: Record<string, unknown>) => void;
   onRemove: () => void;
 }) {
+  // Statut de la proposition de rubrique au référentiel (rubriques « auto »).
+  const [proposeState, setProposeState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const tone = STATE_TONES[row.state];
   const label = getEffective(row, 'label') as string;
   const value = getEffective(row, 'value') as number;
@@ -367,6 +380,10 @@ function ConditionRowView({
   const qualitative = (getEffective(row, 'qualitative') as ConditionRow['data']['qualitative']) ?? undefined;
   const edited = hasEdits(row);
   const isCustom = isCustomRubricKey(rubricKey);
+  // Une rubrique à clé custom DÉJÀ validée au référentiel a rubricSource
+  // 'registry' : elle est connue → on ne propose plus son ajout.
+  const rubricSource = getEffective(row, 'rubricSource') as ConditionRow['data']['rubricSource'];
+  const isProposable = isCustom && rubricSource !== 'registry';
 
   // The current custom key might not be in the shared catalog if the user
   // edited this row's label after import — surface it as its own option so
@@ -380,6 +397,35 @@ function ConditionRowView({
       source: 'custom',
     });
   }
+
+  // Proposer la rubrique « auto » au référentiel : l'admin la validera et elle
+  // deviendra une rubrique connue de l'application (réutilisée aux imports).
+  const handlePropose = async () => {
+    const parsed = parseCustomRubricKey(rubricKey);
+    if (!parsed) return;
+    setProposeState('sending');
+    try {
+      await proposeRubric({
+        rubricKey,
+        label: (getEffective(row, 'rubricLabel') as string | undefined) ?? label,
+        category: parsed.category,
+        unit: unit === '%' ? 'percent' : unit === 'days' ? 'days' : 'amount',
+        sourceLabel: row.data.label,
+        bankCode,
+      });
+      setProposeState('done');
+      window.dispatchEvent(new CustomEvent('atlas-toast', { detail: {
+        type: 'success',
+        message: `Rubrique « ${label} » proposée au référentiel. Un administrateur la validera.`,
+      } }));
+    } catch (err) {
+      setProposeState('error');
+      window.dispatchEvent(new CustomEvent('atlas-toast', { detail: {
+        type: 'error',
+        message: `Proposition impossible : ${err instanceof Error ? err.message : 'erreur'}`,
+      } }));
+    }
+  };
 
   return (
     <div
@@ -427,14 +473,21 @@ function ConditionRowView({
 
         {/* Rubric mapping (combobox) — registry rubrics + auto-created ones */}
         <div className="flex items-center gap-1 min-w-0">
-          {isCustom && (
+          {isProposable ? (
             <span
               title="Rubrique créée automatiquement à partir du document"
               className="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-accent-100 text-accent-700 border border-accent-200"
             >
               auto
             </span>
-          )}
+          ) : isCustom && rubricSource === 'registry' ? (
+            <span
+              title="Rubrique validée au référentiel"
+              className="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200"
+            >
+              validée
+            </span>
+          ) : null}
           <select
             value={rubricKey}
             onChange={(e) => onPatch({ rubricKey: e.target.value || undefined })}
@@ -538,6 +591,26 @@ function ConditionRowView({
             </DetailCell>
             <DetailCell label="Confiance">{Math.round(row.confidence * 100)}%</DetailCell>
           </div>
+          {/* Rubrique auto (absente de l'application) → proposer l'ajout au
+              référentiel ; un admin la validera et elle deviendra connue. */}
+          {isProposable && (
+            <div className="rounded-lg border border-accent-200 bg-accent-50/50 px-2.5 py-2">
+              <p className="text-[11px] text-accent-800">
+                Cette rubrique n'existe pas encore dans l'application (créée automatiquement).
+              </p>
+              <button
+                onClick={handlePropose}
+                disabled={proposeState === 'sending' || proposeState === 'done'}
+                className="mt-1.5 text-[10px] px-2 py-1 rounded-pill border border-accent-300 text-accent-700 hover:bg-accent-100 disabled:opacity-60 inline-flex items-center gap-1"
+              >
+                {proposeState === 'done'
+                  ? '✓ Proposée — en attente de validation'
+                  : proposeState === 'sending'
+                    ? 'Envoi…'
+                    : 'Proposer au référentiel'}
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               onClick={() => onSetState('rejected')}
