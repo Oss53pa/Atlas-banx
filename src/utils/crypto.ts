@@ -124,6 +124,23 @@ export async function decryptApiKey(encrypted: string, iv: string): Promise<stri
 }
 
 /**
+ * Calcule l'empreinte SHA-256 (hex) du contenu binaire d'un fichier.
+ * Sert à détecter les doublons d'import : deux fichiers au contenu
+ * strictement identique produisent la même empreinte.
+ */
+export async function sha256HexOfFile(file: Blob): Promise<string> {
+  // `Blob.arrayBuffer()` existe dans tous les navigateurs modernes ; on garde
+  // un repli via Response() pour les environnements où il manque (jsdom).
+  const buffer = typeof file.arrayBuffer === 'function'
+    ? await file.arrayBuffer()
+    : await new Response(file).arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
  * Verifie si une chaine ressemble a une cle API chiffree
  */
 export function isEncrypted(value: string): boolean {

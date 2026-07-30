@@ -614,6 +614,8 @@ export interface ArchivedDocument {
   }>;
   /** Segment tarifaire détecté à l'import (nom de fichier / en-tête). */
   segment?: TariffSegment;
+  /** Empreinte SHA-256 (hex) du fichier source — détection des doublons d'import. */
+  contentHash?: string;
   isActive: boolean;
 }
 

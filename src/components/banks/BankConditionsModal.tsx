@@ -46,6 +46,7 @@ import {
   applyExtractedValuesToConditions,
 } from '../../extraction/conditionsForm';
 import { normalizeForMatch } from '../../extraction/normalize';
+import { sha256HexOfFile } from '../../utils/crypto';
 import { ExtractionReportPanel } from './ExtractionReportPanel';
 import {
   ImportVerificationModal,
@@ -167,6 +168,7 @@ export function BankConditionsModal({
   const [verification, setVerification] = useState<{
     file: File;
     payload: VerificationPayload;
+    contentHash?: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -410,6 +412,32 @@ export function BankConditionsModal({
     setExtractionProgress(null);
 
     try {
+      // ─── Détection de doublon (par empreinte SHA-256 du contenu) ─────
+      // On refuse d'importer deux fois le MÊME fichier de conditions pour
+      // cette banque. Le contrôle porte sur le contenu binaire : un fichier
+      // renommé mais identique est quand même détecté.
+      let contentHash: string | undefined;
+      try {
+        contentHash = await sha256HexOfFile(file);
+      } catch {
+        contentHash = undefined; // pas de hash → on n'empêche pas l'import
+      }
+      if (contentHash) {
+        const dup = conditions.documents.find((d) => d.contentHash === contentHash);
+        if (dup) {
+          setIsUploading(false);
+          setExtractionProgress(null);
+          const when = dup.uploadDate instanceof Date
+            ? dup.uploadDate.toLocaleDateString('fr-FR')
+            : new Date(dup.uploadDate).toLocaleDateString('fr-FR');
+          window.dispatchEvent(new CustomEvent('atlas-toast', { detail: {
+            type: 'warning',
+            message: `Ce document est déjà importé pour cette banque (« ${dup.name} », le ${when}). Import ignoré pour éviter un doublon.`,
+          } }));
+          return;
+        }
+      }
+
       // ─── PDF route: verification modal (split-screen review) ─────────
       if (isPdf && bank) {
         setIsExtracting(true);
@@ -437,7 +465,7 @@ export function BankConditionsModal({
           detectedPeriodLabel: result.detectionEvidence?.periodLabel,
         });
 
-        setVerification({ file, payload });
+        setVerification({ file, payload, contentHash });
         setIsExtracting(false);
         setIsUploading(false);
         setExtractionProgress(null);
@@ -475,6 +503,7 @@ export function BankConditionsModal({
         fileSize: file.size,
         extractedAt: report.success && report.stats.extracted > 0 ? new Date() : undefined,
         extractedValues: Object.keys(legacyValues).length > 0 ? legacyValues : undefined,
+        contentHash,
         isActive: true,
       };
 
@@ -584,6 +613,7 @@ export function BankConditionsModal({
         extractedValues: mappedCount > 0 ? values : undefined,
         extractedCustomFees: docCustomFees.length > 0 ? docCustomFees : undefined,
         segment: detectedSegment,
+        contentHash: verification.contentHash,
         isActive: true,
       };
       setConditions(prev => ({
