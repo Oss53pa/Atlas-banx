@@ -9,7 +9,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { FileX, Sparkles, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { FileX, Sparkles, CheckCircle2, AlertTriangle, Loader2, FileUp } from 'lucide-react';
 import type { Bank, ArchivedDocument } from '../../types';
 import { SplitScreenValidator, type ExtractedField } from '../../cdc/components/SplitScreenValidator';
 import { submitValidatedReference } from '../../cdc/services/submitValidatedReference';
@@ -63,9 +63,11 @@ interface ValidationTabContentProps {
   archivedDocuments: ArchivedDocument[];
   /** Segment L2 pré-sélectionné (onglet d'import admin Particuliers/Entreprises). */
   defaultSegment?: Segment;
+  /** Bascule vers l'onglet « Documents » (pour importer un document source). */
+  onGoToDocuments?: () => void;
 }
 
-export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }: ValidationTabContentProps) {
+export function ValidationTabContent({ bank, archivedDocuments, defaultSegment, onGoToDocuments }: ValidationTabContentProps) {
   // On prend le document le plus récent qui a un PDF
   const document = useMemo(() => {
     const sorted = [...archivedDocuments]
@@ -134,9 +136,19 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment }
           <FileX className="w-12 h-12 text-ink-300 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-ink-900">Aucun document à valider</h3>
           <p className="text-sm text-ink-500 mt-2">
-            Importez un document (CG bancaires, convention) dans l'onglet
-            « Documents » pour démarrer une session de validation IA.
+            Pour publier un barème au référentiel, importez d'abord le document
+            source (CG bancaires, convention) de <span className="font-medium text-ink-700">{bank.name}</span> dans
+            l'onglet « Documents ». La publication part toujours d'un document.
           </p>
+          {onGoToDocuments && (
+            <button
+              onClick={onGoToDocuments}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-ink-800"
+            >
+              <FileUp className="w-4 h-4" />
+              Aller à l'onglet « Documents »
+            </button>
+          )}
           <p className="text-xs text-ink-400 mt-3 inline-flex items-center gap-1">
             <Sparkles className="w-3 h-3" />
             PROPH3T extraira les conditions tarifaires en split-screen.

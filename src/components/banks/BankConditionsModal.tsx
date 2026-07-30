@@ -2070,6 +2070,7 @@ export function BankConditionsModal({
             <ValidationTabContent
               bank={bank}
               archivedDocuments={conditions.documents}
+              onGoToDocuments={() => setActiveTab('documents')}
               defaultSegment={
                 defaultSegment === 'particuliers' ? 'particulier'
                   : defaultSegment === 'entreprises' ? 'corporate'
