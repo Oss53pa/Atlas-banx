@@ -155,6 +155,27 @@ describe('findAmounts', () => {
   it('retourne un tableau vide quand il n\'y a aucun montant', () => {
     expect(findAmounts('LIBELLE SANS CHIFFRE')).toEqual([]);
   });
+
+  it('capture un entier NU de 4+ chiffres sans le tronquer (OCR sans espace)', () => {
+    // Régression : "2000" était tronqué en "200".
+    expect(findAmounts('Tenue de compte 2000')[0].raw).toBe('2000');
+    expect(findAmounts('Carte 25000 FCFA')[0].raw).toBe('25000');
+    // Mots intercalés (cas réel « 20 à 60 jous 110 ») → montants distincts.
+    const multi = findAmounts('1012 20 a 60 jous 110');
+    expect(multi.map((h) => h.raw)).toEqual(['1012', '20', '60', '110']);
+  });
+
+  it('un entier nu de 4+ chiffres se parse à sa valeur pleine', () => {
+    const hit = findAmounts('Frais 2000')[0];
+    expect(parseAmount(hit.raw)?.value).toBe(2000);
+    expect(parseAmount(findAmounts('X 25000')[0].raw)?.value).toBe(25000);
+  });
+
+  it('n\'altère pas les montants groupés ni les décimales', () => {
+    expect(findAmounts('A 5 000 B 5,000.50 C 0,025').map((h) => h.raw))
+      .toEqual(['5 000', '5,000.50', '0,025']);
+    expect(findAmounts('Taux 14,5 et 0,25').map((h) => h.raw)).toEqual(['14,5', '0,25']);
+  });
 });
 
 describe('looksLikeAmount', () => {

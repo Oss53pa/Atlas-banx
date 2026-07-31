@@ -173,9 +173,15 @@ export function looksLikeAmount(s: string): boolean {
 /** Find all amount-like substrings inside a free-text cell, in left-to-right order. */
 export function findAmounts(text: string): Array<{ start: number; end: number; raw: string }> {
   const results: Array<{ start: number; end: number; raw: string }> = [];
-  // Match clusters of digits separated by spaces / commas / dots
-  // Examples: "500 293",  "74 158 089",  "1 250,50",  "5,000.50"
-  const re = /[+-]?\s*\(?\s*\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{1,2})?\s*\)?/g;
+  // Match clusters of digits separated by spaces / commas / dots.
+  // Two shapes (grouped tried first) :
+  //   1. GROUPÉ  — "500 293", "74 158 089", "1 250,50", "5,000.50", "0,025"
+  //      (au moins un groupe de milliers `[sep]\d{3}`, décimale optionnelle)
+  //   2. BRUT    — "2000", "12345", "2000.50" (entier/décimal SANS séparateur
+  //      de milliers). Indispensable car l'OCR supprime souvent l'espace des
+  //      milliers ("2 000" → "2000") : sans cette branche, `\d{1,3}` tronquait
+  //      un entier nu de 4+ chiffres à ses 3 premiers ("2000" → "200").
+  const re = /[+-]?\s*\(?\s*(?:\d{1,3}(?:[\s.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*\)?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const raw = m[0].trim();
