@@ -37,6 +37,7 @@ export {
   rejectRubricProposal,
 } from './rubricProposals';
 export type { RubricProposal, ProposalStatus, ProposeRubricInput } from './rubricProposals';
+export { toTaxonomyCode, REGISTRY_TO_TAXONOMY } from './registryToTaxonomy';
 
 export type {
   LabelValuePair,
