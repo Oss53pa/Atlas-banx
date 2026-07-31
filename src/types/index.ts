@@ -616,7 +616,24 @@ export interface ArchivedDocument {
   segment?: TariffSegment;
   /** Empreinte SHA-256 (hex) du fichier source — détection des doublons d'import. */
   contentHash?: string;
+  /** Lignes VALIDÉES par l'utilisateur à l'import (écran de vérification).
+   *  Utilisées telles quelles pour la publication au référentiel L2 — au lieu
+   *  d'une ré-extraction aveugle qui ignorerait les corrections/suppressions. */
+  validatedConditions?: ValidatedConditionLine[];
   isActive: boolean;
+}
+
+/** Une condition validée par l'utilisateur, prête pour la publication L2. */
+export interface ValidatedConditionLine {
+  /** Clé de rubrique (registre FIELD_DEFINITIONS ou `custom:cat:slug`). */
+  rubricKey: string;
+  label: string;
+  value: number;
+  unit?: string;
+  qualitative?: string;
+  /** Rubrique custom auto-créée (vs rubrique du registre). */
+  custom?: boolean;
+  category?: string;
 }
 
 // ----------------------------------------------------------------------------

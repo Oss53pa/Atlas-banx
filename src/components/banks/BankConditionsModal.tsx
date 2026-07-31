@@ -32,7 +32,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Button, Badge } from '../ui';
-import type { Bank, BankConditions, ArchivedDocument, TariffSegment } from '../../types';
+import type { Bank, BankConditions, ArchivedDocument, TariffSegment, ValidatedConditionLine } from '../../types';
 import { ValidationTabContent } from './ValidationTabContent';
 import { useAuthStore } from '../../store/authStore';
 import { AFRICAN_COUNTRIES, ZONE_CURRENCIES } from '../../types';
@@ -608,6 +608,20 @@ export function BankConditionsModal({
     const detectedEffectiveDate = verification.payload.detectedEffectiveDate
       ? new Date(verification.payload.detectedEffectiveDate)
       : new Date();
+    // Lignes VALIDÉES par l'utilisateur (corrections/suppressions comprises) →
+    // portées sur le document pour piloter la publication L2 (au lieu d'une
+    // ré-extraction aveugle). Seules les lignes validées sont incluses.
+    const validatedConditions: ValidatedConditionLine[] = Object.entries(commit.conditions ?? {})
+      .map(([rubricKey, c]) => ({
+        rubricKey,
+        label: c.label ?? rubricKey,
+        value: c.value,
+        unit: c.unit,
+        qualitative: c.qualitative,
+        custom: c.custom,
+        category: c.category,
+      }));
+
     let archiveError: unknown = null;
     try {
       const base64 = await fileToBase64(file);
@@ -624,6 +638,7 @@ export function BankConditionsModal({
         extractedCustomFees: docCustomFees.length > 0 ? docCustomFees : undefined,
         segment: detectedSegment,
         contentHash: verification.contentHash,
+        validatedConditions: validatedConditions.length > 0 ? validatedConditions : undefined,
         isActive: true,
       };
       setConditions(prev => ({

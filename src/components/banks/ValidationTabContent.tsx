@@ -13,8 +13,25 @@ import { FileX, Sparkles, CheckCircle2, AlertTriangle, Loader2, FileUp } from 'l
 import type { Bank, ArchivedDocument } from '../../types';
 import { SplitScreenValidator, type ExtractedField } from '../../cdc/components/SplitScreenValidator';
 import { submitValidatedReference } from '../../cdc/services/submitValidatedReference';
-import { extractConditions } from '../../extraction/conditions';
+import { extractConditions, toTaxonomyCode } from '../../extraction/conditions';
 import { extractionResultToFields } from './extractionToFields';
+
+/** Convertit les lignes VALIDÉES par l'utilisateur (à l'import) en champs du
+ *  validateur — codes rubriques traduits en taxonomie CDC. Priorité sur la
+ *  ré-extraction : on publie exactement ce que l'utilisateur a validé/corrigé. */
+function validatedConditionsToFields(
+  lines: NonNullable<ArchivedDocument['validatedConditions']>,
+): ExtractedField[] {
+  return lines.map((l, i) => ({
+    id: `fld-val-${i}`,
+    rubricCode: toTaxonomyCode(l.rubricKey),
+    label: l.label,
+    value: l.qualitative ? l.qualitative : l.value,
+    unit: (l.unit as ExtractedField['unit']) ?? undefined,
+    bbox: null,
+    confidence: 'high',
+  }));
+}
 
 type ExtractionState =
   | { status: 'idle' }
@@ -91,15 +108,29 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment, 
   const [extractionState, setExtractionState] = useState<ExtractionState>({ status: 'idle' });
 
   const pdfUrl = document?.fileData ?? '';
+  const fromValidated = Boolean(document?.validatedConditions?.length);
 
-  // Lance la vraie extraction des conditions dès qu'un document est présent.
-  // Non bloquant : le rendu se fait immédiatement, les champs arrivent ensuite.
+  // Source des champs :
+  //   1) PRIORITÉ aux lignes VALIDÉES par l'utilisateur à l'import (corrections
+  //      et suppressions comprises) → on publie exactement ce qu'il a validé ;
+  //   2) sinon, ré-extraction du document (documents importés avant cette
+  //      fonctionnalité, ou saisie hors écran de vérification).
   useEffect(() => {
     if (!document || !pdfUrl) {
       setFields([]);
       setExtractionState({ status: 'idle' });
       return;
     }
+
+    // 1) Lignes validées présentes → on les utilise telles quelles.
+    if (document.validatedConditions && document.validatedConditions.length > 0) {
+      const mapped = validatedConditionsToFields(document.validatedConditions);
+      setFields(mapped);
+      setExtractionState({ status: 'done', count: mapped.length, warnings: [] });
+      return;
+    }
+
+    // 2) Repli : ré-extraction du PDF.
     let cancelled = false;
     setExtractionState({ status: 'extracting' });
     (async () => {
@@ -244,12 +275,24 @@ export function ValidationTabContent({ bank, archivedDocuments, defaultSegment, 
         </div>
       )}
       {extractionState.status === 'done' && (
-        <div className="px-4 py-2 bg-canvas-50 border-b border-canvas-200 text-xs text-ink-600 flex flex-col gap-1">
+        <div className={`px-4 py-2 border-b text-xs flex flex-col gap-1 ${
+          fromValidated ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-canvas-50 border-canvas-200 text-ink-600'
+        }`}>
           <span className="inline-flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-ink-400" />
-            {extractionState.count} champ{extractionState.count > 1 ? 's' : ''} extrait
-            {extractionState.count > 1 ? 's' : ''}
-            {extractionState.count === 0 && ' — aucune condition détectée, ajoutez les champs manuellement.'}
+            {fromValidated ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5 text-ink-400" />}
+            {fromValidated ? (
+              <>
+                {extractionState.count} ligne{extractionState.count > 1 ? 's' : ''} issue
+                {extractionState.count > 1 ? 's' : ''} de <strong>vos corrections</strong> à l'import
+                {' '}— publiées telles quelles (aucune ré-extraction).
+              </>
+            ) : (
+              <>
+                {extractionState.count} champ{extractionState.count > 1 ? 's' : ''} extrait
+                {extractionState.count > 1 ? 's' : ''}
+                {extractionState.count === 0 && ' — aucune condition détectée, ajoutez les champs manuellement.'}
+              </>
+            )}
           </span>
           {extractionState.warnings.length > 0 && (
             <span className="inline-flex items-start gap-1.5 text-amber-700">
