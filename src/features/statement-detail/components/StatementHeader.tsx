@@ -7,7 +7,7 @@
 //    [PDF source] [Comparer] [PROPH3T]"
 // ============================================================================
 
-import { FileText, ArrowLeftRight, Sparkles, User, Building2, Building, Briefcase } from 'lucide-react';
+import { FileText, ArrowLeftRight, User, Building2, Building, Briefcase } from 'lucide-react';
 import { formatDateDDMMYYYY } from '../../../lib/dateFormat';
 import { CLIENT_TYPE_LABEL, type ClientType } from '../../../types';
 
@@ -109,7 +109,7 @@ export function StatementHeader(props: StatementHeaderProps) {
           onClick={props.onOpenProphet}
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-canvas-300 bg-white hover:bg-canvas-50"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+          <img src="/proph3t.png" alt="Proph3t" className="w-4 h-4 object-contain" />
           PROPH3T
         </button>
       </div>

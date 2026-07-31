@@ -2,7 +2,6 @@
 // ProphetMessage — bulle de message (user ou assistant) avec citations + follow-ups
 // ============================================================================
 
-import { Sparkles } from 'lucide-react';
 import type { ProphetMessage as ProphetMessageType, ProphetCitation } from '../../statement-detail/types/statement.types';
 
 interface ProphetMessageProps {
@@ -19,7 +18,7 @@ export function ProphetMessage({ message, onCitationClick, onFollowUp }: Prophet
       <div className={`max-w-[85%] ${isUser ? 'bg-amber-100 text-ink-900' : 'bg-white border border-canvas-200'} rounded-lg p-2.5`}>
         {!isUser && (
           <div className="flex items-center gap-1 mb-1">
-            <Sparkles className="w-3 h-3 text-amber-600" />
+            <img src="/proph3t.png" alt="Proph3t" className="w-4 h-4 object-contain" />
             <span className="text-[10px] uppercase tracking-wider text-ink-500 font-semibold">PROPH3T</span>
           </div>
         )}

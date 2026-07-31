@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { X, Sparkles, History, Settings } from 'lucide-react';
+import { X, History, Settings } from 'lucide-react';
 import type { ProphetMessage as ProphetMessageType, ProphetCitation } from '../../statement-detail/types/statement.types';
 import { ProphetSuggestions } from './ProphetSuggestions';
 import { ProphetMessage } from './ProphetMessage';
@@ -88,7 +88,7 @@ export function ProphetDrawer(props: ProphetDrawerProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-600" />
+          <img src="/proph3t.png" alt="Proph3t" className="w-5 h-5 object-contain" />
           <span className="text-sm font-semibold text-ink-900">PROPH3T</span>
           <span className="text-xs text-ink-500">· copilote</span>
         </div>
