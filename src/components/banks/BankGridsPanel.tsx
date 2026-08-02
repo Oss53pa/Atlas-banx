@@ -267,6 +267,7 @@ export function BankGridsPanel({
           currency={currency}
           onEdit={() => onEditGrid(selectedGrid)}
           onViewSource={() => onViewSource(selectedGrid)}
+          onDelete={() => onDeleteGrid(selectedGrid)}
           onChangeSegment={(segment) => onChangeSegment(selectedGrid, segment)}
         />
       )}

@@ -12,7 +12,7 @@
 import {
   Calendar, Clock, FileText, Pencil, Receipt, CreditCard,
   ArrowLeftRight, Percent, Smartphone, Wallet,
-  Banknote,
+  Banknote, Trash2,
 } from 'lucide-react';
 import { Card, CardBody, Button, Badge } from '../ui';
 import type { ConditionGrid, BankConditions, TariffSegment } from '../../types';
@@ -25,6 +25,8 @@ interface GridSummaryCardProps {
   currency: 'XAF' | 'XOF';
   onEdit?: () => void;
   onViewSource?: () => void;
+  /** Supprime définitivement cette grille importée (le parent gère la confirmation). */
+  onDelete?: () => void;
   /** Réaffecte le segment tarifaire (Particuliers / Entreprises / …) de la grille. */
   onChangeSegment?: (segment: TariffSegment | null) => void;
 }
@@ -273,7 +275,7 @@ function extractCardCotisations(
 // Composant principal
 // ────────────────────────────────────────────────────────────────────────────
 
-export function GridSummaryCard({ grid, currency, onEdit, onViewSource, onChangeSegment }: GridSummaryCardProps) {
+export function GridSummaryCard({ grid, currency, onEdit, onViewSource, onDelete, onChangeSegment }: GridSummaryCardProps) {
   const sectionRows = SECTIONS
     .map((s) => ({ section: s, rows: extractSectionRows(grid.conditions, s, currency) }))
     .filter((sr) => sr.rows.length > 0);
@@ -344,6 +346,26 @@ export function GridSummaryCard({ grid, currency, onEdit, onViewSource, onChange
               <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={onEdit}>
                 <Pencil className="w-3 h-3 mr-1" />
                 Éditer
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-7 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                title="Supprimer définitivement cette grille importée"
+                onClick={() => {
+                  const ok = confirm(
+                    `Supprimer définitivement la grille « ${grid.name} » `
+                    + `(du ${fmtDate(grid.effectiveDate)}) ?\n\n`
+                    + `Cette action retire le barème et son document source. `
+                    + `Elle est irréversible.`,
+                  );
+                  if (ok) onDelete();
+                }}
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Supprimer
               </Button>
             )}
           </div>

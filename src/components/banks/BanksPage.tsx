@@ -15,11 +15,12 @@ import { BankGridsPanel } from './BankGridsPanel';
 import type { Bank, BankConditions, ConditionGrid, MonetaryZone, ArchivedDocument, TariffSegment } from '../../types';
 import { CEMAC_COUNTRIES, UEMOA_COUNTRIES, AFRICAN_COUNTRIES } from '../../types';
 import { extractConditions } from '../../extraction/conditions';
-import { setByPath } from '../../extraction/normalize';
+import { isCustomRubricKey, parseCustomRubricKey } from '../../extraction/conditions/RubricClassifier';
 import {
   getEmptyFullConditions,
   applyExtractedValuesToConditions,
   customFeesToFeeSchedules,
+  type CustomFee,
 } from '../../extraction/conditionsForm';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -63,6 +64,18 @@ interface ReconcileArgs {
   ) => ConditionGrid;
   updateConditionGrid: (bankId: string, gridId: string, updates: Partial<ConditionGrid>) => void;
   archiveConditionGrid: (bankId: string, gridId: string) => void;
+}
+
+// Lit un File en data-URL base64 (`data:application/pdf;base64,…`) — format
+// stocké dans ArchivedDocument.fileData et attendu par l'onglet de publication
+// (SplitScreenValidator) comme par le lien de téléchargement.
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader a échoué'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function reconcileGridsFromDocuments(args: ReconcileArgs): void {
@@ -409,48 +422,96 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
   };
 
   // User validated rows in the modal → commit a new ConditionGrid
-  const handleVerifiedConditionsCommit = (_args: CommitArgs, commit: CommitResult) => {
+  const handleVerifiedConditionsCommit = async (_args: CommitArgs, commit: CommitResult) => {
     if (!verification) {
       return;
     }
     const { bankId, bank, file } = verification;
 
-    // Project validated rubrics into the nested BankConditions structure.
-    // We commit the grid even when nothing got auto-mapped — the document
-    // archive is still useful and the user can edit values manually.
-    const structured: Record<string, unknown> = {};
+    // On embarque le PDF source (base64) sur le document archivé : sans lui,
+    // l'onglet « Publier au référentiel » filtre le document (Boolean(fileData))
+    // et affiche « Aucun document à valider », et le lien de téléchargement
+    // (href={doc.fileData}) est mort. Repli chaîne vide si la lecture échoue —
+    // la grille reste créée, seul le PDF manque.
+    let fileData = '';
+    try {
+      fileData = await fileToDataUrl(file);
+    } catch (err) {
+      console.error('Erreur conversion PDF → base64:', err);
+    }
+
+    // Sépare les rubriques validées en deux canaux (comme l'import de la
+    // modale) :
+    //   • clés du REGISTRE → extractedValues, PUIS traduites vers l'espace de
+    //     noms du formulaire (tenueCompte.*, fraisCartes.*, …) via
+    //     applyExtractedValuesToConditions — le SEUL espace lu par la grille
+    //     (GridSummaryCard) et par les algorithmes d'audit.
+    //   • clés CUSTOM      → CustomFee[] → fees[] (détecteurs ghost-fee /
+    //     surfacturation).
+    // AVANT ce correctif on faisait setByPath(structured, 'accountFees.…') :
+    // les valeurs atterrissaient dans un espace de noms que PERSONNE ne lit,
+    // d'où « paires détectées » mais « aucune donnée » importée.
+    const extractedValues: Record<string, number> = {};
+    const customFees: CustomFee[] = [];
     if (commit.conditions) {
       for (const [rubricKey, val] of Object.entries(commit.conditions)) {
-        // Skip qualitative-only rows (no numeric value) for the structured mapping
-        const value = val.qualitative && val.value === 0 ? null : val.value;
-        if (value === null) continue;
-        setByPath(structured, rubricKey, value);
+        // Ignore les lignes purement qualitatives (valeur numérique nulle).
+        if (val.qualitative && val.value === 0) continue;
+        if (isCustomRubricKey(rubricKey)) {
+          const parsed = parseCustomRubricKey(rubricKey);
+          customFees.push({
+            id: uuidv4(),
+            label: val.label ?? parsed?.slug ?? 'Rubrique',
+            amount: Number.isFinite(val.value) ? val.value : 0,
+            type: val.unit === '%' ? 'percent' : 'fixed',
+            frequency: 'per_operation',
+            category: val.category ?? parsed?.category ?? 'divers',
+          });
+        } else {
+          extractedValues[rubricKey] = val.value;
+        }
       }
     }
-    const mappedCount = Object.keys(structured).length;
+    const mappedCount = Object.keys(extractedValues).length;
+    const customCount = customFees.length;
+
+    // Registre → formulaire (tenueCompte.particulierLocal, …).
+    const fullConditions = applyExtractedValuesToConditions(
+      getEmptyFullConditions(),
+      extractedValues,
+    );
+
+    // Document source archivé — un SEUL objet partagé par documents[] et
+    // sourceDocument (id commun → reconcileGridsFromDocuments le retrouve par
+    // id). Porte extractedValues/CustomFees pour que la ré-édition et la
+    // réconciliation de grille repartent exactement des mêmes valeurs.
+    const archivedDoc: ArchivedDocument = {
+      id: uuidv4(),
+      name: file.name,
+      type: 'conditions',
+      uploadDate: new Date(),
+      effectiveDate: new Date(),
+      fileData,
+      fileSize: file.size,
+      extractedAt: new Date(),
+      extractedValues: mappedCount > 0 ? extractedValues : undefined,
+      extractedCustomFees: customCount > 0 ? customFees : undefined,
+      ...(defaultSegment ? { segment: defaultSegment } : {}),
+      isActive: true,
+    };
 
     const baseConditions: BankConditions = {
+      ...(fullConditions as unknown as BankConditions),
       id: uuidv4(),
       bankCode: bank.code,
       bankName: bank.name,
       country: bank.country,
       currency: bank.zone === 'UEMOA' ? 'XOF' : 'XAF',
       effectiveDate: new Date(),
-      fees: [],
+      fees: customFeesToFeeSchedules(customFees),
       interestRates: [],
       isActive: true,
-      documents: [{
-        id: uuidv4(),
-        name: file.name,
-        type: 'conditions',
-        uploadDate: new Date(),
-        effectiveDate: new Date(),
-        fileData: '',
-        fileSize: file.size,
-        extractedAt: new Date(),
-        isActive: true,
-      }],
-      ...structured,
+      documents: [archivedDoc],
     };
 
     const newGrid: Omit<ConditionGrid, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -463,17 +524,7 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
       // (Particuliers / Entreprises) quand on est dans ce contexte.
       ...(defaultSegment ? { segment: defaultSegment } : {}),
       conditions: baseConditions,
-      sourceDocument: {
-        id: uuidv4(),
-        name: file.name,
-        type: 'conditions',
-        uploadDate: new Date(),
-        effectiveDate: new Date(),
-        fileData: '',
-        fileSize: file.size,
-        extractedAt: new Date(),
-        isActive: true,
-      },
+      sourceDocument: archivedDoc,
       notes: `${commit.validated} rubrique(s) validée(s), ${commit.rejected} rejetée(s).`,
     };
 
@@ -497,7 +548,7 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
     setSelectedBank(bankId);
     setShowConditions(true); // open the legacy editor on the new grid for fine-tuning
 
-    if (mappedCount === 0) {
+    if (mappedCount === 0 && customCount === 0) {
       // Soft warning — grid is created and document archived; user can fill manually.
       setTimeout(() => {
         alert(

@@ -37,6 +37,51 @@ function stripSectionNumber(label: string): string {
   return label.replace(SECTION_NUMBER_PREFIX, '').trim();
 }
 
+// ── Réparation OCR des chiffres ─────────────────────────────────────────────
+// L'OCR confond fréquemment lettres et chiffres dans les montants ("5 O00",
+// "l 250", "25.S00"). On corrige ces confusions — mais UNIQUEMENT à l'intérieur
+// de tokens déjà « numériques » : contenant au moins un vrai chiffre et
+// composés exclusivement de chiffres, séparateurs, signes et sosies connus.
+// Un vrai libellé ("Compte", "Gratuit", "3D Secure") contient d'autres lettres
+// → il n'est jamais numérique → jamais touché. La substitution est 1 char → 1
+// char (longueur préservée), donc les index restent valides et le libellé est
+// toujours découpé sur le texte ORIGINAL, jamais corrompu.
+const OCR_DIGIT_LOOKALIKE: Record<string, string> = {
+  O: '0', o: '0', Q: '0',
+  I: '1', l: '1', '|': '1',
+  Z: '2', z: '2',
+  S: '5', s: '5',
+  G: '6',
+  B: '8',
+};
+const NUMERIC_SEP_CHARS = '.,+-()';
+
+/** Un token est « numérique » s'il a ≥1 vrai chiffre, ≥2 caractères
+ *  chiffre-ou-sosie, et AUCUN caractère hors {chiffres, sosies, séparateurs}. */
+function isNumericishToken(tok: string): boolean {
+  if (!/[0-9]/.test(tok)) return false;
+  let digitLike = 0;
+  for (const ch of tok) {
+    if (ch >= '0' && ch <= '9') { digitLike++; continue; }
+    if (ch in OCR_DIGIT_LOOKALIKE) { digitLike++; continue; }
+    if (NUMERIC_SEP_CHARS.includes(ch)) continue;
+    return false; // toute autre lettre → ce n'est pas un montant → on n'y touche pas
+  }
+  return digitLike >= 2;
+}
+
+/** Remplace les sosies de chiffres uniquement dans les tokens numériques.
+ *  Longueur strictement préservée (index conservés). */
+function repairNumericTokens(text: string): string {
+  return text
+    .split(/(\s+)/) // garde les blancs comme tokens → jointure exacte
+    .map((tok) => {
+      if (/^\s*$/.test(tok) || !isNumericishToken(tok)) return tok;
+      return tok.replace(/./g, (ch) => OCR_DIGIT_LOOKALIKE[ch] ?? ch);
+    })
+    .join('');
+}
+
 /** Detect a qualitative value embedded in a row text. Returns null if none. */
 function detectQualitative(text: string): NonNullable<LabelValuePair['qualitative']> | null {
   for (const { q, re } of QUALITATIVE_PATTERNS) {
@@ -89,7 +134,12 @@ interface SplitResult {
  *  fall back to qualitative detection. */
 function splitLabelValue(row: ReconstructedRow): SplitResult | null {
   const text = row.items.map((i) => i.text).join(' ').trim();
-  const amounts = findAmounts(text);
+  // Réparation OCR des chiffres AVANT détection des montants. `scanText` a la
+  // même longueur que `text` (les index coïncident) : on cherche le montant
+  // dans `scanText` (chiffres corrigés) mais on découpe TOUJOURS le libellé
+  // dans `text` (original, jamais corrompu).
+  const scanText = repairNumericTokens(text);
+  const amounts = findAmounts(scanText);
 
   // ─── Path A: numeric value present ────────────────────────────────────
   if (amounts.length > 0) {

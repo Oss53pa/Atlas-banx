@@ -148,17 +148,42 @@ export class OcrService {
       source = await this.fileToDataUrl(imageSource);
     }
 
-    const result = await worker.recognize(source);
+    // tesseract.js v6+ : il n'y a plus de `data.words` à plat. Les mots (et
+    // leurs bbox) vivent sous data.blocks[].paragraphs[].lines[].words[], et
+    // ne sont peuplés QUE si l'on demande explicitement la sortie `blocks`.
+    // Sans ce 3e argument, `data.blocks` est null → 0 mot → l'extraction
+    // position-aware des scans échouait silencieusement.
+    const result = await worker.recognize(source, {}, { blocks: true });
+    const data = result.data as unknown as {
+      text: string;
+      confidence: number;
+      blocks?: Array<{
+        paragraphs?: Array<{
+          lines?: Array<{
+            words?: Array<{
+              text: string;
+              bbox: { x0: number; y0: number; x1: number; y1: number };
+              confidence: number;
+            }>;
+          }>;
+        }>;
+      }> | null;
+    };
 
-    const words = (result.data as { words?: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }> }).words?.map((w: { text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }) => ({
-      text: w.text,
-      bbox: w.bbox,
-      confidence: w.confidence,
-    })) || [];
+    const words: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }> = [];
+    for (const block of data.blocks ?? []) {
+      for (const para of block.paragraphs ?? []) {
+        for (const line of para.lines ?? []) {
+          for (const w of line.words ?? []) {
+            words.push({ text: w.text, bbox: w.bbox, confidence: w.confidence });
+          }
+        }
+      }
+    }
 
     return {
-      text: result.data.text,
-      confidence: result.data.confidence,
+      text: data.text,
+      confidence: data.confidence,
       words,
     };
   }
