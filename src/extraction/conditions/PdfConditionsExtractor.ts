@@ -80,43 +80,71 @@ export async function extractConditions(
     warnings.push('PDF scanné détecté — extraction par OCR (positions limitées)');
     options.onProgress?.({ stage: 'ocr', pct: 0, message: 'OCR en cours...' });
 
-    // For scanned conditions docs we OCR each page and synthesize
-    // pseudo-positions: each line gets its own Y, words within a line
-    // share the same Y, X = column index × estimated char width.
-    // This is good enough for the "rightmost amount = value" heuristic.
+    // For scanned conditions docs we OCR each page and use the REAL word
+    // bounding boxes returned by Tesseract → accurate X/Y per word. This lets
+    // the column-band segmentation and the "rightmost amount = value" heuristic
+    // work on scans exactly like on native-text PDFs. Only if the engine
+    // returns no word boxes do we fall back to a crude line-by-index synthesis.
     items.length = 0;
+    // Higher render scale = sharper glyphs = better OCR on small tariff tables.
+    const OCR_SCALE = 3;
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
-      const scale = 2;
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({ scale: OCR_SCALE });
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       await page.render({ canvas, canvasContext: ctx, viewport }).promise;
       const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
-      const result = await OcrService.recognizeImage(blob);
-      if (!result.success) continue;
 
-      const lines = result.text.split('\n');
-      const lineHeight = 12;
-      const charWidth = 5;
-      lines.forEach((line, lineIdx) => {
-        const y = (lines.length - lineIdx) * lineHeight; // top-to-bottom → big Y first
-        let x = 0;
-        for (const word of line.split(/\s+/)) {
-          if (!word) continue;
+      let ocr: Awaited<ReturnType<typeof OcrService.recognizeImageWithBboxes>> | null = null;
+      try {
+        ocr = await OcrService.recognizeImageWithBboxes(blob);
+      } catch (err) {
+        warnings.push(`OCR page ${p} échoué : ${err instanceof Error ? err.message : 'erreur'}`);
+      }
+
+      if (ocr && ocr.words.length > 0) {
+        // Tesseract : origine haut-gauche (y croît vers le bas). pdfjs +
+        // clusterRowsFromItems : origine bas-gauche (y plus grand = plus haut).
+        // On inverse Y avec la hauteur du canvas pour rester cohérent.
+        const H = canvas.height;
+        for (const w of ocr.words) {
+          const text = (w.text ?? '').trim();
+          if (!text) continue;
+          const { x0, y0, x1, y1 } = w.bbox;
           items.push({
-            text: word,
+            text,
             page: p,
-            x,
-            y,
-            width: word.length * charWidth,
-            height: lineHeight,
+            x: x0,
+            y: H - y0,
+            width: Math.max(1, x1 - x0),
+            height: Math.max(1, y1 - y0),
           });
-          x += (word.length + 1) * charWidth;
         }
-      });
+      } else if (ocr) {
+        // Repli : aucune bbox → synthèse par ligne (positions approximatives).
+        const lines = ocr.text.split('\n');
+        const lineHeight = 12;
+        const charWidth = 5;
+        lines.forEach((line, lineIdx) => {
+          const y = (lines.length - lineIdx) * lineHeight; // top-to-bottom → big Y first
+          let x = 0;
+          for (const word of line.split(/\s+/)) {
+            if (!word) continue;
+            items.push({
+              text: word,
+              page: p,
+              x,
+              y,
+              width: word.length * charWidth,
+              height: lineHeight,
+            });
+            x += (word.length + 1) * charWidth;
+          }
+        });
+      }
 
       options.onProgress?.({
         stage: 'ocr',
