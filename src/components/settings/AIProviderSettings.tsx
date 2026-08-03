@@ -80,10 +80,8 @@ const PROVIDERS = {
     icon: Zap,
     color: 'orange',
     models: [
-      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Recommande)' },
-      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (Rapide)' },
-      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
-      { value: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+      { value: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (Recommande)' },
+      { value: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (Rapide)' },
     ],
     placeholder: 'gsk_...',
     description: 'Inference LPU ultra-rapide, modeles open-weight',

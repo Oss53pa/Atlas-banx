@@ -8,7 +8,10 @@
 //
 // Variables d'environnement :
 //   - GROQ_API_KEY   (obligatoire)
-//   - GROQ_MODEL     (défaut 'llama-3.3-70b-versatile')
+//   - GROQ_MODEL     (défaut 'openai/gpt-oss-120b')
+//     ⚠ llama-3.3-70b-versatile et llama-3.1-8b-instant ont été DÉPRÉCIÉS par
+//     Groq le 2026-06-17 (tier free/dev) → remplacés par openai/gpt-oss-120b
+//     (≈70B, recommandé) et openai/gpt-oss-20b (rapide).
 //
 // POST body : { messages: [{role, content}], system?, model?, temperature?, maxTokens? }
 // Réponse   : { content, model, tokensUsed }
@@ -16,7 +19,7 @@
 // ============================================================================
 
 const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') ?? '';
-const GROQ_MODEL = Deno.env.get('GROQ_MODEL') ?? 'llama-3.3-70b-versatile';
+const GROQ_MODEL = Deno.env.get('GROQ_MODEL') ?? 'openai/gpt-oss-120b';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const CORS = {
