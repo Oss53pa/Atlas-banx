@@ -7,7 +7,7 @@ export { PdfViewerWithOverlay } from './PdfViewerWithOverlay';
 export { VerificationTable } from './VerificationTable';
 export { SanityCheckBanner } from './SanityCheckBanner';
 export { useVerificationState } from './useVerificationState';
-export { buildStatementPayload, buildConditionsPayload } from './payloadBuilders';
+export { buildStatementPayload, buildConditionsPayload, buildAutoCommitResult } from './payloadBuilders';
 
 export type {
   VerificationMode,

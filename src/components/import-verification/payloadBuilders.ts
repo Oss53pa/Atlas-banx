@@ -10,11 +10,18 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ExtractedTransaction } from '../../extraction/bank-statement';
 import type { ExtractionReport } from '../../extraction';
 import type { LabelValuePair, RubricMatch } from '../../extraction/conditions/types';
-import { classifyPairs } from '../../extraction/conditions';
-import type {
-  ConditionRow,
-  StatementRow,
-  VerificationPayload,
+import {
+  classifyPairs,
+  isCustomRubricKey,
+  parseCustomRubricKey,
+} from '../../extraction/conditions/RubricClassifier';
+import {
+  AUTO_VALIDATE_CONFIDENCE,
+  type CommitResult,
+  type CommittedCondition,
+  type ConditionRow,
+  type StatementRow,
+  type VerificationPayload,
 } from './types';
 
 interface StatementBuildArgs {
@@ -61,6 +68,51 @@ export function buildStatementPayload(args: StatementBuildArgs): VerificationPay
     },
     rows,
   };
+}
+
+/**
+ * Construit un CommitResult SANS écran de vérification : toute ligne dont la
+ * confiance ≥ `threshold` est considérée validée (même règle que la
+ * pré-validation au montage de la modale). Utilisé par l'import GROUPÉ en mode
+ * auto-commit — il produit exactement la même forme que `computeCommitResult`
+ * pour que le handler de commit soit partagé entre les deux chemins.
+ */
+export function buildAutoCommitResult(
+  payload: VerificationPayload,
+  threshold: number = AUTO_VALIDATE_CONFIDENCE,
+): CommitResult {
+  const validated = (payload.rows as ConditionRow[]).filter((r) => r.confidence >= threshold);
+  const rejected = payload.rows.length - validated.length;
+
+  const catalogByKey = new Map<string, { label: string; category: string }>();
+  for (const r of payload.rubricCatalog ?? []) {
+    catalogByKey.set(r.key, { label: r.label, category: r.category });
+  }
+
+  const conditions: Record<string, CommittedCondition> = {};
+  for (const row of validated) {
+    const key = row.data.rubricKey;
+    if (!key) continue;
+    const value = row.data.value ?? 0;
+    const unit = row.data.unit;
+    const qualitative = row.data.qualitative;
+    if (isCustomRubricKey(key)) {
+      const meta = catalogByKey.get(key);
+      const parsed = parseCustomRubricKey(key);
+      conditions[key] = {
+        value,
+        unit,
+        qualitative,
+        custom: true,
+        label: meta?.label ?? row.data.rubricLabel ?? row.data.label ?? parsed?.slug ?? 'Rubrique',
+        category: meta?.category ?? parsed?.category ?? 'divers',
+      };
+    } else {
+      conditions[key] = { value, unit, qualitative };
+    }
+  }
+
+  return { conditions, validated: validated.length, rejected };
 }
 
 interface ConditionsBuildArgs {
