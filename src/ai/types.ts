@@ -61,10 +61,9 @@ export const AI_MODELS: Record<AIProviderType, AIModel[]> = {
     { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', contextWindow: 16385, maxOutputTokens: 4096 },
   ],
   groq: [
-    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', provider: 'groq', contextWindow: 128000, maxOutputTokens: 32768, isDefault: true },
-    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', provider: 'groq', contextWindow: 128000, maxOutputTokens: 8192 },
-    { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', provider: 'groq', contextWindow: 32768, maxOutputTokens: 32768 },
-    { id: 'gemma2-9b-it', name: 'Gemma 2 9B', provider: 'groq', contextWindow: 8192, maxOutputTokens: 8192 },
+    // llama-3.3-70b-versatile / llama-3.1-8b-instant dépréciés (Groq, 2026-06-17).
+    { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B', provider: 'groq', contextWindow: 131072, maxOutputTokens: 32768, isDefault: true },
+    { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B (rapide)', provider: 'groq', contextWindow: 131072, maxOutputTokens: 32768 },
   ],
   mistral: [
     { id: 'mistral-large-latest', name: 'Mistral Large', provider: 'mistral', contextWindow: 128000, maxOutputTokens: 8192, isDefault: true },

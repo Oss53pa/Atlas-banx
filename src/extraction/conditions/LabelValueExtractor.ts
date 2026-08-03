@@ -19,8 +19,15 @@ import type { LabelValuePair } from './types';
 import { clusterRowsFromItems } from '../bank-statement/HeaderDetector';
 import { segmentColumnBands } from './columnBands';
 
-/** Section number prefix at the start of a label (eg "10.1.2", "8.1") */
-const SECTION_NUMBER_PREFIX = /^(?:\d+(?:\.\d+){1,5})\s+/;
+// Numéro de section en tête de libellé. Deux formes :
+//  1) hiérarchique avec séparateurs — l'OCR confond le point avec « , » ou
+//     « : » (ex. "10.1.2", "8.1", "1.1.1.5:1", "2,2,2,1,5,10").
+//  2) OCR ayant PERDU les points → longue suite de chiffres collés
+//     ("2.2.2.1.5.10" lu "2221510"). On ne strippe une suite NUE que si elle
+//     fait ≥ 4 chiffres (multi-niveaux) ET est suivie d'un vrai libellé
+//     (lettre) — pour ne jamais manger un petit nombre légitime.
+const SECTION_NUMBER_PREFIX = /^(?:\d+(?:[.,:]\d+){1,7})[\s.:)-]+/;
+const OCR_SECTION_DIGITS_PREFIX = /^\d{4,}[\s.:)-]+(?=[^\d\s])/;
 
 /** Qualitative values commonly used in tariff grids. Order matters — the
  *  more specific patterns are tested first. */
@@ -32,9 +39,13 @@ const QUALITATIVE_PATTERNS: Array<{ q: NonNullable<LabelValuePair['qualitative']
   { q: 'consulter',   re: /\bnous\s*consulter\b/i },
 ];
 
-/** Strip a leading section number from a label, if present. */
+/** Strip a leading section number from a label, if present (formes pointée ET
+ *  OCR-dépointée). */
 function stripSectionNumber(label: string): string {
-  return label.replace(SECTION_NUMBER_PREFIX, '').trim();
+  return label
+    .replace(SECTION_NUMBER_PREFIX, '')
+    .replace(OCR_SECTION_DIGITS_PREFIX, '')
+    .trim();
 }
 
 // ── Réparation OCR des chiffres ─────────────────────────────────────────────
