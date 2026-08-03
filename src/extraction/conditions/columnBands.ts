@@ -19,6 +19,7 @@
 // ============================================================================
 
 import type { PositionedItem } from '../bank-statement/types';
+import { looksLikeAmount } from '../bank-statement/AmountParser';
 
 /** X interval covered by an item. */
 function itemLeft(it: PositionedItem): number {
@@ -26,6 +27,28 @@ function itemLeft(it: PositionedItem): number {
 }
 function itemRight(it: PositionedItem): number {
   return it.x + (it.width ?? Math.max(4, it.text.length * 4));
+}
+
+/** Un token « textuel » (libellé) = contient des lettres et n'est pas un montant. */
+function isTextToken(it: PositionedItem): boolean {
+  return /[a-zA-ZÀ-ÿ]/.test(it.text) && !looksLikeAmount(it.text);
+}
+
+/**
+ * Vrai si le contenu juste À DROITE de `cutX` est majoritairement TEXTUEL
+ * (des libellés de la colonne suivante) plutôt que numérique. C'est ce qui
+ * distingue une vraie gouttière INTER-colonnes (à droite : des libellés) d'un
+ * simple gap libellé→valeur INTERNE à une colonne (à droite : des valeurs).
+ */
+function rightSideIsLabels(cutX: number, items: PositionedItem[], pageWidth: number): boolean {
+  const win = pageWidth * 0.15;
+  const near = items
+    .filter((it) => itemLeft(it) >= cutX && itemLeft(it) < cutX + win)
+    .sort((a, b) => itemLeft(a) - itemLeft(b))
+    .slice(0, 16);
+  if (near.length < 3) return false; // rien de substantiel à droite → bord de page
+  const textCount = near.filter(isTextToken).length;
+  return textCount >= near.length * 0.5;
 }
 
 /**
@@ -48,17 +71,30 @@ export function segmentColumnBands(items: PositionedItem[]): PositionedItem[][] 
   const pageWidth = maxX - minX;
   if (!Number.isFinite(pageWidth) || pageWidth <= 0) return [items];
 
-  // Occupancy histogram along X (fine bins).
+  // Occupancy histogram along X (fine bins). On compte le NOMBRE d'items par
+  // bin (densité), pas un simple booléen : un titre pleine largeur, un pied de
+  // page ou un libellé qui déborde ne doivent PAS masquer une gouttière réelle.
   const BINS = 400;
   const binW = pageWidth / BINS;
-  const occupied = new Uint8Array(BINS);
+  const binCount = new Uint16Array(BINS);
   for (const it of items) {
     const l = Math.max(0, Math.floor((itemLeft(it) - minX) / binW));
     const r = Math.min(BINS - 1, Math.floor((itemRight(it) - minX) / binW));
-    for (let b = l; b <= r; b++) occupied[b] = 1;
+    for (let b = l; b <= r; b++) binCount[b]++;
   }
 
-  // Find interior gutters: maximal runs of empty bins with occupied content on
+  // Nombre de lignes approximatif (Y distincts, tolérance verticale). Sert à
+  // définir une gouttière comme un corridor de FAIBLE densité : quelques lignes
+  // seulement le traversent (titre, ligne d'exemple TEG, libellé débordant),
+  // vs une colonne réelle occupée par la majorité des lignes.
+  const yKeys = new Set<number>();
+  for (const it of items) yKeys.add(Math.round(it.y / 3));
+  const approxRows = Math.max(1, yKeys.size);
+  // Tolère jusqu'à ~10% des lignes traversant le corridor (titre/débordement).
+  const gutterMaxCount = Math.max(1, Math.round(approxRows * 0.1));
+  const isGutterBin = (b: number): boolean => binCount[b] <= gutterMaxCount;
+
+  // Find interior gutters: maximal runs of LOW-DENSITY bins with real content on
   // BOTH sides. A gutter must be wide enough to be a real column separator and
   // not an ordinary intra-row cell gap.
   const MIN_GUTTER_FRAC = 0.03; // ≥ 3% of page width
@@ -68,11 +104,18 @@ export function segmentColumnBands(items: PositionedItem[]): PositionedItem[][] 
   let run = 0;
   let sawContentBefore = false;
   for (let b = 0; b < BINS; b++) {
-    if (occupied[b]) {
+    if (!isGutterBin(b)) {
       if (run >= minGutterBins && sawContentBefore) {
-        // A qualifying gutter ends here → cut at its center.
+        // A qualifying gutter ends here → cut at its center — mais SEULEMENT si
+        // ce qui suit est une nouvelle colonne de libellés (pas la colonne de
+        // valeurs d'un simple gap libellé→valeur interne).
         const center = b - run / 2;
-        cutXs.push(minX + center * binW);
+        const cutX = minX + center * binW;
+        // `b` = premier bin de contenu APRÈS la gouttière → bord droit réel.
+        const rightEdgeX = minX + b * binW;
+        if (rightSideIsLabels(rightEdgeX, items, pageWidth)) {
+          cutXs.push(cutX);
+        }
       }
       run = 0;
       sawContentBefore = true;

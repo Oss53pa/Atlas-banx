@@ -26,10 +26,13 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   ImportVerificationModal,
   buildConditionsPayload,
+  buildAutoCommitResult,
+  AUTO_VALIDATE_CONFIDENCE,
   type CommitArgs,
   type CommitResult,
   type VerificationPayload,
 } from '../import-verification';
+import { BatchImportModal, type BatchValidationMode } from './BatchImportModal';
 
 type ViewMode = 'banks' | 'grids';
 
@@ -275,6 +278,14 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
   // fichier passe à tour de rôle par la modale de vérification.
   const [pendingImports, setPendingImports] = useState<{ file: File; bankId: string }[]>([]);
 
+  // Mode de validation de la file d'import en cours :
+  //   null            → import « legacy » mono-banque (vérif + éditeur ouvert)
+  //   'verify'        → import groupé, vérification par fichier
+  //   'auto'          → import groupé, auto-commit (rubriques ≥ seuil)
+  //   'auto-doubt'    → import groupé, auto-commit sauf fichier douteux → vérif
+  const [importMode, setImportMode] = useState<BatchValidationMode | null>(null);
+  const [showBatchImport, setShowBatchImport] = useState(false);
+
   // Selected bank
   const selectedBank = useMemo(() => {
     return selectedBankId ? banks.find(b => b.id === selectedBankId) ?? null : null;
@@ -285,11 +296,6 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
     if (!selectedBank) return [];
     return getAllGrids(selectedBank.id);
   }, [selectedBank, getAllGrids]);
-
-  const activeGrid = useMemo(() => {
-    if (!selectedBank) return null;
-    return getActiveGrid(selectedBank.id);
-  }, [selectedBank, getActiveGrid]);
 
   // Filtered banks
   const filteredBanks = useMemo(() => {
@@ -367,7 +373,24 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
   // Traite la file d'import : extrait le prochain fichier exploitable et ouvre
   // la modale de vérification. Les fichiers vides/en erreur sont ignorés (avec
   // notification) et l'on passe automatiquement au suivant.
-  const processNextImport = async (queue: { file: File; bankId: string }[]) => {
+  // Un fichier est « douteux » (mode auto-doubt → on ouvre la vérification) si
+  // aucune ligne n'atteint le seuil d'auto-validation, ou si la confiance
+  // moyenne est basse.
+  const hasImportDoubt = (payload: VerificationPayload): boolean => {
+    if (payload.rows.length === 0) return true;
+    const eligible = payload.rows.filter((r) => r.confidence >= AUTO_VALIDATE_CONFIDENCE).length;
+    return eligible === 0 || payload.stats.averageConfidence < 0.75;
+  };
+
+  // Traite la file d'import. `mode` = null → import mono-banque « legacy »
+  // (vérification systématique + ouverture de l'éditeur à la fin). Sinon import
+  // GROUPÉ multi-banques : 'verify' (vérif par fichier), 'auto' (auto-commit),
+  // 'auto-doubt' (auto-commit sauf fichiers douteux). Les fichiers en erreur /
+  // sans condition sont ignorés (notification) et l'on passe au suivant.
+  const processNextImport = async (
+    queue: { file: File; bankId: string }[],
+    mode: BatchValidationMode | null = null,
+  ) => {
     let remaining = queue;
     while (remaining.length > 0) {
       const [head, ...rest] = remaining;
@@ -390,11 +413,27 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
           bankCode: bank.code,
           pairs: result.rawPairs,
           matches: result.matches,
+          detectedSegment: result.detectedSegment,
+          detectedEffectiveDate: result.detectedEffectiveDate,
+          detectedPeriodLabel: result.detectionEvidence?.periodLabel,
         });
-        // On mémorise le reste de la file, puis on ouvre la vérification.
-        setPendingImports(rest);
-        setVerification({ file: head.file, payload, bankId: head.bankId, bank });
-        return;
+
+        const wantsVerify =
+          mode === null || mode === 'verify' || (mode === 'auto-doubt' && hasImportDoubt(payload));
+
+        if (wantsVerify) {
+          // On mémorise le reste de la file + le mode, puis on ouvre la vérif.
+          setPendingImports(rest);
+          setImportMode(mode);
+          setVerification({ file: head.file, payload, bankId: head.bankId, bank });
+          return;
+        }
+
+        // Auto-commit : on valide les rubriques ≥ seuil sans écran de vérif.
+        const commit = buildAutoCommitResult(payload);
+        await commitConditions({ file: head.file, bank, bankId: head.bankId }, commit, { openEditor: false });
+        remaining = rest;
+        continue;
       } catch (error) {
         console.error('Erreur extraction conditions:', error);
         alert(`Erreur lors de l'extraction de « ${head.file.name} ». Fichier ignoré.`);
@@ -410,6 +449,17 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
     }
     // File épuisée.
     setPendingImports([]);
+    setImportMode(null);
+  };
+
+  // Lance un import GROUPÉ multi-banques depuis la modale d'assignation.
+  const runBatchImport = async (
+    assignments: { file: File; bankId: string }[],
+    mode: BatchValidationMode,
+  ) => {
+    setShowBatchImport(false);
+    if (assignments.length === 0) return;
+    await processNextImport(assignments, mode);
   };
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>, bankId: string) => {
@@ -421,12 +471,16 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
     await processNextImport(files.map((file) => ({ file, bankId })));
   };
 
-  // User validated rows in the modal → commit a new ConditionGrid
-  const handleVerifiedConditionsCommit = async (_args: CommitArgs, commit: CommitResult) => {
-    if (!verification) {
-      return;
-    }
-    const { bankId, bank, file } = verification;
+  // Crée et enregistre une ConditionGrid à partir d'un CommitResult, pour un
+  // fichier + une banque donnés. Partagé par la modale de vérification ET
+  // l'auto-commit de l'import groupé (aucun accès à l'état `verification` ni à
+  // `selectedBank` : la banque cible est explicite → correct en multi-banques).
+  const commitConditions = async (
+    ctx: { file: File; bank: Bank; bankId: string },
+    commit: CommitResult,
+    opts: { openEditor: boolean },
+  ) => {
+    const { file, bank, bankId } = ctx;
 
     // On embarque le PDF source (base64) sur le document archivé : sans lui,
     // l'onglet « Publier au référentiel » filtre le document (Boolean(fileData))
@@ -528,34 +582,56 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
       notes: `${commit.validated} rubrique(s) validée(s), ${commit.rejected} rejetée(s).`,
     };
 
-    if (activeGrid) {
-      archiveConditionGrid(bankId, activeGrid.id);
+    // Archive la grille active DE CETTE banque (pas celle de selectedBank).
+    const currentActive = getActiveGrid(bankId);
+    if (currentActive) {
+      archiveConditionGrid(bankId, currentActive.id);
     }
     const createdGrid = addConditionGrid(bankId, newGrid);
     setActiveGrid(bankId, createdGrid.id);
 
-    setVerification(null);
-
-    // Import multi-fichiers : s'il reste des fichiers dans la file, on enchaîne
-    // sur le suivant plutôt que d'ouvrir l'éditeur entre chaque période.
-    if (pendingImports.length > 0) {
-      const next = pendingImports;
-      setPendingImports([]);
-      void processNextImport(next);
-      return;
+    // Ouverture de l'éditeur uniquement en import mono-banque (jamais en batch).
+    if (opts.openEditor) {
+      setSelectedBank(bankId);
+      setShowConditions(true); // open the legacy editor on the new grid for fine-tuning
+      if (mappedCount === 0 && customCount === 0) {
+        // Soft warning — grid is created and document archived; user can fill manually.
+        setTimeout(() => {
+          alert(
+            'Aucune rubrique n\'a été automatiquement mappée. La grille a été créée et le document archivé '
+            + '— tu peux maintenant saisir les valeurs manuellement dans les onglets.'
+          );
+        }, 200);
+      }
     }
 
-    setSelectedBank(bankId);
-    setShowConditions(true); // open the legacy editor on the new grid for fine-tuning
+    return { mappedCount, customCount };
+  };
 
-    if (mappedCount === 0 && customCount === 0) {
-      // Soft warning — grid is created and document archived; user can fill manually.
-      setTimeout(() => {
-        alert(
-          'Aucune rubrique n\'a été automatiquement mappée. La grille a été créée et le document archivé '
-          + '— tu peux maintenant saisir les valeurs manuellement dans les onglets.'
-        );
-      }, 200);
+  // La modale de vérification a validé un fichier → commit puis on enchaîne la
+  // file (même mode). L'éditeur ne s'ouvre qu'en import mono-banque (mode null)
+  // et seulement pour le dernier fichier de la file.
+  const handleVerifiedConditionsCommit = async (_args: CommitArgs, commit: CommitResult) => {
+    if (!verification) {
+      return;
+    }
+    const { bankId, bank, file } = verification;
+    const mode = importMode;
+    const next = pendingImports;
+
+    setVerification(null);
+    setPendingImports([]);
+
+    await commitConditions(
+      { file, bank, bankId },
+      commit,
+      { openEditor: mode === null && next.length === 0 },
+    );
+
+    if (next.length > 0) {
+      void processNextImport(next, mode);
+    } else {
+      setImportMode(null);
     }
   };
 
@@ -699,6 +775,16 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
             </button>
           )}
 
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-9 text-sm px-3"
+            onClick={() => setShowBatchImport(true)}
+            title="Importer des conditions pour plusieurs banques en une fois"
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            Import multi-banques
+          </Button>
           <Button size="sm" className="h-9 text-sm px-3" onClick={() => setShowAddBank(true)}>
             <Plus className="w-4 h-4 mr-1" />
             Banque
@@ -993,6 +1079,13 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
       />
 
       {/* Conditions verification modal — opens after PDF extraction */}
+      <BatchImportModal
+        open={showBatchImport}
+        banks={banks}
+        onClose={() => setShowBatchImport(false)}
+        onRun={runBatchImport}
+      />
+
       {verification && (
         <ImportVerificationModal
           open
@@ -1001,11 +1094,15 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
           onCommit={handleVerifiedConditionsCommit}
           onCancel={() => {
             setVerification(null);
-            // On saute ce fichier mais on poursuit la file d'import restante.
+            // On saute ce fichier mais on poursuit la file d'import restante
+            // (même mode de validation).
+            const mode = importMode;
             if (pendingImports.length > 0) {
               const next = pendingImports;
               setPendingImports([]);
-              void processNextImport(next);
+              void processNextImport(next, mode);
+            } else {
+              setImportMode(null);
             }
           }}
         />

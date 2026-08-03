@@ -86,11 +86,18 @@ export async function extractConditions(
     // work on scans exactly like on native-text PDFs. Only if the engine
     // returns no word boxes do we fall back to a crude line-by-index synthesis.
     items.length = 0;
-    // Higher render scale = sharper glyphs = better OCR on small tariff tables.
-    const OCR_SCALE = 3;
+    // Résolution OCR : on VISE ~400 DPI en pixels de sortie (glyphes nets même
+    // sur les grilles tarifaires denses / vectorisées — type NSIA). À scale=3
+    // (≈216 DPI) l'OCR d'un scan A4 dense était illisible (conf ~34%) ; à
+    // ~400 DPI la confiance monte à ~78%. On adapte l'échelle à la taille de
+    // page (grande page → échelle moindre) et on plafonne pour la mémoire :
+    // un canvas trop grand échoue silencieusement (limites navigateur).
+    const TARGET_OCR_WIDTH_PX = 3200; // ~400 DPI sur une page A4 (595 pt)
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: OCR_SCALE });
+      const baseWidth = page.getViewport({ scale: 1 }).width || 595;
+      const ocrScale = Math.min(6, Math.max(3, TARGET_OCR_WIDTH_PX / baseWidth));
+      const viewport = page.getViewport({ scale: ocrScale });
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
       canvas.width = viewport.width;

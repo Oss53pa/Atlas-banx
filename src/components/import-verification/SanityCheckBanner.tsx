@@ -17,7 +17,7 @@
 //   3. Zero-value amounts that look suspicious
 // ============================================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -25,11 +25,15 @@ import {
   ChevronDown,
   ChevronUp,
   Calculator,
+  Trash2,
+  Pencil,
+  Check as CheckIcon,
 } from 'lucide-react';
 import {
   type ConditionRow,
   type StatementRow,
   type VerificationMode,
+  type RowState,
   getEffective,
 } from './types';
 
@@ -37,11 +41,20 @@ type AnyRow = StatementRow | ConditionRow;
 
 type Severity = 'ok' | 'warn' | 'error';
 
+/** Un groupe de lignes partageant la même rubrique (doublon à arbitrer). */
+interface DuplicateGroup {
+  key: string;
+  label: string;
+  rowIds: string[];
+}
+
 interface Check {
   id: string;
   severity: Severity;
   title: string;
   detail?: string;
+  /** Présent pour le contrôle « rubriques dupliquées » → résolveur interactif. */
+  groups?: DuplicateGroup[];
 }
 
 interface Props {
@@ -50,6 +63,11 @@ interface Props {
   /** Optional initial / final balance pulled from the document header / footer.
    *  When provided, used for the balance reconciliation check. */
   documentBalance?: { initial?: number; final?: number; currency?: string };
+  /** Actions par ligne — quand fournies, le contrôle « doublons » devient
+   *  actionnable : conserver / modifier / supprimer chaque ligne. */
+  onFocusRow?: (id: string) => void;
+  onSetRowState?: (id: string, state: RowState) => void;
+  onRemoveRow?: (id: string) => void;
 }
 
 const SEVERITY_TONES: Record<Severity, {
@@ -81,8 +99,16 @@ const SEVERITY_TONES: Record<Severity, {
   },
 };
 
-export function SanityCheckBanner({ rows, mode, documentBalance }: Props) {
+export function SanityCheckBanner({
+  rows,
+  mode,
+  documentBalance,
+  onFocusRow,
+  onSetRowState,
+  onRemoveRow,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
+  const interactive = Boolean(onFocusRow || onSetRowState || onRemoveRow);
 
   const checks = useMemo<Check[]>(() => {
     if (mode === 'statement') return runStatementChecks(rows as StatementRow[], documentBalance);
@@ -99,6 +125,17 @@ export function SanityCheckBanner({ rows, mode, documentBalance }: Props) {
   const tone = SEVERITY_TONES[aggregate];
   const errorCount = checks.filter((c) => c.severity === 'error').length;
   const warnCount = checks.filter((c) => c.severity === 'warn').length;
+
+  // Déplie une fois si des doublons actionnables sont présents, pour exposer
+  // le résolveur d'emblée (sans lutter contre une fermeture manuelle ensuite).
+  const hasActionableGroups = interactive && checks.some((c) => c.groups && c.groups.length > 0);
+  const didAutoExpand = useRef(false);
+  useEffect(() => {
+    if (hasActionableGroups && !didAutoExpand.current) {
+      setExpanded(true);
+      didAutoExpand.current = true;
+    }
+  }, [hasActionableGroups]);
 
   const summary =
     aggregate === 'ok'
@@ -149,17 +186,149 @@ export function SanityCheckBanner({ rows, mode, documentBalance }: Props) {
       </button>
 
       {expanded && (
-        <div className={`border-t ${tone.border} px-4 py-3 space-y-2`}>
+        <div className={`border-t ${tone.border} px-4 py-3 space-y-3`}>
           {checks.map((c) => {
             const t = SEVERITY_TONES[c.severity];
             return (
-              <div key={c.id} className="flex items-start gap-2.5">
-                <t.Icon className={`w-4 h-4 ${t.text} flex-shrink-0 mt-0.5`} />
-                <div className="min-w-0">
-                  <p className={`text-xs font-medium ${t.text}`}>{c.title}</p>
-                  {c.detail && (
-                    <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">{c.detail}</p>
-                  )}
+              <div key={c.id} className="space-y-2">
+                <div className="flex items-start gap-2.5">
+                  <t.Icon className={`w-4 h-4 ${t.text} flex-shrink-0 mt-0.5`} />
+                  <div className="min-w-0">
+                    <p className={`text-xs font-medium ${t.text}`}>{c.title}</p>
+                    {c.detail && (
+                      <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">{c.detail}</p>
+                    )}
+                  </div>
+                </div>
+                {/* Résolveur interactif des doublons — une décision par ligne. */}
+                {c.groups && interactive && (
+                  <div className="pl-6 space-y-2">
+                    {c.groups.map((g) => (
+                      <DuplicateGroupCard
+                        key={g.key}
+                        group={g}
+                        rows={rows as ConditionRow[]}
+                        onFocusRow={onFocusRow}
+                        onSetRowState={onSetRowState}
+                        onRemoveRow={onRemoveRow}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// DUPLICATE RESOLVER — une décision par ligne dupliquée
+// ───────────────────────────────────────────────────────────────────────────
+
+function eff<T = unknown>(r: ConditionRow, field: string): T {
+  return getEffective<Record<string, unknown>>(r as never, field) as T;
+}
+
+function fmtValue(value: number, unit?: string): string {
+  if (!Number.isFinite(value)) return '—';
+  const v = value.toLocaleString('fr-FR');
+  return unit ? `${v} ${unit}` : v;
+}
+
+const STATE_LABEL: Record<RowState, { text: string; cls: string }> = {
+  validated: { text: 'Validée', cls: 'text-emerald-700' },
+  rejected: { text: 'Rejetée', cls: 'text-red-600' },
+  pending: { text: 'En attente', cls: 'text-ink-400' },
+};
+
+function DuplicateGroupCard({
+  group,
+  rows,
+  onFocusRow,
+  onSetRowState,
+  onRemoveRow,
+}: {
+  group: DuplicateGroup;
+  rows: ConditionRow[];
+  onFocusRow?: (id: string) => void;
+  onSetRowState?: (id: string, state: RowState) => void;
+  onRemoveRow?: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
+  const members = group.rowIds
+    .map((id) => byId.get(id))
+    .filter((r): r is ConditionRow => Boolean(r) && r!.state !== 'rejected');
+
+  // Groupe résolu (plus qu'une ligne active) → on ne l'affiche plus.
+  if (members.length <= 1) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-white/70 overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-amber-50/60"
+      >
+        {open ? (
+          <ChevronUp className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        )}
+        <span className="text-[11px] font-medium text-ink-800 truncate flex-1" title={group.label}>
+          {group.label}
+        </span>
+        <span className="text-[10px] font-medium text-amber-800 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">
+          {members.length} lignes
+        </span>
+      </button>
+
+      {open && (
+        <div className="border-t border-amber-100 divide-y divide-primary-50">
+          {members.map((r) => {
+            const label = eff<string>(r, 'label');
+            const value = eff<number>(r, 'value');
+            const unit = eff<string | undefined>(r, 'unit');
+            const st = STATE_LABEL[r.state];
+            const siblings = members.filter((m) => m.id !== r.id);
+            return (
+              <div key={r.id} className="flex items-center gap-2 px-2.5 py-1.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-ink-800 truncate" title={label}>
+                    {label || '(sans libellé)'}
+                  </p>
+                  <p className="text-[10px] text-ink-500">
+                    {fmtValue(value, unit)} · <span className={st.cls}>{st.text}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Conserver celle-ci = garder cette ligne et retirer les autres du groupe. */}
+                  <button
+                    onClick={() => {
+                      onSetRowState?.(r.id, 'validated');
+                      siblings.forEach((s) => onRemoveRow?.(s.id));
+                    }}
+                    className="p-1 rounded text-emerald-600 hover:bg-emerald-50"
+                    title="Ne garder que celle-ci (supprime les autres du groupe)"
+                  >
+                    <CheckIcon className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onFocusRow?.(r.id)}
+                    className="p-1 rounded text-ink-500 hover:bg-primary-50"
+                    title="Modifier — éditer la rubrique / la valeur dans le tableau"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onRemoveRow?.(r.id)}
+                    className="p-1 rounded text-red-500 hover:bg-red-50"
+                    title="Supprimer cette ligne"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             );
@@ -333,26 +502,36 @@ function runConditionChecks(rows: ConditionRow[]): Check[] {
   }
 
   // ─── 1. Duplicate rubric mapping ────────────────────────────────────────
-  const rubricCounts = new Map<string, number>();
+  const byKey = new Map<string, ConditionRow[]>();
   for (const r of active) {
     const key = getEffective<Record<string, unknown>>(r as never, 'rubricKey') as string | undefined;
     if (!key) continue;
-    rubricCounts.set(key, (rubricCounts.get(key) ?? 0) + 1);
+    const arr = byKey.get(key) ?? [];
+    arr.push(r);
+    byKey.set(key, arr);
   }
-  const dupes = [...rubricCounts.entries()].filter(([, n]) => n > 1);
+  const dupes = [...byKey.entries()].filter(([, rs]) => rs.length > 1);
   if (dupes.length === 0) {
     checks.push({
       id: 'rubric-unique',
       severity: 'ok',
       title: 'Rubriques uniques',
-      detail: `${rubricCounts.size} rubrique${rubricCounts.size > 1 ? 's' : ''} mappée${rubricCounts.size > 1 ? 's' : ''}.`,
+      detail: `${byKey.size} rubrique${byKey.size > 1 ? 's' : ''} mappée${byKey.size > 1 ? 's' : ''}.`,
     });
   } else {
+    const dupeLines = dupes.reduce((n, [, rs]) => n + rs.length, 0);
     checks.push({
       id: 'rubric-unique',
       severity: 'error',
       title: `${dupes.length} rubrique${dupes.length > 1 ? 's' : ''} dupliquée${dupes.length > 1 ? 's' : ''}`,
-      detail: dupes.map(([k, n]) => `${k} (${n} lignes)`).join(', '),
+      detail: `${dupeLines} lignes concernées — arbitrez chaque groupe ci-dessous (conserver / modifier / supprimer).`,
+      groups: dupes.map(([key, rs]) => ({
+        key,
+        label:
+          (getEffective<Record<string, unknown>>(rs[0] as never, 'rubricLabel') as string | undefined) ??
+          key,
+        rowIds: rs.map((r) => r.id),
+      })),
     });
   }
 
