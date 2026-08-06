@@ -410,6 +410,10 @@ export function BankConditionsModal({
     e.target.value = '';
 
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|tiff?|bmp|webp|gif)$/i.test(file.name);
+    // PDF ET images passent par le pipeline position-aware (bbox) + écran de
+    // vérification — extractConditions gère les deux. Excel/CSV → moteur legacy.
+    const usePositionAware = isPdf || isImage;
 
     setIsUploading(true);
     setExtractionReport(null);
@@ -442,10 +446,10 @@ export function BankConditionsModal({
         }
       }
 
-      // ─── PDF route: verification modal (split-screen review) ─────────
-      if (isPdf && bank) {
+      // ─── PDF / image route: verification modal (split-screen review) ──
+      if (usePositionAware && bank) {
         setIsExtracting(true);
-        setExtractionProgress({ stage: 'load', pct: 0, message: 'Chargement du PDF…' });
+        setExtractionProgress({ stage: 'load', pct: 0, message: 'Chargement du document…' });
         const result = await extractConditions(file, {
           bankCode: bank.code,
           onProgress: (p) => setExtractionProgress(p),

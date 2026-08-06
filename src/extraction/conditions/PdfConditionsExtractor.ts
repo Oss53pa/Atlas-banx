@@ -40,6 +40,11 @@ export async function extractConditions(
   file: File,
   options: ConditionsExtractionOptions = {},
 ): Promise<ConditionsExtractionResult> {
+  // Fichier IMAGE → pipeline OCR position-aware dédié (pas de pdfjs).
+  if (isImageFile(file)) {
+    return extractConditionsFromImage(file, options);
+  }
+
   const start = performance.now();
   const warnings: string[] = [];
 
@@ -161,9 +166,22 @@ export async function extractConditions(
     }
   }
 
+  return buildConditionsResult(items, file, warnings, options, pdf.numPages, start);
+}
+
+/** Post-traitement commun (PDF & image) : items positionnés → paires →
+ *  rubriques → segment/période → stats. */
+function buildConditionsResult(
+  items: PositionedItem[],
+  file: File,
+  warnings: string[],
+  options: ConditionsExtractionOptions,
+  numPages: number,
+  start: number,
+): ConditionsExtractionResult {
   options.onProgress?.({ stage: 'pairs', pct: 0.6, message: 'Extraction des paires label/valeur...' });
 
-  const { pairs, sections } = extractLabelValuePairs(items, pdf.numPages);
+  const { pairs, sections } = extractLabelValuePairs(items, numPages);
 
   options.onProgress?.({
     stage: 'match',
@@ -178,10 +196,6 @@ export async function extractConditions(
       ? 0
       : matchedFields.reduce((s, k) => s + matches[k].confidence, 0) / matchedFields.length;
 
-  // Compute pairs that were extracted but didn't match any rubric in the
-  // registry. These are valuable signal: either real conditions we don't
-  // model yet, or noisy lines. The UI surfaces them so the user can map
-  // manually or request registry extension.
   const matchedPairKeys = new Set<string>();
   for (const m of Object.values(matches)) {
     matchedPairKeys.add(`${m.pair.page}-${Math.round(m.pair.y)}-${m.pair.label}`);
@@ -190,9 +204,6 @@ export async function extractConditions(
     (p) => !matchedPairKeys.has(`${p.page}-${Math.round(p.y)}-${p.label}`),
   );
 
-  // Detect clientèle segment + effective period from the file name and the
-  // top-of-document text (page 1). Both drive bi-temporal, segment-aware grid
-  // resolution when this document is later turned into a ConditionGrid.
   const headerText = items
     .filter((it) => it.page === 1)
     .map((it) => it.text)
@@ -218,7 +229,7 @@ export async function extractConditions(
     detectedEffectiveDate: period.effectiveDate,
     detectionEvidence: { segment: seg.evidence, period: period.evidence, periodLabel: period.label },
     stats: {
-      totalPages: pdf.numPages,
+      totalPages: numPages,
       pairsFound: pairs.length,
       rubricsMatched: matchedFields.length,
       pairsUnmatched: unmatchedPairs.length,
@@ -227,4 +238,44 @@ export async function extractConditions(
     },
     warnings,
   };
+}
+
+/** Fichier image (png/jpg/tiff/…) — reconnu par type MIME ou extension. */
+function isImageFile(file: File): boolean {
+  return (file.type?.startsWith('image/') ?? false) || /\.(png|jpe?g|tiff?|bmp|webp|gif)$/i.test(file.name);
+}
+
+/**
+ * Extraction de conditions depuis une IMAGE (png/jpg/scan photographié) via le
+ * MÊME pipeline position-aware que les PDF scannés : OCR avec bbox par mot →
+ * items positionnés → détection de colonnes + paires + rubriques. Aligne enfin
+ * les imports image sur la qualité des PDF scannés (au lieu du legacy texte).
+ */
+async function extractConditionsFromImage(
+  file: File,
+  options: ConditionsExtractionOptions,
+): Promise<ConditionsExtractionResult> {
+  const start = performance.now();
+  const warnings: string[] = ['Image importée — extraction OCR (positions réelles).'];
+  options.onProgress?.({ stage: 'ocr', pct: 0, message: 'OCR de l’image...' });
+
+  const items: PositionedItem[] = [];
+  try {
+    const ocr = await OcrService.recognizeImageWithBboxes(file);
+    // Hauteur image = max des y1 → inversion d'axe (Tesseract haut-gauche →
+    // pdfjs/clustering bas-gauche), cohérent avec le reste du pipeline.
+    let H = 0;
+    for (const w of ocr.words) H = Math.max(H, w.bbox?.y1 ?? 0);
+    for (const w of ocr.words) {
+      const text = (w.text ?? '').trim();
+      if (!text) continue;
+      const { x0, y0, x1, y1 } = w.bbox;
+      items.push({ text, page: 1, x: x0, y: H - y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) });
+    }
+  } catch (err) {
+    warnings.push(`OCR image échoué : ${err instanceof Error ? err.message : 'erreur'}`);
+  }
+  if (items.length === 0) warnings.push('Aucun texte détecté dans l’image.');
+
+  return buildConditionsResult(items, file, warnings, options, 1, start);
 }
