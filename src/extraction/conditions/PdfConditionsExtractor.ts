@@ -24,7 +24,8 @@ import type { PositionedItem } from '../bank-statement/types';
 import { extractLabelValuePairs } from './LabelValueExtractor';
 import { matchRubrics } from './RubricMatcher';
 import { detectSegment, detectEffectivePeriod } from './segmentDetector';
-import type { ConditionsExtractionResult } from './types';
+import type { ConditionsExtractionResult, LabelValuePair } from './types';
+import { isVisionExtractionAvailable, visionExtractConditionPairs } from '../../ai/visionExtract';
 
 export interface ConditionsExtractionOptions {
   /** Force OCR even with a text layer */
@@ -33,7 +34,24 @@ export interface ConditionsExtractionOptions {
   skipOcr?: boolean;
   /** Bank code hint (used by future per-bank templates) */
   bankCode?: string;
+  /** Repli VISION (Claude multimodal) si l'OCR déterministe est trop faible —
+   *  gère les scans denses/médiocres, le manuscrit et les layouts exotiques.
+   *  Opt-in (nécessite la clé Anthropic de l'utilisateur), dégradation gracieuse. */
+  visionFallback?: boolean;
   onProgress?: (p: { stage: string; pct: number; message: string }) => void;
+}
+
+/** En dessous de ce nombre de paires, on considère l'OCR « faible » et on tente
+ *  le repli vision (si activé). */
+const WEAK_PAIRS_THRESHOLD = 5;
+
+function blobToDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result ?? ''));
+    r.onerror = () => reject(r.error ?? new Error('lecture image échouée'));
+    r.readAsDataURL(file);
+  });
 }
 
 export async function extractConditions(
@@ -166,7 +184,9 @@ export async function extractConditions(
     }
   }
 
-  return buildConditionsResult(items, file, warnings, options, pdf.numPages, start);
+  const result = buildConditionsResult(items, file, warnings, options, pdf.numPages, start);
+  // Repli vision aussi pour les PDF (surtout scans denses type NSIA).
+  return withVisionFallback(result, () => renderFirstPageDataUrl(pdf), file, options, start);
 }
 
 /** Post-traitement commun (PDF & image) : items positionnés → paires →
@@ -180,9 +200,23 @@ function buildConditionsResult(
   start: number,
 ): ConditionsExtractionResult {
   options.onProgress?.({ stage: 'pairs', pct: 0.6, message: 'Extraction des paires label/valeur...' });
-
   const { pairs, sections } = extractLabelValuePairs(items, numPages);
+  const headerText = items.filter((it) => it.page === 1).map((it) => it.text).join(' ').slice(0, 3000);
+  return assembleFromPairs(pairs, sections, headerText, file, warnings, options, numPages, start);
+}
 
+/** Assemble un ConditionsExtractionResult à partir de paires déjà extraites
+ *  (OCR déterministe OU vision). */
+function assembleFromPairs(
+  pairs: LabelValuePair[],
+  sections: string[],
+  headerText: string,
+  file: File,
+  warnings: string[],
+  options: ConditionsExtractionOptions,
+  numPages: number,
+  start: number,
+): ConditionsExtractionResult {
   options.onProgress?.({
     stage: 'match',
     pct: 0.85,
@@ -204,11 +238,6 @@ function buildConditionsResult(
     (p) => !matchedPairKeys.has(`${p.page}-${Math.round(p.y)}-${p.label}`),
   );
 
-  const headerText = items
-    .filter((it) => it.page === 1)
-    .map((it) => it.text)
-    .join(' ')
-    .slice(0, 3000);
   const seg = detectSegment(file.name, headerText);
   const period = detectEffectivePeriod(file.name, headerText);
   if (seg.segment) warnings.push(`Segment détecté : ${seg.segment} (${seg.evidence})`);
@@ -277,5 +306,58 @@ async function extractConditionsFromImage(
   }
   if (items.length === 0) warnings.push('Aucun texte détecté dans l’image.');
 
-  return buildConditionsResult(items, file, warnings, options, 1, start);
+  const ocrResult = buildConditionsResult(items, file, warnings, options, 1, start);
+  return withVisionFallback(ocrResult, () => blobToDataUrl(file), file, options, start);
+}
+
+/**
+ * Repli VISION : si l'OCR déterministe est trop faible ET le repli activé +
+ * disponible, on demande à un modèle de vision (Claude) de LIRE l'image — ce
+ * qui gère les scans denses/médiocres, le MANUSCRIT et les layouts exotiques.
+ * On n'adopte le résultat vision que s'il est strictement meilleur (plus de
+ * paires). Dégradation gracieuse en cas d'indisponibilité/erreur.
+ * `getDataUrl` est paresseux : l'image n'est rendue que si le repli se déclenche.
+ */
+async function withVisionFallback(
+  ocrResult: ConditionsExtractionResult,
+  getDataUrl: () => Promise<string>,
+  file: File,
+  options: ConditionsExtractionOptions,
+  start: number,
+): Promise<ConditionsExtractionResult> {
+  if (
+    !options.visionFallback ||
+    ocrResult.rawPairs.length >= WEAK_PAIRS_THRESHOLD ||
+    !isVisionExtractionAvailable()
+  ) {
+    return ocrResult;
+  }
+  try {
+    options.onProgress?.({ stage: 'vision', pct: 0.9, message: 'Lecture par IA vision…' });
+    const dataUrl = await getDataUrl();
+    if (!dataUrl) return ocrResult;
+    const visionPairs = await visionExtractConditionPairs(dataUrl);
+    if (visionPairs.length > ocrResult.rawPairs.length) {
+      const warnings = [...ocrResult.warnings, `Repli IA vision utilisé (${visionPairs.length} lignes lues).`];
+      return assembleFromPairs(visionPairs, [], '', file, warnings, options, ocrResult.stats.totalPages, start);
+    }
+  } catch {
+    /* repli gracieux : on conserve le résultat OCR */
+  }
+  return ocrResult;
+}
+
+/** Rend la 1re page d'un PDF en data-URL PNG (~200 DPI) — pour le repli vision
+ *  des PDF scannés. */
+async function renderFirstPageDataUrl(
+  pdf: Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>,
+): Promise<string> {
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2.5 });
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL('image/png');
 }

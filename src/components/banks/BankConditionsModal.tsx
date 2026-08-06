@@ -452,6 +452,7 @@ export function BankConditionsModal({
         setExtractionProgress({ stage: 'load', pct: 0, message: 'Chargement du document…' });
         const result = await extractConditions(file, {
           bankCode: bank.code,
+          visionFallback: true, // repli IA vision si l'OCR est trop faible
           onProgress: (p) => setExtractionProgress(p),
         });
 
