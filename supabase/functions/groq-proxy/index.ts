@@ -35,7 +35,10 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-interface ChatMsg { role: 'system' | 'user' | 'assistant'; content: string }
+// content peut être une string OU un tableau de blocs (vision OpenAI :
+// [{type:'text',text}, {type:'image_url', image_url:{url}}]) pour les modèles
+// multimodaux type qwen/qwen3.6-27b.
+interface ChatMsg { role: 'system' | 'user' | 'assistant'; content: string | unknown[] }
 
 interface ProxyRequest {
   messages?: ChatMsg[];
@@ -68,7 +71,7 @@ Deno.serve(async (req: Request) => {
     messages.push({ role: 'system', content: body.system });
   }
   for (const m of body.messages ?? []) {
-    if (m && typeof m.content === 'string' && m.role) {
+    if (m && m.role && (typeof m.content === 'string' || Array.isArray(m.content))) {
       messages.push({ role: m.role, content: m.content });
     }
   }

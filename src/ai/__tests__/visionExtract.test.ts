@@ -27,6 +27,12 @@ describe('parseVisionPairs', () => {
     expect(p[0].value).toBe(1500);
   });
 
+  it('ignore le bloc <think> des modèles thinking (qwen)', () => {
+    const p = parseVisionPairs('<think>Je vois un tableau [avec des crochets]. Analysons…</think>\n[{"label":"Carte Visa","value":25000,"unit":"FCFA"}]');
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({ label: 'Carte Visa', value: 25000 });
+  });
+
   it('renvoie [] sur une réponse invalide', () => {
     expect(parseVisionPairs('désolé, aucune donnée')).toEqual([]);
     expect(parseVisionPairs('')).toEqual([]);
