@@ -264,6 +264,19 @@ function pairsFromRows(
   return pairs;
 }
 
+/** Filtre qualité : écarte le bruit OCR flagrant sans toucher aux libellés
+ *  normaux (les PDF texte ont des libellés courts et alphabétiques → no-op).
+ *   - moins de 3 lettres → fragment OCR (« bh », « ce », « T1 222 ») ;
+ *   - libellé > 90 caractères → fusion multi-lignes / en-tête pleine largeur
+ *     (ex. la ligne d'exemple TEG), inexploitable tel quel. */
+function isUsablePair(p: LabelValuePair): boolean {
+  const label = p.label.trim();
+  const letters = label.replace(/[^a-zA-ZÀ-ÿ]/g, '').length;
+  if (letters < 3) return false;
+  if (label.length > 90) return false;
+  return true;
+}
+
 export function extractLabelValuePairs(
   items: PositionedItem[],
   totalPages: number,
@@ -312,5 +325,5 @@ export function extractLabelValuePairs(
     for (const s of chosenSections) if (!sections.includes(s)) sections.push(s);
   }
 
-  return { pairs, sections };
+  return { pairs: pairs.filter(isUsablePair), sections };
 }
