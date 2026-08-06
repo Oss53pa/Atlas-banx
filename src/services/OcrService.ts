@@ -112,7 +112,9 @@ export class OcrService {
 
       onProgress?.({ status: 'Reconnaissance OCR en cours...', progress: 0 });
 
-      const result = await worker.recognize(source);
+      // rotateAuto → Tesseract détecte l'orientation (OSD) et redresse les
+      // pages tournées / en paysage avant reconnaissance.
+      const result = await worker.recognize(source, { rotateAuto: true });
 
       onProgress?.({ status: 'Terminé', progress: 100 });
 
@@ -153,7 +155,8 @@ export class OcrService {
     // ne sont peuplés QUE si l'on demande explicitement la sortie `blocks`.
     // Sans ce 3e argument, `data.blocks` est null → 0 mot → l'extraction
     // position-aware des scans échouait silencieusement.
-    const result = await worker.recognize(source, {}, { blocks: true });
+    // rotateAuto → redressement automatique des pages tournées avant OCR.
+    const result = await worker.recognize(source, { rotateAuto: true }, { blocks: true });
     const data = result.data as unknown as {
       text: string;
       confidence: number;
