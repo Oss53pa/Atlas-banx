@@ -402,7 +402,7 @@ export function BanksPage({ defaultSegment, showConditionsCoverage }: BanksPageP
       setIsUploading(true);
       setUploadingBankId(head.bankId);
       try {
-        const result = await extractConditions(head.file, { bankCode: bank.code });
+        const result = await extractConditions(head.file, { bankCode: bank.code, visionFallback: true });
         if (result.rawPairs.length === 0) {
           alert(`Aucune condition n'a pu être extraite de « ${head.file.name} ». Fichier ignoré.`);
           remaining = rest;
