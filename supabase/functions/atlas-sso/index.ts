@@ -70,13 +70,18 @@ Deno.serve(async (req) => {
         return errorResponse("Impossible de créer l'organisation", 500, origin);
       }
 
-      // Create profile with admin role
+      // Create profile with the DEFAULT non-privileged role. Sécurité : NE PAS
+      // mettre "admin" par défaut — is_admin() = (profiles.role in admin/
+      // super_admin) gouverne l'écriture du référentiel L2 MUTUALISÉ (partagé
+      // entre tous les tenants). Un défaut "admin" faisait de chaque nouvel
+      // utilisateur SSO un admin du barème partagé. La promotion admin doit être
+      // un acte délibéré (hors provisioning SSO).
       await supabase.from("profiles").insert({
         id: userId,
         email: claims.email,
         full_name: claims.fullName,
         organization_id: org?.id || null,
-        role: "admin",
+        role: "client",
       });
     } else {
       await supabase.from("profiles").update({
