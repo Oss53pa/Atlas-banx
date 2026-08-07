@@ -206,9 +206,12 @@ export default function ExpressAuditPage() {
       setAuditStep('Vérification du montant récupérable…');
       const server = await requestExpressAudit({
         reference, transactions, bankConditions, bankCode: bankCode || undefined,
-        periodStart, periodEnd, months,
+        segment, periodStart, periodEnd, months,
       });
       setPricing(pricingForRecovery(server ? server.recoverableFcfa : certainAmount));
+      // Le serveur fait autorité sur l'usage du barème officiel (il le récupère
+      // lui-même) : on aligne l'indicateur de méthodologie sur SA décision.
+      if (server) setUsedOfficialGrid(server.usedOfficialGrid);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse.");
       setStep('setup');

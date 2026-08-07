@@ -10,3 +10,6 @@ export { runFullAudit } from './runFullAudit';
 export { partitionByCertainty } from './anomalyCertainty';
 export { pricingForRecovery } from '../../billing/recoveryPricing';
 export { auditReportToHtml } from '../../billing/express/auditReportHtml';
+// Conversion du référentiel L2 (rubriques CDC) → BankConditions, pour que le
+// serveur puisse construire le barème officiel lui-même (OVERCHARGE autoritaire).
+export { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
