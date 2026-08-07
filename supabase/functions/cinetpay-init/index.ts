@@ -52,6 +52,26 @@ Deno.serve(async (req: Request) => {
   const currency: string = body.currency ?? 'XOF';
   if (!reference || !amount) return json({ error: 'reference et amount requis' }, 400);
 
+  // ── Garde-fous serveur sur le montant (funnel anonyme : on ne fait pas
+  // confiance au client) ────────────────────────────────────────────────────
+  // NB : le paywall express reste client-side par ARCHITECTURE (l'audit et le
+  // rapport sont générés dans le navigateur) → ces bornes empêchent les valeurs
+  // aberrantes / une surfacturation par client trafiqué, pas la sous-facturation
+  // (qui exigerait un recalcul de l'audit côté serveur — chantier séparé).
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    return json({ error: 'montant invalide' }, 400);
+  }
+  if (!['XOF', 'XAF'].includes(currency)) {
+    return json({ error: 'devise non supportée' }, 400);
+  }
+  // Prix de référence des plans (miroir de src/billing/auditPlans.ts). Le prix
+  // effectif est indexé (≤ prix du plan) → on borne au plafond du plan.
+  const PLAN_PRICE_FCFA: Record<string, number> = { '3m': 15000, '6m': 25000, '12m': 40000 };
+  const planCeiling = body.planId && PLAN_PRICE_FCFA[body.planId] ? PLAN_PRICE_FCFA[body.planId] : 5_000_000;
+  if (amount > planCeiling) {
+    return json({ error: 'montant supérieur au plafond du plan' }, 400);
+  }
+
   await insertPending({
     reference,
     amount,
