@@ -46,6 +46,7 @@ export class CinetPayProvider implements PaymentProvider {
       body: {
         reference: request.reference,
         amount: request.amount,
+        recoverableFcfa: request.recoverableFcfa,
         currency: request.currency,
         description: request.description,
         customerEmail: request.customerEmail,

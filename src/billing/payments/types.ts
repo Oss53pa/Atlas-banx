@@ -19,6 +19,10 @@ export interface PaymentRequest {
   reference: string;
   customerEmail?: string;
   customerPhone?: string;
+  /** Récupérable estimé (FCFA) — transmis au serveur pour qu'il RE-DÉRIVE le
+   *  prix via la formule officielle (prix serveur-autoritaire, pas de confiance
+   *  au `amount` seul). */
+  recoverableFcfa?: number;
 }
 
 export interface PaymentInitResult {
