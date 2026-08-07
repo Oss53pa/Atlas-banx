@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build:audit-core": "esbuild src/services/audit/expressServerEntry.ts --bundle --format=esm --platform=neutral --target=deno1 --outfile=supabase/functions/_shared/audit-core.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",

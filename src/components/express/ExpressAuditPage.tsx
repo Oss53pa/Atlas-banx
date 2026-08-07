@@ -30,6 +30,7 @@ import { CGV_PARTICULIER_VERSION, CGV_PARTICULIER_SECTIONS } from '../../billing
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
 import { fetchPublicBankReference, fetchPublicBankList } from '../../services/publicBankReference';
+import { requestExpressAudit } from '../../services/expressAuditServer';
 import { DEFAULT_BANKS } from '../../store/bankStore';
 import { ANOMALY_TYPE_LABELS, AFRICAN_COUNTRIES, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
@@ -94,6 +95,10 @@ export default function ExpressAuditPage() {
   const [periodEnd, setPeriodEnd] = useState<Date | null>(null);
   const [months, setMonths] = useState(0);
   const [pricing, setPricing] = useState<RecoveryPricing | null>(null);
+  // Référence STABLE de l'audit express, générée à l'analyse et réutilisée au
+  // paiement : elle relie le rapport stocké côté serveur (express-audit),
+  // l'écriture de paiement (cinetpay) et la livraison gatée (express-report).
+  const [auditRef, setAuditRef] = useState<string>('');
   const [audit, setAudit] = useState<AnalysisResult | null>(null);
   const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
@@ -191,7 +196,19 @@ export default function ExpressAuditPage() {
       setAudit(result);
       // Le montant récupérable ne compte QUE les anomalies certaines (≥90%).
       const { certainAmount } = partitionByCertainty(result.anomalies);
-      setPricing(pricingForRecovery(certainAmount));
+
+      // SERVEUR-AUTORITAIRE : on ré-exécute l'audit côté serveur, qui fait
+      // autorité sur le récupérable/prix (le calcul navigateur est falsifiable)
+      // et stocke le rapport détaillé sous cette même `reference`. Repli sur
+      // l'estimation client si Supabase est indisponible (funnel toujours utile).
+      const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setAuditRef(reference);
+      setAuditStep('Vérification du montant récupérable…');
+      const server = await requestExpressAudit({
+        reference, transactions, bankConditions, bankCode: bankCode || undefined,
+        periodStart, periodEnd, months,
+      });
+      setPricing(pricingForRecovery(server ? server.recoverableFcfa : certainAmount));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse.");
       setStep('setup');
@@ -227,7 +244,9 @@ export default function ExpressAuditPage() {
     setIsBusy(true);
     try {
       const provider = getPaymentProvider();
-      const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Même référence que l'audit serveur : le paiement débloque le rapport
+      // déjà stocké sous cette clé (express-audit → cinetpay → express-report).
+      const reference = auditRef || `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const init = await provider.initiate({
         amount: pricing.priceFcfa, recoverableFcfa: pricing.recoverableFcfa, currency: 'XOF',
         description: `Audit express — déblocage rapport (${fmt(pricing.recoverableFcfa)} FCFA récupérables) · CGV v${CGV_PARTICULIER_VERSION} acceptées`,
