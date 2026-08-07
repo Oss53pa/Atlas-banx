@@ -48,28 +48,42 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json(); } catch { return json({ error: 'JSON invalide' }, 400); }
 
   const reference: string = body.reference;
-  const amount: number = body.amount;
   const currency: string = body.currency ?? 'XOF';
-  if (!reference || !amount) return json({ error: 'reference et amount requis' }, 400);
-
-  // ── Garde-fous serveur sur le montant (funnel anonyme : on ne fait pas
-  // confiance au client) ────────────────────────────────────────────────────
-  // NB : le paywall express reste client-side par ARCHITECTURE (l'audit et le
-  // rapport sont générés dans le navigateur) → ces bornes empêchent les valeurs
-  // aberrantes / une surfacturation par client trafiqué, pas la sous-facturation
-  // (qui exigerait un recalcul de l'audit côté serveur — chantier séparé).
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-    return json({ error: 'montant invalide' }, 400);
-  }
+  if (!reference) return json({ error: 'reference requise' }, 400);
   if (!['XOF', 'XAF'].includes(currency)) {
     return json({ error: 'devise non supportée' }, 400);
   }
-  // Prix de référence des plans (miroir de src/billing/auditPlans.ts). Le prix
-  // effectif est indexé (≤ prix du plan) → on borne au plafond du plan.
-  const PLAN_PRICE_FCFA: Record<string, number> = { '3m': 15000, '6m': 25000, '12m': 40000 };
-  const planCeiling = body.planId && PLAN_PRICE_FCFA[body.planId] ? PLAN_PRICE_FCFA[body.planId] : 5_000_000;
-  if (amount > planCeiling) {
-    return json({ error: 'montant supérieur au plafond du plan' }, 400);
+
+  // ── Prix SERVEUR-AUTORITAIRE ────────────────────────────────────────────────
+  // La formule officielle (miroir de src/billing/recoveryPricing.ts) est
+  // recalculée ICI à partir du récupérable déclaré → on ne fait PAS confiance à
+  // un `amount` client arbitraire (fini la « facturation à 1 XOF »).
+  // ⚠️ RÉSIDUEL ASSUMÉ : le récupérable est encore CALCULÉ côté client (l'audit
+  // et le rapport tournent dans le navigateur). Fermer totalement la
+  // sous-facturation exige un AUDIT SERVEUR (recalcul du récupérable depuis les
+  // relevés + livraison du rapport détaillé seulement après paiement) — chantier
+  // séparé. Ici on garantit au moins : montant = f(récupérable déclaré).
+  const RATE = 0.2, MIN_PRICE = 1500, FREE_BELOW = 8000, ROUND_TO = 500;
+  function priceForRecovery(rec: number): number {
+    const r = Math.max(0, Math.round(rec || 0));
+    if (r < FREE_BELOW) return 0;
+    return Math.max(MIN_PRICE, Math.floor((r * RATE) / ROUND_TO) * ROUND_TO);
+  }
+
+  const recoverable = Number(body.recoverableFcfa);
+  let amount: number;
+  if (Number.isFinite(recoverable) && recoverable > 0) {
+    amount = priceForRecovery(recoverable);
+    if (amount <= 0) return json({ error: 'récupérable sous le seuil — rapport offert, aucun paiement' }, 400);
+    // Cohérence avec le montant annoncé par le client (tolérance à l'arrondi).
+    if (Number.isFinite(body.amount) && Math.abs(Number(body.amount) - amount) > ROUND_TO) {
+      return json({ error: 'montant incohérent avec le récupérable déclaré' }, 400);
+    }
+  } else {
+    // Repli (compat) : pas de récupérable fourni → on borne le montant client.
+    amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return json({ error: 'montant ou récupérable requis' }, 400);
+    if (amount > 5_000_000) return json({ error: 'montant hors bornes' }, 400);
   }
 
   await insertPending({

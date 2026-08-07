@@ -229,7 +229,7 @@ export default function ExpressAuditPage() {
       const provider = getPaymentProvider();
       const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const init = await provider.initiate({
-        amount: pricing.priceFcfa, currency: 'XOF',
+        amount: pricing.priceFcfa, recoverableFcfa: pricing.recoverableFcfa, currency: 'XOF',
         description: `Audit express — déblocage rapport (${fmt(pricing.recoverableFcfa)} FCFA récupérables) · CGV v${CGV_PARTICULIER_VERSION} acceptées`,
         reference, customerEmail: email || undefined, customerPhone: phone || undefined,
       });
