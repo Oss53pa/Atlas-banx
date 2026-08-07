@@ -15,10 +15,44 @@
 // ============================================================================
 
 // @ts-nocheck — bundle JS pré-typé
-import { runFullAudit, partitionByCertainty, pricingForRecovery, auditReportToHtml } from '../_shared/audit-core.mjs';
+import { runFullAudit, partitionByCertainty, pricingForRecovery, auditReportToHtml, l2ToBankConditions } from '../_shared/audit-core.mjs';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+// Barème OFFICIEL récupéré CÔTÉ SERVEUR (référentiel L2), pour ne plus faire
+// confiance à la grille tarifaire envoyée par le client → OVERCHARGE autoritaire.
+// On réutilise l'Edge Function publique `public-bank-reference` (même source que
+// le funnel), en appel serveur-à-serveur. Renvoie null si indisponible → repli.
+async function fetchOfficialConditions(
+  bankCode: string,
+  segment: string,
+  referenceDate?: string,
+): Promise<unknown | null> {
+  if (!bankCode) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/public-bank-reference`, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE, Authorization: `Bearer ${SERVICE}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ bankCode, referenceDate }),
+    });
+    if (!r.ok) return null;
+    const ref = await r.json();
+    if (!ref?.found || !Array.isArray(ref.conditions) || ref.conditions.length === 0) return null;
+    return l2ToBankConditions({
+      bankCode,
+      bankName: ref.legalName,
+      effectiveFrom: ref.effectiveFrom,
+      conditions: ref.conditions,
+      segment: segment === 'pme' || segment === 'corporate' ? segment : 'particulier',
+    });
+  } catch {
+    return null;
+  }
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -66,12 +100,21 @@ Deno.serve(async (req: Request) => {
 
   const transactions = rawTx.map(reviveTx);
   const bankCode: string = body.bankCode ?? '';
+  const segment: string = body.segment ?? 'particulier';
+
+  // Barème SERVEUR-AUTORITAIRE : on récupère la grille officielle L2 côté serveur
+  // (référentiel public), et on ne retombe sur celle fournie par le client que si
+  // elle est indisponible. Le client ne contrôle donc plus la comparaison tarifaire.
+  const referenceDate = body.periodEnd ? String(body.periodEnd).slice(0, 10) : undefined;
+  const officialConditions = await fetchOfficialConditions(bankCode, segment, referenceDate);
+  const bankConditions = officialConditions ?? body.bankConditions;
+  const usedOfficialGrid = officialConditions != null;
 
   let result: any;
   try {
     result = await runFullAudit({
       transactions,
-      bankConditions: body.bankConditions,   // barème fourni par le client (v1)
+      bankConditions,   // barème officiel serveur (repli : client)
       bankCode,
     });
   } catch (err) {
@@ -115,5 +158,6 @@ Deno.serve(async (req: Request) => {
     priceFcfa: pricing.priceFcfa,
     isFree: pricing.isFree,
     anomalyCount: anomalies.length,
+    usedOfficialGrid,   // le serveur a-t-il utilisé le barème officiel L2 ?
   });
 });

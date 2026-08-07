@@ -20,6 +20,8 @@ export interface ExpressAuditTeaser {
   priceFcfa: number;
   isFree: boolean;
   anomalyCount: number;
+  /** Le serveur a-t-il comparé au barème officiel L2 (récupéré côté serveur) ? */
+  usedOfficialGrid: boolean;
 }
 
 /**
@@ -33,6 +35,8 @@ export async function requestExpressAudit(input: {
   transactions: Transaction[];
   bankConditions?: BankConditions;
   bankCode?: string;
+  /** Segment client — sélectionne les lignes dimensionnées du barème L2 côté serveur. */
+  segment?: 'particulier' | 'pme' | 'corporate';
   periodStart?: Date | null;
   periodEnd?: Date | null;
   months?: number;
@@ -46,6 +50,7 @@ export async function requestExpressAudit(input: {
         transactions: input.transactions,
         bankConditions: input.bankConditions,
         bankCode: input.bankCode || undefined,
+        segment: input.segment,
         periodStart: input.periodStart ? input.periodStart.toISOString() : undefined,
         periodEnd: input.periodEnd ? input.periodEnd.toISOString() : undefined,
         months: input.months,
@@ -58,6 +63,7 @@ export async function requestExpressAudit(input: {
       priceFcfa: data.priceFcfa,
       isFree: Boolean(data.isFree),
       anomalyCount: Number(data.anomalyCount) || 0,
+      usedOfficialGrid: Boolean(data.usedOfficialGrid),
     };
   } catch {
     return null;
