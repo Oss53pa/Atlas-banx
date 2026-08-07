@@ -13,25 +13,8 @@ import { FileX, Sparkles, CheckCircle2, AlertTriangle, Loader2, FileUp } from 'l
 import type { Bank, ArchivedDocument } from '../../types';
 import { SplitScreenValidator, type ExtractedField } from '../../cdc/components/SplitScreenValidator';
 import { submitValidatedReference } from '../../cdc/services/submitValidatedReference';
-import { extractConditions, toTaxonomyCode } from '../../extraction/conditions';
-import { extractionResultToFields } from './extractionToFields';
-
-/** Convertit les lignes VALIDÉES par l'utilisateur (à l'import) en champs du
- *  validateur — codes rubriques traduits en taxonomie CDC. Priorité sur la
- *  ré-extraction : on publie exactement ce que l'utilisateur a validé/corrigé. */
-function validatedConditionsToFields(
-  lines: NonNullable<ArchivedDocument['validatedConditions']>,
-): ExtractedField[] {
-  return lines.map((l, i) => ({
-    id: `fld-val-${i}`,
-    rubricCode: toTaxonomyCode(l.rubricKey),
-    label: l.label,
-    value: l.qualitative ? l.qualitative : l.value,
-    unit: (l.unit as ExtractedField['unit']) ?? undefined,
-    bbox: null,
-    confidence: 'high',
-  }));
-}
+import { extractConditions } from '../../extraction/conditions';
+import { extractionResultToFields, validatedConditionsToFields } from './extractionToFields';
 
 type ExtractionState =
   | { status: 'idle' }
