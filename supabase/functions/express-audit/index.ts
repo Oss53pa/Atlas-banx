@@ -123,7 +123,9 @@ Deno.serve(async (req: Request) => {
 
   const anomalies = result?.anomalies ?? [];
   const part = partitionByCertainty(anomalies);
-  const recoverable = (part.certain ?? []).reduce((s: number, a: any) => s + (a.amount || 0), 0);
+  const certain = part.certain ?? [];
+  const uncertain = part.uncertain ?? [];
+  const recoverable = certain.reduce((s: number, a: any) => s + (a.amount || 0), 0);
   const pricing = pricingForRecovery(recoverable);
 
   // Rapport détaillé (généré SERVEUR) — stocké, jamais renvoyé ici.
@@ -145,19 +147,26 @@ Deno.serve(async (req: Request) => {
     is_free: pricing.isFree,
     anomaly_count: anomalies.length,
     report_html: reportHtml || null,
+    audit_json: result ?? null,   // résultat COMPLET — livré après paiement
   });
   if (!stored.ok) {
     // Le rapport n'a pas pu être persisté → express-report ne pourra rien livrer.
     return json({ error: 'stockage du rapport échoué', detail: stored.error ?? null }, 502);
   }
 
-  // TEASER uniquement — le détail sort via express-report après paiement.
+  // TEASER SÛR uniquement — aucun montant par anomalie, aucune preuve ; le détail
+  // actionnable (montants, anomalies complètes, lettre) sort via express-report
+  // APRÈS paiement. Le client n'exécute plus l'audit lui-même.
   return json({
     reference,
     recoverableFcfa: pricing.recoverableFcfa,
     priceFcfa: pricing.priceFcfa,
     isFree: pricing.isFree,
     anomalyCount: anomalies.length,
+    certainCount: certain.length,
+    uncertainCount: uncertain.length,
+    totalTransactions: result?.statistics?.totalTransactions ?? transactions.length,
+    previewTypes: anomalies.slice(0, 4).map((a: any) => a.type),   // libellés seuls (floutés côté client)
     usedOfficialGrid,   // le serveur a-t-il utilisé le barème officiel L2 ?
   });
 });

@@ -35,7 +35,7 @@ Deno.serve(async (req: Request) => {
   try { reference = (await req.json()).reference ?? ''; } catch { /* ignore */ }
   if (!reference) return json({ error: 'reference requise' }, 400);
 
-  const rows = await sel(`express_report_pending?reference=eq.${encodeURIComponent(reference)}&select=report_html,is_free,recoverable_fcfa,price_fcfa&limit=1`);
+  const rows = await sel(`express_report_pending?reference=eq.${encodeURIComponent(reference)}&select=report_html,audit_json,is_free,recoverable_fcfa,price_fcfa&limit=1`);
   if (!rows.length) return json({ error: 'rapport introuvable' }, 404);
   const rep = rows[0];
 
@@ -47,5 +47,7 @@ Deno.serve(async (req: Request) => {
   }
   if (!paid) return json({ error: 'paiement non confirmé', paid: false }, 402);
 
-  return json({ reference, paid: true, reportHtml: rep.report_html ?? '' });
+  // Livraison du détail actionnable : rapport HTML + résultat d'audit COMPLET
+  // (le client bâtit le PDF premium / la lettre à partir de CES données serveur).
+  return json({ reference, paid: true, reportHtml: rep.report_html ?? '', audit: rep.audit_json ?? null });
 });

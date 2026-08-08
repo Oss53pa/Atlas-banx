@@ -3,10 +3,16 @@
 // ============================================================================
 // Parcours public, éphémère, à VALEUR PROUVÉE AVANT PAIEMENT :
 //   import relevé → analyse GRATUITE (audit complet, mêmes 19 détecteurs que
-//   l'offre Entreprise via runFullAudit) → révélation du montant récupérable +
-//   prix indexé sur ce montant (jamais > au récupérable ; offert sous un seuil)
-//   → déblocage payant du rapport détaillé → rapport A4 + détail.
+//   l'offre Entreprise, exécuté CÔTÉ SERVEUR) → révélation du montant récupérable
+//   + prix indexé (jamais > au récupérable ; offert sous un seuil) → déblocage
+//   payant du rapport détaillé → rapport A4 + détail.
 // Aucune donnée conservée.
+//
+// PAYWALL SERVEUR-ENFORCED : le client n'exécute plus l'audit. express-audit
+// calcule tout côté serveur et ne renvoie qu'un TEASER sûr (compteurs, libellés,
+// aucun montant) ; le détail actionnable (audit complet, PDF, lettre) n'est livré
+// qu'après paiement par express-report. Résiduel : les transactions extraites
+// restent côté client (fermeture totale = extraction serveur).
 //
 // Mise en page : sidebar bleue (notice + progression) à gauche, contenu sur la
 // largeur restante. Titres en Grand Hotel (font-display), reste en Dosis
@@ -20,17 +26,14 @@ import {
   ArrowLeft, Lock, RotateCcw, Sparkles,
 } from 'lucide-react';
 import { extractStatement } from '../../extraction/bank-statement';
-import { runFullAudit } from '../../services/audit/runFullAudit';
 import { countAuditedMonths } from '../../billing/auditPlans';
 import { pricingForRecovery, type RecoveryPricing } from '../../billing/recoveryPricing';
-import { partitionByCertainty } from '../../services/audit/anomalyCertainty';
-import { auditReportToHtml } from '../../billing/express/auditReportHtml';
 import { buildParticulierComplaintLetter, complaintLetterToHtml } from '../../billing/express/complaintLetter';
 import { CGV_PARTICULIER_VERSION, CGV_PARTICULIER_SECTIONS } from '../../billing/express/cgvParticulier';
 import { l2ToBankConditions } from '../../billing/express/l2ToBankConditions';
 import { getPaymentProvider } from '../../billing/payments';
 import { fetchPublicBankReference, fetchPublicBankList } from '../../services/publicBankReference';
-import { requestExpressAudit } from '../../services/expressAuditServer';
+import { requestExpressAudit, fetchExpressReport, type ExpressAuditTeaser } from '../../services/expressAuditServer';
 import { DEFAULT_BANKS } from '../../store/bankStore';
 import { ANOMALY_TYPE_LABELS, AFRICAN_COUNTRIES, type Transaction, type AnalysisResult, type BankConditions } from '../../types';
 
@@ -99,7 +102,14 @@ export default function ExpressAuditPage() {
   // paiement : elle relie le rapport stocké côté serveur (express-audit),
   // l'écriture de paiement (cinetpay) et la livraison gatée (express-report).
   const [auditRef, setAuditRef] = useState<string>('');
+  // Teaser SÛR renvoyé par express-audit (compteurs + libellés, aucun montant) :
+  // c'est tout ce que le client connaît AVANT paiement (il n'exécute plus l'audit).
+  const [teaser, setTeaser] = useState<ExpressAuditTeaser | null>(null);
+  // Audit COMPLET (anomalies, stats, synthèse) livré par express-report APRÈS
+  // paiement — source du livrable (PDF premium, lettre). null tant que non payé.
   const [audit, setAudit] = useState<AnalysisResult | null>(null);
+  // Rapport HTML serveur (repli si la génération du PDF premium échoue).
+  const [serverReportHtml, setServerReportHtml] = useState<string>('');
   const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -189,29 +199,29 @@ export default function ExpressAuditPage() {
           });
         }
       }
-      const result = await runFullAudit({
-        transactions, bankConditions, bankCode: bankCode || undefined,
-        onProgress: (_pct, s) => setAuditStep(s),
-      });
-      setAudit(result);
-      // Le montant récupérable ne compte QUE les anomalies certaines (≥90%).
-      const { certainAmount } = partitionByCertainty(result.anomalies);
-
-      // SERVEUR-AUTORITAIRE : on ré-exécute l'audit côté serveur, qui fait
-      // autorité sur le récupérable/prix (le calcul navigateur est falsifiable)
-      // et stocke le rapport détaillé sous cette même `reference`. Repli sur
-      // l'estimation client si Supabase est indisponible (funnel toujours utile).
+      // SERVEUR-AUTORITAIRE : l'audit tourne UNIQUEMENT côté serveur. Le client
+      // n'obtient qu'un teaser sûr (compteurs + libellés, aucun montant) ; le
+      // détail actionnable (montants, anomalies, lettre) ne sort qu'après paiement
+      // via express-report. Le barème `bankConditions` n'est qu'un repli — le
+      // serveur récupère lui-même la grille officielle. `reference` stable relie
+      // teaser, paiement et livraison gatée.
       const reference = `axb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setAuditRef(reference);
-      setAuditStep('Vérification du montant récupérable…');
+      setAuditStep('Analyse serveur du relevé…');
       const server = await requestExpressAudit({
         reference, transactions, bankConditions, bankCode: bankCode || undefined,
         segment, periodStart, periodEnd, months,
       });
-      setPricing(pricingForRecovery(server ? server.recoverableFcfa : certainAmount));
+      if (!server) {
+        setError("Service d'analyse indisponible. Réessayez dans un instant.");
+        setStep('setup');
+        return;
+      }
+      setTeaser(server);
+      setPricing(pricingForRecovery(server.recoverableFcfa));
       // Le serveur fait autorité sur l'usage du barème officiel (il le récupère
       // lui-même) : on aligne l'indicateur de méthodologie sur SA décision.
-      if (server) setUsedOfficialGrid(server.usedOfficialGrid);
+      setUsedOfficialGrid(server.usedOfficialGrid);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse.");
       setStep('setup');
@@ -238,11 +248,35 @@ export default function ExpressAuditPage() {
     return () => { cancelled = true; };
   }, [bankCode, periodEnd]);
 
+  // Récupère le rapport SERVEUR (audit complet + HTML) — livré par express-report
+  // uniquement si le paiement est confirmé côté serveur (ou si le rapport est
+  // gratuit). C'est CE gate qui rend le paywall réellement enforced : le détail
+  // n'existe pas côté client avant paiement.
+  const openReport = async () => {
+    setError(null);
+    setIsBusy(true);
+    try {
+      const res = await fetchExpressReport(auditRef);
+      if (!res.paid || !res.audit) {
+        setError("Le rapport n'a pas pu être débloqué. Si le paiement vient d'être effectué, réessayez dans un instant.");
+        return;
+      }
+      setAudit(res.audit);
+      setServerReportHtml(res.reportHtml ?? '');
+      setStep('report');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rapport indisponible.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   // Déblocage payant du rapport détaillé (uniquement si le récupérable dépasse
-  // le seuil de gratuité). L'audit est DÉJÀ calculé — on ne facture que le
-  // détail + le rapport + la lettre de réclamation.
+  // le seuil de gratuité). L'audit est déjà calculé+stocké côté serveur — le
+  // paiement confirme la livraison du détail + rapport + lettre.
   const unlock = async () => {
-    if (!pricing || pricing.isFree) { setStep("report"); return; }
+    // Gratuit (récupérable sous le seuil) : pas de paiement, le serveur livre direct.
+    if (!pricing || pricing.isFree) { await openReport(); return; }
     setError(null);
     setIsBusy(true);
     try {
@@ -259,7 +293,7 @@ export default function ExpressAuditPage() {
       if (init.redirectUrl) { window.location.href = init.redirectUrl; return; }
       const check = await provider.verify(init.transactionId);
       if (check.status !== 'succeeded') { setError('Paiement non confirmé. Réessayez.'); return; }
-      setStep('report');
+      await openReport();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Échec du paiement.');
     } finally {
@@ -323,12 +357,11 @@ export default function ExpressAuditPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      // Repli : rapport HTML A4 imprimable si la génération PDF échoue.
-      console.error('[express] génération PDF premium échouée, repli HTML:', err);
-      const html = auditReportToHtml(audit, {
-        periodStart, periodEnd, months,
-        planLabel: pricing && !pricing.isFree ? `Rapport débloqué (${fmt(pricing.priceFcfa)} FCFA)` : 'Rapport offert',
-      });
+      // Repli : rapport HTML A4 imprimable (généré et fourni par le SERVEUR) si
+      // la génération du PDF premium échoue.
+      console.error('[express] génération PDF premium échouée, repli HTML serveur:', err);
+      const html = serverReportHtml
+        || '<!doctype html><meta charset="utf-8"><p>Rapport indisponible. Contactez le support.</p>';
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -366,6 +399,7 @@ export default function ExpressAuditPage() {
 
   const reset = () => {
     setStep('import'); setError(null); setAudit(null); setPricing(null);
+    setTeaser(null); setServerReportHtml(''); setAuditRef('');
     setTransactions([]); setBankCode(''); setEmail(''); setPhone('');
     setClientName(''); setAccountRef(''); setUsedOfficialGrid(false); setRefGrid(null);
   };
@@ -718,7 +752,7 @@ export default function ExpressAuditPage() {
             {/* ── Step: reveal (potentiel + prix indexé) ── */}
             {step === 'reveal' && (
               <div className="mt-7 animate-fade-in-up">
-                {!audit || !pricing ? (
+                {!teaser || !pricing ? (
                   <div className="card flex flex-col items-center gap-3 p-12 text-center">
                     <Loader2 className="h-8 w-8 animate-spin text-accent-600" />
                     <p className="font-medium text-ink-800">{auditStep || 'Analyse en cours…'}</p>
@@ -728,8 +762,7 @@ export default function ExpressAuditPage() {
                   /* Relevé conforme : rien à récupérer */
                   <div className="space-y-4">
                     {(() => {
-                      const p = partitionByCertainty(audit.anomalies);
-                      const onlyUncertain = p.uncertain.length > 0;
+                      const onlyUncertain = teaser.uncertainCount > 0;
                       return (
                         <div className={`card p-6 text-center ${onlyUncertain ? 'border-amber-200 bg-amber-50/60' : 'border-emerald-200 bg-emerald-50/60'}`}>
                           <span className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full text-white ${onlyUncertain ? 'bg-amber-500' : 'bg-emerald-500'}`}>
@@ -740,16 +773,16 @@ export default function ExpressAuditPage() {
                           </p>
                           <p className="mt-1 text-sm text-ink-500">
                             {onlyUncertain ? (
-                              <>Aucune anomalie <strong>prouvée à 90%+</strong> sur {transactions.length} transactions, mais {p.uncertain.length} point{p.uncertain.length > 1 ? 's' : ''} à vérifier. Le rapport détaillé (offert) les liste.</>
+                              <>Aucune anomalie <strong>prouvée à 90%+</strong> sur {teaser.totalTransactions} transactions, mais {teaser.uncertainCount} point{teaser.uncertainCount > 1 ? 's' : ''} à vérifier. Le rapport détaillé (offert) les liste.</>
                             ) : (
-                              <>Aucun frais indu détecté sur {transactions.length} transactions{usedOfficialGrid ? ', y compris face au barème officiel de votre banque.' : '.'}</>
+                              <>Aucun frais indu détecté sur {teaser.totalTransactions} transactions{usedOfficialGrid ? ', y compris face au barème officiel de votre banque.' : '.'}</>
                             )}
                           </p>
                         </div>
                       );
                     })()}
-                    <button onClick={() => { setStep("report"); }} className="btn btn-primary btn-lg w-full">
-                      Voir le rapport (offert) <ArrowRight className="h-4 w-4" />
+                    <button onClick={openReport} disabled={isBusy} className="btn btn-primary btn-lg w-full">
+                      {isBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</> : <>Voir le rapport (offert) <ArrowRight className="h-4 w-4" /></>}
                     </button>
                     <button onClick={reset} className="mx-auto flex items-center gap-1 text-xs text-ink-400 hover:text-ink-700"><RotateCcw className="h-3 w-3" /> Nouvel audit</button>
                   </div>
@@ -760,16 +793,11 @@ export default function ExpressAuditPage() {
                       <div className="bg-gradient-to-br from-ink-800 to-ink-950 p-6 text-center text-white">
                         <p className="text-xs uppercase tracking-[0.16em] text-white/50">Montant récupérable (anomalies certaines)</p>
                         <p className="mt-1 font-display text-5xl text-gradient-gold leading-none sm:text-6xl">{fmt(pricing.recoverableFcfa)}</p>
-                        {(() => {
-                          const p = partitionByCertainty(audit.anomalies);
-                          return (
-                            <p className="mt-1 text-sm text-white/50">
-                              FCFA · {p.certain.length} anomalie{p.certain.length > 1 ? 's' : ''} certaine{p.certain.length > 1 ? 's' : ''} (≥90%)
-                              {p.uncertain.length > 0 && ` · ${p.uncertain.length} à confirmer, non comptée${p.uncertain.length > 1 ? 's' : ''}`}
-                              {' '}sur {months} mois
-                            </p>
-                          );
-                        })()}
+                        <p className="mt-1 text-sm text-white/50">
+                          FCFA · {teaser.certainCount} anomalie{teaser.certainCount > 1 ? 's' : ''} certaine{teaser.certainCount > 1 ? 's' : ''} (≥90%)
+                          {teaser.uncertainCount > 0 && ` · ${teaser.uncertainCount} à confirmer, non comptée${teaser.uncertainCount > 1 ? 's' : ''}`}
+                          {' '}sur {months} mois
+                        </p>
                         <p className="mt-2 text-[11px] text-white/40">
                           {usedOfficialGrid ? '✓ Comparé au barème officiel de votre banque (référentiel L2).' : 'Audit sur vos seules transactions (aucun barème officiel disponible).'}
                         </p>
@@ -803,14 +831,14 @@ export default function ExpressAuditPage() {
                     <div className="card p-5">
                       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-400">Aperçu du détail (débloqué après paiement)</p>
                       <ul className="divide-y divide-primary-100">
-                        {audit.anomalies.slice(0, 4).map((a) => (
-                          <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                            <span className="text-ink-700">{ANOMALY_TYPE_LABELS[a.type] ?? a.type}</span>
+                        {teaser.previewTypes.map((t, i) => (
+                          <li key={i} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                            <span className="text-ink-700">{ANOMALY_TYPE_LABELS[t as keyof typeof ANOMALY_TYPE_LABELS] ?? t}</span>
                             <span className="select-none font-semibold text-accent-700 blur-sm">•••• FCFA</span>
                           </li>
                         ))}
                       </ul>
-                      {audit.anomalies.length > 4 && <p className="mt-2 text-xs text-ink-400">+ {audit.anomalies.length - 4} autres lignes dans le rapport complet.</p>}
+                      {teaser.anomalyCount > teaser.previewTypes.length && <p className="mt-2 text-xs text-ink-400">+ {teaser.anomalyCount - teaser.previewTypes.length} autres lignes dans le rapport complet.</p>}
                     </div>
 
                     <button onClick={unlock} disabled={isBusy} className="btn btn-accent btn-lg w-full">
