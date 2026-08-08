@@ -15,10 +15,57 @@
 // ============================================================================
 
 // @ts-nocheck — bundle JS pré-typé
-import { runFullAudit, partitionByCertainty, pricingForRecovery, auditReportToHtml, l2ToBankConditions } from '../_shared/audit-core.mjs';
+import { runFullAudit, partitionByCertainty, pricingForRecovery, auditReportToHtml, l2ToBankConditions, itemsToTransactions } from '../_shared/audit-core.mjs';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+// Extraction SERVEUR des relevés à TEXTE NATIF : le client envoie le PDF, le
+// serveur l'extrait lui-même (pdfjs texte → items → cœur pur partagé) et audite
+// SA propre extraction → on ne fait plus confiance à des transactions envoyées
+// par le client (« faked transactions » fermé pour le texte natif). Les scans
+// (texte insuffisant) sont signalés → le client repasse à son OCR navigateur.
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// pdfjs 5.x référence `DOMMatrix` (absent du runtime Edge) même pour
+// l'extraction de texte. On le polyfille une fois avant le premier import.
+async function ensurePdfEnv(): Promise<void> {
+  if (!(globalThis as any).DOMMatrix) {
+    const m: any = await import('npm:dommatrix@1.0.3');
+    (globalThis as any).DOMMatrix = m.default ?? m.DOMMatrix ?? m;
+  }
+}
+
+async function extractNativeText(pdfBase64: string): Promise<{ scanned: boolean; transactions: any[] }> {
+  const data = base64ToBytes(pdfBase64);
+  await ensurePdfEnv();
+  const pdfjs: any = await import('npm:pdfjs-dist@5.4.449/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data, isEvalSupported: false, disableFontFace: true, useSystemFonts: false }).promise;
+  const items: any[] = [];
+  let totalChars = 0;
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    for (const it of tc.items) {
+      const text = it && typeof it.str === 'string' ? it.str : '';
+      if (!text.trim()) continue;
+      const tr = it.transform || [];
+      items.push({ text, page: p, x: tr[4] ?? 0, y: tr[5] ?? 0, width: it.width ?? text.length * 4, height: it.height ?? 8 });
+      totalChars += text.length;
+    }
+  }
+  // Peu de texte natif → PDF scanné : l'OCR (canvas+tesseract) n'existe pas côté
+  // serveur → on signale au client de faire l'extraction navigateur.
+  const avgPerPage = totalChars / Math.max(1, doc.numPages);
+  if (avgPerPage < 50) return { scanned: true, transactions: [] };
+  const res = itemsToTransactions(items, doc.numPages, { defaultCurrency: 'XOF', rowYTolerance: 3 });
+  return { scanned: false, transactions: res.transactions ?? [] };
+}
 
 // Barème OFFICIEL récupéré CÔTÉ SERVEUR (référentiel L2), pour ne plus faire
 // confiance à la grille tarifaire envoyée par le client → OVERCHARGE autoritaire.
@@ -94,11 +141,28 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json(); } catch { return json({ error: 'JSON invalide' }, 400); }
 
   const reference: string = body.reference;
-  const rawTx = Array.isArray(body.transactions) ? body.transactions : [];
   if (!reference) return json({ error: 'reference requise' }, 400);
-  if (rawTx.length === 0) return json({ error: 'transactions requises' }, 400);
 
-  const transactions = rawTx.map(reviveTx);
+  // Résolution des transactions AUTORITAIRE :
+  //  (1) si un PDF (base64) est fourni ET donne du TEXTE NATIF → extraction
+  //      SERVEUR (le client ne peut pas falsifier les transactions auditées) ;
+  //  (2) sinon (scan, échec, ou pas de PDF) → transactions envoyées par le client
+  //      (extraites par son OCR navigateur pour les scans).
+  const clientTx = Array.isArray(body.transactions) ? body.transactions.map(reviveTx) : [];
+  let transactions: any[] = clientTx;
+  let serverExtracted = false;
+  if (typeof body.pdfBase64 === 'string' && body.pdfBase64.length > 0) {
+    try {
+      const ex = await extractNativeText(body.pdfBase64);
+      if (!ex.scanned && ex.transactions.length > 0) {
+        transactions = ex.transactions;   // dates déjà en objets Date (extraction serveur)
+        serverExtracted = true;
+      }
+      // scan / 0 tx → on garde les transactions client (repli)
+    } catch { /* extraction serveur best-effort → repli client (OCR navigateur) */ }
+  }
+  if (transactions.length === 0) return json({ error: 'transactions ou pdfBase64 requis' }, 400);
+
   const bankCode: string = body.bankCode ?? '';
   const segment: string = body.segment ?? 'particulier';
 
@@ -168,5 +232,6 @@ Deno.serve(async (req: Request) => {
     totalTransactions: result?.statistics?.totalTransactions ?? transactions.length,
     previewTypes: anomalies.slice(0, 4).map((a: any) => a.type),   // libellés seuls (floutés côté client)
     usedOfficialGrid,   // le serveur a-t-il utilisé le barème officiel L2 ?
+    serverExtracted,    // relevé extrait CÔTÉ SERVEUR (texte natif) ?
   });
 });

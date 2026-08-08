@@ -30,6 +30,8 @@ export interface ExpressAuditTeaser {
   previewTypes: string[];
   /** Le serveur a-t-il comparé au barème officiel L2 (récupéré côté serveur) ? */
   usedOfficialGrid: boolean;
+  /** Le relevé a-t-il été extrait CÔTÉ SERVEUR (PDF texte natif) ? */
+  serverExtracted: boolean;
 }
 
 /**
@@ -45,6 +47,8 @@ export async function requestExpressAudit(input: {
   bankCode?: string;
   /** Segment client — sélectionne les lignes dimensionnées du barème L2 côté serveur. */
   segment?: 'particulier' | 'pme' | 'corporate';
+  /** PDF (base64, sans préfixe data:) — extraction SERVEUR pour les relevés texte natif. */
+  pdfBase64?: string;
   periodStart?: Date | null;
   periodEnd?: Date | null;
   months?: number;
@@ -59,6 +63,7 @@ export async function requestExpressAudit(input: {
         bankConditions: input.bankConditions,
         bankCode: input.bankCode || undefined,
         segment: input.segment,
+        pdfBase64: input.pdfBase64,
         periodStart: input.periodStart ? input.periodStart.toISOString() : undefined,
         periodEnd: input.periodEnd ? input.periodEnd.toISOString() : undefined,
         months: input.months,
@@ -76,6 +81,7 @@ export async function requestExpressAudit(input: {
       totalTransactions: Number(data.totalTransactions) || 0,
       previewTypes: Array.isArray(data.previewTypes) ? data.previewTypes.map(String) : [],
       usedOfficialGrid: Boolean(data.usedOfficialGrid),
+      serverExtracted: Boolean(data.serverExtracted),
     };
   } catch {
     return null;

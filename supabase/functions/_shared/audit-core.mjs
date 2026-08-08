@@ -208,11 +208,11 @@ function getTimezoneOffsetInMilliseconds(date) {
 
 // node_modules/date-fns/_lib/normalizeDates.js
 function normalizeDates(context, ...dates) {
-  const normalize = constructFrom.bind(
+  const normalize2 = constructFrom.bind(
     null,
     context || dates.find((date) => typeof date === "object")
   );
-  return dates.map(normalize);
+  return dates.map(normalize2);
 }
 
 // node_modules/date-fns/startOfDay.js
@@ -11021,8 +11021,669 @@ function l2ToBankConditions(params) {
     accountFees
   };
 }
+
+// src/extraction/bank-statement/HeaderDetector.ts
+var HEADER_KEYWORDS = [
+  // Most discriminative columns first (their presence proves it's a tx table)
+  {
+    role: "debit",
+    weight: 3,
+    patterns: [/^debit/, /^debits$/, /^deb\.?$/, /^debit\s*\(.*\)$/, /^debit\s*xof$/, /^debit\s*xaf$/, /^debit\s*eur$/, /^retraits?$/, /^withdrawals?$/, /^sortie/]
+  },
+  {
+    role: "credit",
+    weight: 3,
+    patterns: [/^credit/, /^credits$/, /^cred\.?$/, /^credit\s*\(.*\)$/, /^credit\s*xof$/, /^credit\s*xaf$/, /^credit\s*eur$/, /^versements?$/, /^deposits?$/, /^entrees?$/]
+  },
+  {
+    role: "balance",
+    weight: 3,
+    patterns: [/^solde/, /^balance/, /^solde\s*\(.*\)$/, /^solde\s*xof$/, /^solde\s*xaf$/, /^solde\s*eur$/, /^running\s*bal/]
+  },
+  {
+    role: "amount",
+    weight: 2,
+    patterns: [/^montant/, /^amount/, /^somme/, /^valeur\s*op/, /^montant\s*\(.*\)$/, /^op\.?\s*amount/]
+  },
+  {
+    role: "description",
+    weight: 2,
+    patterns: [/^libelle/, /^libelle\s*de/, /^description/, /^objet/, /^operation/, /^operations?$/, /^narration/, /^details?/, /^wording/, /^designation/]
+  },
+  {
+    role: "reference",
+    weight: 1,
+    patterns: [/^reference/, /^ref\.?$/, /^n[°o]\s*piece/, /^numero/, /^transaction/, /^txn/, /^cheque/, /^ref\s*ext/]
+  },
+  {
+    role: "value_date",
+    weight: 1,
+    patterns: [/^valeur/, /^value\s*date/, /^date\s*valeur/, /^d\.\s*v\.$/, /^d\.v\.?$/, /^dv$/]
+  },
+  {
+    role: "date",
+    weight: 3,
+    patterns: [/^date$/, /^date\s*op/, /^date\s*operation/, /^operation\s*date/, /^posting\s*date/, /^date\s*compt/, /^d\.o\.?$/]
+  },
+  {
+    role: "type",
+    weight: 1,
+    patterns: [/^sens$/, /^type$/, /^d\/c$/, /^debit\/credit$/, /^cr\/db$/]
+  },
+  {
+    role: "currency",
+    weight: 0.5,
+    patterns: [/^devise$/, /^currency$/, /^cur\.?$/, /^ccy$/]
+  }
+];
+function normalize(s) {
+  return s.normalize("NFD").replace(new RegExp("\\p{Diacritic}", "gu"), "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function classifyHeaderLabel(label) {
+  const norm = normalize(label);
+  if (!norm) return null;
+  for (const kw of HEADER_KEYWORDS) {
+    for (const re of kw.patterns) {
+      if (re.test(norm)) return { role: kw.role, weight: kw.weight };
+    }
+  }
+  return null;
+}
+function clusterRows(items, page, tolerance = 3) {
+  return clusterRowsFromItems(items.filter((it) => it.page === page), page, tolerance);
+}
+function clusterRowsFromItems(pageItems, page, tolerance = 3) {
+  const sorted = [...pageItems].sort((a, b) => b.y - a.y);
+  const rows = [];
+  for (const it of sorted) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(last.y - it.y) <= tolerance) {
+      last.items.push(it);
+    } else {
+      rows.push({ page, y: it.y, items: [it] });
+    }
+  }
+  for (const r of rows) r.items.sort((a, b) => a.x - b.x);
+  return rows;
+}
+function buildLabelsFromRow(row, gapThreshold = 8) {
+  if (row.items.length === 0) return [];
+  const groups = [[row.items[0]]];
+  for (let i = 1; i < row.items.length; i++) {
+    const prev = row.items[i - 1];
+    const cur = row.items[i];
+    const prevRight = prev.x + (prev.width ?? 0);
+    if (cur.x - prevRight < gapThreshold) {
+      groups[groups.length - 1].push(cur);
+    } else {
+      groups.push([cur]);
+    }
+  }
+  return groups.map((g) => {
+    const xLeft = g[0].x;
+    const last = g[g.length - 1];
+    const xRight = last.x + (last.width ?? 30);
+    return { label: g.map((it) => it.text).join(" ").trim(), xLeft, xRight };
+  });
+}
+function detectTableStructure(rows) {
+  let best = null;
+  for (const row of rows) {
+    const labels = buildLabelsFromRow(row);
+    if (labels.length < 3) continue;
+    const detectedColumns = [];
+    let totalWeight = 0;
+    let foundDate = false;
+    let foundAnyAmount = false;
+    for (const lbl of labels) {
+      const cls = classifyHeaderLabel(lbl.label);
+      if (cls) {
+        detectedColumns.push({
+          role: cls.role,
+          label: lbl.label,
+          xLeft: lbl.xLeft,
+          xRight: lbl.xRight,
+          page: row.page
+        });
+        totalWeight += cls.weight;
+        if (cls.role === "date") foundDate = true;
+        if (cls.role === "debit" || cls.role === "credit" || cls.role === "amount" || cls.role === "balance") {
+          foundAnyAmount = true;
+        }
+      }
+    }
+    if (!foundDate || !foundAnyAmount || detectedColumns.length < 3) continue;
+    const score = totalWeight / 12;
+    detectedColumns.sort((a, b) => a.xLeft - b.xLeft);
+    for (let i = 0; i < detectedColumns.length - 1; i++) {
+      detectedColumns[i].xRight = detectedColumns[i + 1].xLeft - 1;
+    }
+    const structure = {
+      columns: detectedColumns,
+      headerY: row.y,
+      headerPage: row.page,
+      confidence: Math.min(1, score)
+    };
+    if (!best || score > best.score) {
+      best = { score, structure };
+    }
+  }
+  return (best == null ? void 0 : best.structure) ?? null;
+}
+
+// src/extraction/bank-statement/RowReconstructor.ts
+var DATE_LIKE = /\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/;
+function snapRowToColumns(row, structure) {
+  const cells = {};
+  const cols = structure.columns;
+  for (const item of row.items) {
+    const centerX = item.x + (item.width ?? 0) / 2;
+    let col = cols.find((c) => centerX >= c.xLeft && centerX < c.xRight);
+    if (!col) {
+      let bestDist = Infinity;
+      for (const c of cols) {
+        const d = Math.min(Math.abs(centerX - c.xLeft), Math.abs(centerX - c.xRight));
+        if (d < bestDist) {
+          bestDist = d;
+          col = c;
+        }
+      }
+    }
+    if (!col) continue;
+    if (!cells[col.role]) cells[col.role] = [];
+    cells[col.role].push(item.text);
+  }
+  const flat = {};
+  for (const [role, parts] of Object.entries(cells)) {
+    flat[role] = parts.join(" ").replace(/\s+/g, " ").trim();
+  }
+  return {
+    page: row.page,
+    y: row.y,
+    cells: flat,
+    items: row.items
+  };
+}
+function mergeMultilineTransactions(rows) {
+  const merged = [];
+  for (const row of rows) {
+    const dateCell = row.cells.date ?? "";
+    const hasDate = DATE_LIKE.test(dateCell);
+    const last = merged[merged.length - 1];
+    if (!last || hasDate) {
+      merged.push({ ...row, cells: { ...row.cells } });
+      continue;
+    }
+    for (const role of Object.keys(row.cells)) {
+      const value = row.cells[role];
+      if (!value) continue;
+      if (role === "description" || role === "reference" || role === "type" || role === "unknown") {
+        last.cells[role] = (last.cells[role] ? last.cells[role] + " " : "") + value;
+      } else if (!last.cells[role]) {
+        last.cells[role] = value;
+      }
+    }
+    last.items.push(...row.items);
+  }
+  return merged;
+}
+var STATEMENT_CHROME_PATTERNS = [
+  /historique\s+des\s+mouvements/i,
+  // titre du relevé
+  /compte\s+n[o°]\s*\.{0,4}\s*:/i,
+  // "Compte No ..:"
+  /n[o°]\s+client\s*\.{0,4}\s*:/i,
+  // "No Client ..:"
+  /agence\s*\.{2,}\s*:/i,
+  // "Agence ......:"
+  /\bpage\s*:\s*\d+/i,
+  // "Page : 3"
+  /\bdate\s*\.{3,}/i,
+  // "Date ........: 29 Janvier"
+  /dev\s+chap/i,
+  // en-tête "Age Dev Chap. Compte Nom Intitule"
+  /\bintitule\b/i,
+  // même en-tête
+  /date\s+compta/i,
+  // en-tête de colonnes répété
+  /^total\b/i
+  // "Total", "Total mouvements"
+];
+function filterNoise(rows, structure) {
+  return rows.filter((row) => {
+    if (row.page === structure.headerPage && row.y >= structure.headerY) {
+      return false;
+    }
+    const allText = Object.values(row.cells).join(" ").toLowerCase();
+    if (!allText) return false;
+    const trimmed = allText.trim();
+    if (/^page\s+\d+\s+(sur|of|de)\s+\d+$/i.test(trimmed)) return false;
+    if (/^solde\s+(initial|final|au|precedent|nouveau|debiteur|crediteur)/i.test(trimmed)) return false;
+    if (STATEMENT_CHROME_PATTERNS.some((re) => re.test(allText))) return false;
+    return true;
+  });
+}
+
+// src/extraction/bank-statement/types.ts
+function computeBoundingBox(items) {
+  if (items.length === 0) return void 0;
+  const page = items[0].page;
+  let xLeft = Infinity;
+  let yBottom = Infinity;
+  let xRight = -Infinity;
+  let yTop = -Infinity;
+  for (const it of items) {
+    if (it.x < xLeft) xLeft = it.x;
+    if (it.y < yBottom) yBottom = it.y;
+    const right = it.x + (it.width ?? 0);
+    const top = it.y + (it.height ?? 0);
+    if (right > xRight) xRight = right;
+    if (top > yTop) yTop = top;
+  }
+  return { page, xLeft, yBottom, xRight, yTop };
+}
+
+// src/extraction/bank-statement/AmountParser.ts
+var CURRENCY_PATTERN = /(?:FCFA|XOF|XAF|EUR|USD|F\s*CFA|F\.?\s*CFA)/gi;
+var PARENS_DEBIT_PATTERN = /^\s*\(([^)]+)\)\s*$/;
+var TRAILING_SIGN_PATTERN = /^\s*([\d\s.,]+)\s*([+-])\s*$/;
+var LEADING_SIGN_PATTERN = /^\s*([+-])?\s*([\d\s.,]+)\s*$/;
+function parseAmount(raw) {
+  if (!raw) return null;
+  let s = String(raw).replace(/\u00A0/g, " ").trim();
+  if (!s) return null;
+  let currency;
+  const curMatch = s.match(CURRENCY_PATTERN);
+  if (curMatch) {
+    currency = curMatch[0].toUpperCase().replace(/[\s.]/g, "");
+    if (currency === "FCFA") currency = "XOF";
+    s = s.replace(CURRENCY_PATTERN, "").trim();
+  }
+  let isDebit = false;
+  let hasExplicitSign = false;
+  const parensMatch = s.match(PARENS_DEBIT_PATTERN);
+  if (parensMatch) {
+    isDebit = true;
+    hasExplicitSign = true;
+    s = parensMatch[1].trim();
+  }
+  const trailingMatch = s.match(TRAILING_SIGN_PATTERN);
+  if (trailingMatch) {
+    if (trailingMatch[2] === "-") {
+      isDebit = true;
+      hasExplicitSign = true;
+    }
+    s = trailingMatch[1].trim();
+  } else {
+    const leadingMatch = s.match(LEADING_SIGN_PATTERN);
+    if (leadingMatch && leadingMatch[1]) {
+      if (leadingMatch[1] === "-") {
+        isDebit = true;
+        hasExplicitSign = true;
+      }
+      s = leadingMatch[2];
+    }
+  }
+  if (!/^[\d\s.,]+$/.test(s)) return null;
+  if (!/\d/.test(s)) return null;
+  const noSpaces = s.replace(/\s+/g, "");
+  if (!noSpaces) return null;
+  const value = decideSeparator(noSpaces);
+  if (value === null) return null;
+  if (!isFinite(value)) return null;
+  let confidence = 0.95;
+  if (value === 0) confidence = 0.5;
+  if (noSpaces.length <= 1) confidence = 0.4;
+  return {
+    value: isDebit ? -Math.abs(value) : Math.abs(value),
+    isDebit,
+    hasExplicitSign,
+    confidence,
+    currency
+  };
+}
+function decideSeparator(s) {
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimalSep = lastComma > lastDot ? "," : ".";
+    const thousandsSep = decimalSep === "," ? "." : ",";
+    const cleaned = s.replace(new RegExp(`\\${thousandsSep}`, "g"), "").replace(decimalSep, ".");
+    const n2 = parseFloat(cleaned);
+    return isNaN(n2) ? null : n2;
+  }
+  if (lastComma !== -1 || lastDot !== -1) {
+    const sep = lastComma !== -1 ? "," : ".";
+    const sepIdx = lastComma !== -1 ? lastComma : lastDot;
+    const sepCount = s.split(sep).length - 1;
+    const decimalsCount = s.length - sepIdx - 1;
+    const integerPart = s.slice(0, sepIdx);
+    if (sepCount > 1) {
+      const n3 = parseInt(s.split(sep).join(""), 10);
+      return isNaN(n3) ? null : n3;
+    }
+    const treatAsThousands = decimalsCount === 3 && integerPart.length > 0 && !integerPart.startsWith("0");
+    if (treatAsThousands) {
+      const n3 = parseInt(s.split(sep).join(""), 10);
+      return isNaN(n3) ? null : n3;
+    }
+    const n2 = parseFloat(s.split(sep).join("."));
+    return isNaN(n2) ? null : n2;
+  }
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+}
+function findAmounts(text) {
+  const results = [];
+  const re = /[+-]?\s*\(?\s*(?:\d{1,3}(?:[\s.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*\)?/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[0].trim();
+    if (raw.replace(/\D/g, "").length < 2) continue;
+    results.push({ start: m.index, end: m.index + m[0].length, raw });
+  }
+  return results;
+}
+
+// src/extraction/bank-statement/TransactionBuilder.ts
+var DATE_REGEX = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b/;
+function parseDate(s) {
+  if (!s) return null;
+  const m = s.match(DATE_REGEX);
+  if (!m) return null;
+  let dd = parseInt(m[1], 10);
+  let mm = parseInt(m[2], 10);
+  let yy = parseInt(m[3], 10);
+  if (yy < 100) yy = yy >= 50 ? 1900 + yy : 2e3 + yy;
+  if (mm > 12 && dd <= 12) {
+    [dd, mm] = [mm, dd];
+  }
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  const date = new Date(Date.UTC(yy, mm - 1, dd));
+  if (isNaN(date.getTime())) return null;
+  return date;
+}
+function buildTransaction(row, structure) {
+  const warnings = [];
+  const date = parseDate(row.cells.date);
+  const valueDate = parseDate(row.cells.value_date);
+  const description = (row.cells.description ?? "").trim();
+  const reference = (row.cells.reference ?? "").trim() || void 0;
+  const hasDebitCol = structure.columns.some((c) => c.role === "debit");
+  const hasCreditCol = structure.columns.some((c) => c.role === "credit");
+  const hasAmountCol = structure.columns.some((c) => c.role === "amount");
+  const hasTypeCol = structure.columns.some((c) => c.role === "type");
+  let amount = 0;
+  let amountConfidence = 0;
+  let currency;
+  if (hasDebitCol || hasCreditCol) {
+    const debitParsed = parseAmount(row.cells.debit);
+    const creditParsed = parseAmount(row.cells.credit);
+    if (debitParsed && Math.abs(debitParsed.value) > 0) {
+      amount = -Math.abs(debitParsed.value);
+      amountConfidence = debitParsed.confidence;
+      currency = debitParsed.currency;
+    } else if (creditParsed && Math.abs(creditParsed.value) > 0) {
+      amount = Math.abs(creditParsed.value);
+      amountConfidence = creditParsed.confidence;
+      currency = creditParsed.currency;
+    } else {
+      warnings.push("Aucun montant d\xE9bit/cr\xE9dit lisible");
+    }
+  } else if (hasAmountCol) {
+    const amtParsed = parseAmount(row.cells.amount);
+    if (amtParsed) {
+      amount = amtParsed.value;
+      amountConfidence = amtParsed.confidence;
+      currency = amtParsed.currency;
+      if (hasTypeCol && !amtParsed.hasExplicitSign) {
+        const t = (row.cells.type ?? "").trim().toUpperCase();
+        if (/^D|DEBIT|DR/.test(t)) amount = -Math.abs(amount);
+        else if (/^C|CREDIT|CR/.test(t)) amount = Math.abs(amount);
+      }
+    } else {
+      warnings.push("Aucun montant lisible");
+    }
+  } else {
+    warnings.push("Structure de colonnes insuffisante");
+  }
+  const balanceParsed = parseAmount(row.cells.balance);
+  const balance = balanceParsed ? balanceParsed.value : void 0;
+  if (!date && amount === 0) return null;
+  let conf2 = 0;
+  if (date) conf2 += 0.3;
+  if (description.length >= 3) conf2 += 0.2;
+  conf2 += amountConfidence * 0.5;
+  if (warnings.length > 0) conf2 -= 0.1 * warnings.length;
+  conf2 = Math.max(0, Math.min(1, conf2));
+  return {
+    date: date ?? void 0,
+    valueDate: valueDate ?? void 0,
+    description,
+    reference,
+    amount,
+    balance,
+    currency,
+    multiline: row.items.length > 8,
+    // heuristic: multi-line tx have many tokens
+    confidence: conf2,
+    warnings,
+    source: row,
+    boundingBox: computeBoundingBox(row.items)
+  };
+}
+
+// src/extraction/bank-statement/PipeTableNormalizer.ts
+var BORDER_CHARS = ["!", "|"];
+var MIN_BORDER_ITEMS = 8;
+function detectBorderChar(items) {
+  let bestChar = null;
+  let bestCount = 0;
+  for (const ch of BORDER_CHARS) {
+    const count = items.reduce((n, it) => it.text.includes(ch) ? n + 1 : n, 0);
+    if (count > bestCount) {
+      bestCount = count;
+      bestChar = ch;
+    }
+  }
+  return bestCount >= MIN_BORDER_ITEMS ? bestChar : null;
+}
+function explodePipeDelimitedItems(items) {
+  const border = detectBorderChar(items);
+  if (!border) return items;
+  const out = [];
+  for (const it of items) {
+    if (!it.text.includes(border)) {
+      out.push(it);
+      continue;
+    }
+    const fullWidth = it.width && it.width > 0 ? it.width : it.text.length * 4;
+    const len = Math.max(1, it.text.length);
+    let charIdx = 0;
+    for (const segment of it.text.split(border)) {
+      const startIdx = charIdx;
+      charIdx += segment.length + 1;
+      const trimmed = segment.trim();
+      if (!trimmed) continue;
+      out.push({
+        text: trimmed,
+        page: it.page,
+        x: it.x + startIdx / len * fullWidth,
+        y: it.y,
+        width: segment.length / len * fullWidth,
+        height: it.height
+      });
+    }
+  }
+  return out;
+}
+
+// src/extraction/bank-statement/itemsToTransactions.ts
+function itemsToTransactions(rawItems, numPages, opts, warnings = [], meta = {}) {
+  const start = meta.startMs ?? (typeof performance !== "undefined" ? performance.now() : Date.now());
+  const onProgress = meta.onProgress;
+  const items = explodePipeDelimitedItems(rawItems);
+  onProgress == null ? void 0 : onProgress({ stage: "detect", pct: 0.5, message: "D\xE9tection du tableau..." });
+  let bestStructure = null;
+  for (let p = 1; p <= numPages; p++) {
+    const rowsOnPage = clusterRows(items, p, opts.rowYTolerance);
+    const struct = detectTableStructure(rowsOnPage);
+    if (struct && (!bestStructure || struct.confidence > bestStructure.confidence)) {
+      bestStructure = struct;
+    }
+    if (bestStructure && bestStructure.confidence > 0.85) break;
+  }
+  let candidates = [];
+  if (bestStructure && bestStructure.confidence >= 0.4) {
+    onProgress == null ? void 0 : onProgress({
+      stage: "extract",
+      pct: 0.7,
+      message: `Tableau d\xE9tect\xE9 (${Math.round(bestStructure.confidence * 100)}% confiance, ${bestStructure.columns.length} colonnes)`
+    });
+    const allRows = [];
+    for (let p = 1; p <= numPages; p++) {
+      const pageRows = clusterRows(items, p, opts.rowYTolerance);
+      allRows.push(...pageRows);
+    }
+    const mapped = allRows.map((r) => snapRowToColumns(r, bestStructure));
+    const filtered = filterNoise(mapped, bestStructure);
+    const merged = mergeMultilineTransactions(filtered);
+    for (const row of merged) {
+      const tx = buildTransaction(row, bestStructure);
+      if (tx) candidates.push(tx);
+    }
+  }
+  if (candidates.length === 0) {
+    warnings.push("D\xE9tection de tableau infructueuse, basculement sur extraction texte libre");
+    const lineMap = /* @__PURE__ */ new Map();
+    for (const it of items) {
+      const key = `${it.page}|${Math.round(it.y / 5) * 5}`;
+      if (!lineMap.has(key)) lineMap.set(key, []);
+      lineMap.get(key).push(it.text);
+    }
+    const lines = Array.from(lineMap.entries()).sort((a, b) => {
+      const [pa, ya] = a[0].split("|").map(Number);
+      const [pb, yb] = b[0].split("|").map(Number);
+      if (pa !== pb) return pa - pb;
+      return yb - ya;
+    }).map(([, parts]) => parts.join(" ").trim()).filter((l) => l.length > 0);
+    candidates = strategyFreeText(lines, opts);
+  }
+  return finalize(
+    candidates,
+    {
+      totalPages: numPages,
+      itemCount: items.length,
+      rowCount: 0,
+      headerDetected: !!bestStructure,
+      headerConfidence: (bestStructure == null ? void 0 : bestStructure.confidence) ?? 0,
+      ocrUsed: !!meta.ocrUsed,
+      durationMs: Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - start)
+    },
+    warnings,
+    opts,
+    candidates.length === 0 ? "Aucune transaction d\xE9tectable. Le format du relev\xE9 n'est peut-\xEAtre pas un tableau standard." : void 0
+  );
+}
+var DATE_LINE = /^\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})\b/;
+function strategyFreeText(lines, opts) {
+  const transactions = [];
+  const grouped = [];
+  for (const line of lines) {
+    if (DATE_LINE.test(line) || grouped.length === 0) {
+      grouped.push(line);
+    } else {
+      grouped[grouped.length - 1] += " " + line;
+    }
+  }
+  for (const line of grouped) {
+    const dateMatch = line.match(DATE_LINE);
+    if (!dateMatch) continue;
+    const rest = line.replace(/^\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})?)\s*/, "");
+    const amounts = findAmounts(rest);
+    if (amounts.length === 0) continue;
+    const lastAmounts = amounts.slice(-3);
+    const firstFeeAmt = lastAmounts[0];
+    const description = rest.slice(0, firstFeeAmt.start).trim();
+    let txAmount = 0;
+    let balance;
+    if (lastAmounts.length >= 2) {
+      const txParsed = parseAmount(lastAmounts[lastAmounts.length - 2].raw);
+      const balParsed = parseAmount(lastAmounts[lastAmounts.length - 1].raw);
+      if (txParsed) txAmount = txParsed.value;
+      if (balParsed) balance = balParsed.value;
+    } else {
+      const onlyParsed = parseAmount(lastAmounts[0].raw);
+      if (onlyParsed) txAmount = onlyParsed.value;
+    }
+    const lower = description.toLowerCase();
+    if (txAmount > 0 && /retrait|prelev|cheque|frais|commission|virement\s*emis|debit|virt\s+w/i.test(lower)) {
+      txAmount = -Math.abs(txAmount);
+    } else if (txAmount > 0 && /versement|depot|virement\s*recu|credit|interets\s*credit/i.test(lower)) {
+      txAmount = Math.abs(txAmount);
+    }
+    transactions.push({
+      date: parseDateLoose(dateMatch[1]) ?? void 0,
+      description,
+      amount: txAmount,
+      balance,
+      currency: opts.defaultCurrency,
+      multiline: false,
+      confidence: 0.55,
+      warnings: ["Extraction sans positions \u2014 confiance r\xE9duite"]
+    });
+  }
+  return transactions;
+}
+function parseDateLoose(s) {
+  const m = s.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+  if (!m) return null;
+  let dd = parseInt(m[1], 10);
+  let mm = parseInt(m[2], 10);
+  let yy = parseInt(m[3], 10);
+  if (yy < 100) yy = yy >= 50 ? 1900 + yy : 2e3 + yy;
+  if (mm > 12 && dd <= 12) [dd, mm] = [mm, dd];
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  const d = new Date(Date.UTC(yy, mm - 1, dd));
+  if (isNaN(d.getTime())) return null;
+  if (d.getUTCMonth() !== mm - 1 || d.getUTCDate() !== dd) return null;
+  return d;
+}
+function finalize(candidates, stats, warnings, opts, diagnostic) {
+  const transactions = candidates.filter((c) => c.date && c.amount !== 0).map((c) => ({
+    id: v4_default(),
+    date: c.date,
+    valueDate: c.valueDate ?? c.date,
+    amount: c.amount,
+    description: c.description || "Transaction",
+    reference: c.reference ?? "",
+    type: c.amount < 0 ? "DEBIT" /* DEBIT */ : "CREDIT" /* CREDIT */,
+    bankCode: "",
+    accountId: "",
+    clientId: "",
+    balance: c.balance,
+    currency: c.currency || opts.defaultCurrency,
+    createdAt: /* @__PURE__ */ new Date(),
+    updatedAt: /* @__PURE__ */ new Date()
+  }));
+  const avgConf = candidates.length === 0 ? 0 : candidates.reduce((s, c) => s + c.confidence, 0) / candidates.length;
+  return {
+    success: transactions.length > 0,
+    transactions,
+    candidates,
+    stats: {
+      ...stats,
+      rowCount: candidates.length,
+      transactionCount: transactions.length,
+      averageConfidence: avgConf
+    },
+    warnings,
+    diagnostic
+  };
+}
 export {
   auditReportToHtml,
+  itemsToTransactions,
   l2ToBankConditions,
   partitionByCertainty,
   pricingForRecovery,
