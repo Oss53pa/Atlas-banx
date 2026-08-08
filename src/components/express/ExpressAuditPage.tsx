@@ -79,6 +79,17 @@ function fmtDate(d: Date | null): string {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Lit un fichier en base64 (sans le préfixe `data:...;base64,`). FileReader gère
+// les gros fichiers sans exploser la pile (contrairement à btoa+spread).
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => { const s = String(r.result); resolve(s.slice(s.indexOf(',') + 1)); };
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
 export default function ExpressAuditPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('import');
@@ -110,6 +121,11 @@ export default function ExpressAuditPage() {
   const [audit, setAudit] = useState<AnalysisResult | null>(null);
   // Rapport HTML serveur (repli si la génération du PDF premium échoue).
   const [serverReportHtml, setServerReportHtml] = useState<string>('');
+  // PDF en base64 pour l'extraction SERVEUR (relevés texte natif seulement) et
+  // indicateur « relevé scanné » (OCR navigateur utilisé) → on n'envoie alors
+  // pas le PDF (l'OCR serveur n'existe pas) et on garde l'extraction client.
+  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [wasScanned, setWasScanned] = useState(false);
   const [auditStep, setAuditStep] = useState<string>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -162,6 +178,11 @@ export default function ExpressAuditPage() {
       setPeriodStart(start);
       setPeriodEnd(end);
       setMonths(m);
+      // PDF texte natif → on transmettra le fichier pour une extraction SERVEUR
+      // autoritaire ; relevé scanné (OCR) → on garde l'extraction navigateur.
+      const scanned = result.stats?.ocrUsed ?? false;
+      setWasScanned(scanned);
+      setPdfBase64(scanned ? null : await fileToBase64(file).catch(() => null));
       setStep('setup');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'analyse du relevé.");
@@ -211,6 +232,9 @@ export default function ExpressAuditPage() {
       const server = await requestExpressAudit({
         reference, transactions, bankConditions, bankCode: bankCode || undefined,
         segment, periodStart, periodEnd, months,
+        // Extraction SERVEUR autoritaire pour les relevés texte natif ; pour les
+        // scans (pdfBase64 nul) le serveur audite les transactions du client (OCR).
+        pdfBase64: wasScanned ? undefined : (pdfBase64 ?? undefined),
       });
       if (!server) {
         setError("Service d'analyse indisponible. Réessayez dans un instant.");
@@ -400,6 +424,7 @@ export default function ExpressAuditPage() {
   const reset = () => {
     setStep('import'); setError(null); setAudit(null); setPricing(null);
     setTeaser(null); setServerReportHtml(''); setAuditRef('');
+    setPdfBase64(null); setWasScanned(false);
     setTransactions([]); setBankCode(''); setEmail(''); setPhone('');
     setClientName(''); setAccountRef(''); setUsedOfficialGrid(false); setRefGrid(null);
   };
