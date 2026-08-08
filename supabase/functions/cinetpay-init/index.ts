@@ -86,21 +86,26 @@ Deno.serve(async (req: Request) => {
     if (amount > 5_000_000) return json({ error: 'montant hors bornes' }, 400);
   }
 
+  // Sans clés marchandes → mode sandbox (paiement SIMULÉ, aucun débit). Le
+  // rapport étant désormais livré côté serveur (express-report) seulement si le
+  // paiement est 'succeeded', on marque la trace sandbox 'succeeded' d'emblée
+  // pour préserver la démo. En prod (clés présentes) ce chemin n'est jamais pris.
+  const sandbox = !API_KEY || !SITE_ID;
+
   await insertPending({
     reference,
     amount,
     currency,
     provider: 'cinetpay',
-    status: 'pending',
+    status: sandbox ? 'succeeded' : 'pending',
     plan_id: body.planId ?? null,
     months_audited: body.months ?? null,
     customer_email: body.customerEmail ?? null,
     customer_phone: body.customerPhone ?? null,
   });
 
-  // Pas de clés → sandbox (simulé).
-  if (!API_KEY || !SITE_ID) {
-    return json({ mode: 'sandbox', reference, transactionId: `sandbox-${reference}`, redirectUrl: null, status: 'pending' });
+  if (sandbox) {
+    return json({ mode: 'sandbox', reference, transactionId: `sandbox-${reference}`, redirectUrl: null, status: 'succeeded' });
   }
 
   // Live — création du paiement CinetPay.

@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { getSupabaseClient } from '../lib/supabase';
-import type { Transaction, BankConditions } from '../types';
+import type { Transaction, BankConditions, AnalysisResult } from '../types';
 
 export interface ExpressAuditTeaser {
   reference: string;
@@ -20,6 +20,14 @@ export interface ExpressAuditTeaser {
   priceFcfa: number;
   isFree: boolean;
   anomalyCount: number;
+  /** Anomalies certaines (≥90%) — comptées dans le récupérable. */
+  certainCount: number;
+  /** Anomalies à confirmer — non comptées. */
+  uncertainCount: number;
+  /** Nombre de transactions analysées. */
+  totalTransactions: number;
+  /** Types d'anomalies (libellés seuls, sans montant) pour l'aperçu flouté. */
+  previewTypes: string[];
   /** Le serveur a-t-il comparé au barème officiel L2 (récupéré côté serveur) ? */
   usedOfficialGrid: boolean;
 }
@@ -63,6 +71,10 @@ export async function requestExpressAudit(input: {
       priceFcfa: data.priceFcfa,
       isFree: Boolean(data.isFree),
       anomalyCount: Number(data.anomalyCount) || 0,
+      certainCount: Number(data.certainCount) || 0,
+      uncertainCount: Number(data.uncertainCount) || 0,
+      totalTransactions: Number(data.totalTransactions) || 0,
+      previewTypes: Array.isArray(data.previewTypes) ? data.previewTypes.map(String) : [],
       usedOfficialGrid: Boolean(data.usedOfficialGrid),
     };
   } catch {
@@ -73,11 +85,14 @@ export async function requestExpressAudit(input: {
 export interface ExpressReportResult {
   paid: boolean;
   reportHtml?: string;
+  /** Résultat d'audit COMPLET (source du PDF premium et de la lettre). */
+  audit?: AnalysisResult;
 }
 
 /**
  * Récupère le rapport détaillé STOCKÉ côté serveur — livré uniquement si le
- * paiement associé est confirmé (ou si le rapport est gratuit). Renvoie
+ * paiement associé est confirmé (ou si le rapport est gratuit). Renvoie le
+ * résultat d'audit complet (dates en ISO — les formateurs les acceptent).
  * `{ paid: false }` tant que le paiement n'est pas confirmé (HTTP 402) ou en
  * cas d'indisponibilité.
  */
@@ -90,7 +105,11 @@ export async function fetchExpressReport(reference: string): Promise<ExpressRepo
     });
     // invoke considère 402 comme une erreur → paiement non confirmé.
     if (error || !data || !data.paid) return { paid: false };
-    return { paid: true, reportHtml: typeof data.reportHtml === 'string' ? data.reportHtml : undefined };
+    return {
+      paid: true,
+      reportHtml: typeof data.reportHtml === 'string' ? data.reportHtml : undefined,
+      audit: (data.audit ?? undefined) as AnalysisResult | undefined,
+    };
   } catch {
     return { paid: false };
   }
